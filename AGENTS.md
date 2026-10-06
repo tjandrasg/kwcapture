@@ -131,7 +131,7 @@ objects**, both over HTTPS (`raw.githubusercontent.com/<repo>/<old-sha>/chat_his
 **Do not write the old short/full SHAs into this file or into any commit message**: GitHub
 resolves abbreviated SHAs, so publishing one hands every visitor a working download link.
 They are deliberately omitted here. **Force-pushing is NOT deletion on GitHub** — at the time of writing
-`https://raw.githubusercontent.com/.../5391a52/chat_his.jsonl` still returns the full file,
+`raw.githubusercontent.com/<repo>/<old-sha>/chat_his.jsonl` still returns the full file,
 and it will until GitHub Support purges the dangling objects (the user has been told to open
 that request). Assume a force-push does not un-publish anything.
 
