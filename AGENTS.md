@@ -159,6 +159,26 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 * One desktop entry per distinct helper path (`io.github.kwcapture-<sha1(path)[:10]>.desktop`)
   so several venvs coexist; `_desktop.prune()` drops entries whose binary is gone.
 
+## CI notes (learned the hard way — first 5 runs all failed)
+* **Test the installed package from OUTSIDE the checkout.** Running `python -c "import
+  kwcapture"` in the repo root imports the source tree (cwd shadows site-packages), so the
+  "wheel contains the helper" assertion failed even though the wheel was correct.
+* cibuildwheel's default image was `manylinux2014` (CentOS 7) → **`dnf` does not exist**
+  there, only `yum`. Pin `CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28` and write
+  `CIBW_BEFORE_ALL_LINUX` as `dnf … || yum …`; EL8's pkg-config package is
+  `pkgconf-pkg-config`, EL7's is `pkgconfig`.
+* **PyPI rejects `linux_x86_64` wheels** (`400 … unsupported platform tag`) — only
+  manylinux/musllinux. Hence PyPI currently carries the sdist; the `linux_x86_64` wheel is
+  only on the GitHub release, and manylinux wheels must come from cibuildwheel.
+  auditwheel must be told `--exclude libsystemd.so.0 --exclude libwayland-client.so.0`
+  (we intentionally do not vendor the compositor libs).
+* Force-pushing a rewritten history needs `git push --force` — `--force-with-lease` said
+  "stale info" because `git filter-branch --all` had rewritten `refs/remotes/origin/main`
+  too. `git fetch` first, then force-push.
+* A tag push runs the workflow **from the tag's commit**, so `release.yml` fired when I
+  re-pointed `v0.1.0`; publishing is opt-in (`workflow_dispatch` + `publish: true`) so it
+  cannot push anything to PyPI by accident.
+
 ## Ideas not done yet
 * Per-window capture (`CaptureWindow` + window enumeration; KWin has `org.kde.KWin`/Windows?).
 * Multi-monitor: works via one `Capture` per screen name, but there is no combined-mode helper.
