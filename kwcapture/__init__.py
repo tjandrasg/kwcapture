@@ -1103,14 +1103,26 @@ def to_rgb(
 _sched_yield = None
 
 
+def _sleep0() -> None:
+    time.sleep(0)
+
+
 def sched_yield() -> None:
+    """Give up the timeslice while `grab()` waits for the next frame.
+
+    Uses libc's sched_yield, falling back to sleep(0). Two things used to be wrong here
+    (see BUG-2 in AGENTS.md): a missing symbol raises AttributeError, not OSError, and this
+    is on the hot path of every grab, so it took the whole capture down; and the cache was
+    tested with `is None`, so anything non-callable that ever landed in `_sched_yield` (for
+    instance the *result* of a call -- `libc.sched_yield()` returns the int 0) would be
+    invoked on every subsequent grab. `callable()` makes that impossible.
+    """
     global _sched_yield
-    if _sched_yield is None:
+    if not callable(_sched_yield):
         try:
-            libc = ctypes.CDLL("libc.so.6", use_errno=True)
-            _sched_yield = libc.sched_yield
-        except OSError:  # pragma: no cover
-            _sched_yield = lambda: time.sleep(0)  # noqa: E731
+            _sched_yield = ctypes.CDLL("libc.so.6", use_errno=True).sched_yield
+        except (OSError, AttributeError):  # no libc.so.6 (musl), or no such symbol
+            _sched_yield = _sleep0
     _sched_yield()
 
 

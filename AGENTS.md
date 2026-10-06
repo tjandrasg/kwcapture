@@ -130,6 +130,64 @@ silent, and "it returned a frame" looks like success.
   **activity**, and a window that is fully **occluded** (the "occlusion does not crop"
   claim below was verified only for *geometry*, never for *liveness*).
 
+### BUG-2 (latent fatal crash in the grab hot path, only partly explained): `sched_yield()`
+
+`kwcapture/__init__.py` (~line 1103) has a lazy ctypes init, and it is called from
+**`Capture.grab()`'s busy-wait loop** (the `sched_yield()` call inside `grab`, during the
+first 200 spins — i.e. on essentially every fresh grab). So anything that breaks here is
+fatal for *all* capture, not for one code path.
+
+```python
+_sched_yield = None
+
+def sched_yield() -> None:
+    global _sched_yield
+    if _sched_yield is None:
+        try:
+            libc = ctypes.CDLL("libc.so.6", use_errno=True)
+            _sched_yield = libc.sched_yield
+        except OSError:            # <-- TOO NARROW
+            _sched_yield = lambda: time.sleep(0)
+    _sched_yield()
+```
+
+* **Verified defect**: if `CDLL("libc.so.6")` succeeds but the `dlsym` for `sched_yield`
+fails, ctypes raises **`AttributeError`, not `OSError`**, which escapes the `except` and
+propagates out of `grab()`. Proven by monkeypatching: `CRASH: AttributeError: sched_yield`.
+Relevant on non-glibc/musl or odd SONAMEs. Unchanged since the initial release
+(`git log -S sched_yield` shows exactly one commit).
+* **The `'int' object is not callable' symptom the author remembers was NOT reproduced and
+  is NOT in the tree or its history.** What is known for certain, and it is what makes this
+  hard to pin down:
+  - **`libc.sched_yield()` RETURNS AN INT (0). Verified.** So this is the one place in the
+    package where the callable and an int sit side by side: a single stray paren —
+    `_sched_yield = libc.sched_yield()` — caches **0**, and from then on every `grab()` dies
+    with exactly `TypeError: 'int' object is not callable`, deep inside the wait loop, far
+    from the line that caused it. That matches the remembered symptom, the fatality, and
+    the difficulty; it is a **hypothesis, not a finding**.
+  - An exhaustive AST scan (all 47 ctypes int fields of `_Hdr`/`_Slot` + every int/bool
+    `Window` field, looking for `field(...)` call sites) found **no** such call in the
+    committed tree. `h.ready()`, `h.frame_seq()`, `w.width()` etc. would all give the same
+    error, so if the earlier session hit one of those it happened **in a scratch script in
+    `/tmp`, which is gone** — the most likely reason it cannot be found again.
+* **How to find it again** (do this, in order):
+  1. `grep -rn "sched_yield" kwcapture/` and check the cache is assigned the function, never
+     the call result (`= libc.sched_yield`, NOT `= libc.sched_yield()`).
+  2. Reproduce any crash with `python -X dev -X faulthandler` and a **full traceback**; the
+     `int` in the message is a ctypes field or a call result, so the *frame above* is where
+     the int came from, not the frame that raised.
+  3. Run the AST scan (kept below in this section's git history / re-create: parse each file,
+     collect int-ish attribute names, look for `ast.Call` whose `func` is an `Attribute` with
+     one of those names). It takes seconds and finds the whole family statically.
+* **Fix** (small, safe, and it kills the AttributeError crash regardless of the int story):
+  catch `(OSError, AttributeError)`, keep the fallback a real named function, and guard the
+  cache with `if not callable(_sched_yield)` instead of `is None` so a cached non-callable
+  can never be invoked. **APPLIED** (commit after this one): all three branches verified —
+  normal `_FuncPtr`, `AttributeError` → `_sleep0`, and forcibly setting `_sched_yield = 0`
+  now *re-initialises* instead of raising, with a real `grab()` still working. The
+  `'int' object is not callable` origin story above is still unconfirmed; the guard only
+  makes that whole family uninvokable. **If the crash ever reappears, read this section.**
+
 ### Smaller things noticed while reading the code (unverified / judgement calls)
 
 * `Window.maximized` is `maximizeHorizontal && maximizeVertical` (`kwcapture.c`, the
