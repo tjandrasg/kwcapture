@@ -62,12 +62,16 @@ jobs:
             (command -v yum >/dev/null 2>&1 &&
              yum install -y systemd-devel wayland-devel pkgconfig)
           # deliberately do NOT vendor the compositor/system libraries into the wheel;
-          # anyone running this is on a desktop that has them
+          # anyone running this is on a desktop that has them.
+          # NOTE the placeholder is {dest_dir}, NOT {dest}: cibuildwheel 4.x leaves an
+          # unknown {dest} alone, so auditwheel happily writes into a directory literally
+          # named "{dest}" and then cibuildwheel fails with "the repair step completed
+          # successfully but did not produce a wheel".
           CIBW_REPAIR_WHEEL_COMMAND: >-
             auditwheel repair
             --exclude libsystemd.so.0
             --exclude libwayland-client.so.0
-            -w {dest} {wheel}
+            -w {dest_dir} {wheel}
           CIBW_BUILD_VERBOSITY: 1
 
       - name: Collect artefacts
