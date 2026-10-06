@@ -42,7 +42,8 @@ re-deriving it cost a whole investigation. If you add anything this session, add
 the moment you see it.
 
 **BUG-4 is the fatal one** (flaky `TypeError: 'int' object is not callable` + segfault in the
-zero-copy read path). Recovered from the user's saved transcript `chat_his.jsonl`; it is NOT
+zero-copy read path). Recovered from the user's saved transcript (now at `private/chat_his.jsonl`, was
+`chat_his.jsonl` in the repo root — see *Repository hygiene*); it is NOT
 a typo and no static search will ever find it. Read that entry before debugging anything
 that looks like a weird int/Slot_Array error in grab()/latest().
 
@@ -110,6 +111,37 @@ that looks like a weird int/Slot_Array error in grab()/latest().
 
 **Next useful features** (see *Ideas not done yet*): `Window.pid`, auto-restart of a dead
 daemon inside `grab()`, and non-normal windows (panels/desktop) via a KWin script.
+
+## REPOSITORY HYGIENE — `private/` is the only place for non-source files
+
+`private/` exists for this: **anything that is not source — chat transcripts, captures,
+dumps, logs, credentials, scratch notes — goes in `private/`**, which is ignored by both
+`private/.gitignore` (`*` + `!.gitignore`) and the root `.gitignore` (`private/*` +
+`!private/.gitignore`). Only the ignore file itself is tracked, so the folder appears in
+every fresh clone and the rule travels with the repo.
+
+**Why this exists:** on 2026-10-06 a `git add -A` swept the user's 1.1 MB private chat
+transcript (`chat_his.jsonl`, dropped in the repo root) into a commit and pushed it to the
+**public** repo. It was removed from the branch and the history was rewritten
+(`filter-branch` + reflog expiry + `gc --prune=now` + force-push), tags / GitHub release
+assets / PyPI sdists never contained it — **but GitHub kept serving the old commit objects**
+(`raw@5391a52` returned HTTP 200 with the full file after the purge), so it was only gone
+after GitHub Support removed it. **Force-pushing is NOT deletion on GitHub** — at the time of writing
+`https://raw.githubusercontent.com/.../5391a52/chat_his.jsonl` still returns the full file,
+and it will until GitHub Support purges the dangling objects (the user has been told to open
+that request). Assume a force-push does not un-publish anything.
+
+**Rules that follow from it:**
+* Non-source files go in `private/`, never in the repo root (the old `*.bgra` scratch dumps
+  in `/tmp` are the same hazard — they are gitignored, but `private/` is the habit).
+* `git add -A` is acceptable **only** because `private/` is ignored now — and only if you
+  check the `git status --porcelain` output the command implies. Before a push that will be
+  public, run `git add -A --dry-run` and read it (it lists exactly what would be staged).
+* Verify an ignore rule rather than trusting it: `git check-ignore -v <path>` shows which
+  rule matched. A `.gitignore` entry that silently matches nothing looks identical to one
+  that works.
+* Never `git add -f`/`git add private/...` — `-f` overrides the ignore rules that protect
+  this folder.
 
 ## OPEN BUGS — found, not yet fixed
 

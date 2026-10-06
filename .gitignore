@@ -27,6 +27,8 @@ prompt.txt
 .DS_Store
 probe/globals
 
-# Private chat transcripts / agent logs — must never be committed
+# PRIVATE — never commit. Everything you want to keep locally goes in private/,
+# which self-ignores (private/.gitignore ignores '*' except itself).
+private/*
+!private/.gitignore
 chat_his*.jsonl
-*.jsonl

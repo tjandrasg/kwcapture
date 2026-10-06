@@ -1,0 +1,4 @@
+# Local-only folder: everything in here is ignored by git.
+# The only tracked file is this one, so the folder exists in fresh clones.
+*
+!.gitignore
