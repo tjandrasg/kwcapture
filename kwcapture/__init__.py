@@ -887,8 +887,12 @@ class Capture:
     def _check_error(self) -> None:
         h = self._hdr
         assert h is not None
-        if h.error:
-            raise CaptureError(f"daemon error: {os.strerror(int(h.error))}")
+        # Read the shared field ONCE. Reading it twice (once to decide, once to format)
+        # lets the daemon change it in between and produced the self-contradictory
+        # "daemon error: Success" -- see BUG-4b in AGENTS.md.
+        err = int(h.error)
+        if err:
+            raise CaptureError(f"daemon error: {os.strerror(err)}")
         if h.magic == KWC_MAGIC_GONE or (self._proc and self._proc.poll() is not None):
             raise DaemonDead("kwcapture daemon is no longer running")
 
@@ -896,7 +900,11 @@ class Capture:
     def _view(self, seq: int, rgb: bool, copy: bool) -> np.ndarray:
         h = self._hdr
         assert h is not None
-        slots = int(h.slots)
+        # Snapshot the shared header once up front (BUG-4 in AGENTS.md: this path is
+        # written concurrently by the daemon, and reading the same field twice can give two
+        # different values for one frame -- torn width/stride or a torn status. It is also
+        # where the flaky "'int' object is not callable" / SIGSEGV family shows up).
+        slots, hdr_size, slot_bytes = int(h.slots), int(h.hdr_size), int(h.slot_bytes)
         sl = h.slot[(seq - 1) % slots]
         status = int(sl.status)
         if status:
@@ -912,9 +920,10 @@ class Capture:
         w, hgt, stride = int(sl.width), int(sl.height), int(sl.stride)
         if w == 0 or hgt == 0:
             raise CaptureError("frame has no geometry")
-        off = int(h.hdr_size) + ((seq - 1) % slots) * int(h.slot_bytes)
+        off = hdr_size + ((seq - 1) % slots) * slot_bytes
+        mm = self._mm
         arr = np.frombuffer(
-            self._mm, dtype=np.uint8, count=stride * hgt, offset=off
+            mm, dtype=np.uint8, count=stride * hgt, offset=off
         ).reshape(hgt, stride // 4, 4)[:, :w, :]
         if rgb:
             if int(sl.format) not in (4, 5, 6, 11, 12, 13):
@@ -922,6 +931,13 @@ class Capture:
             arr = arr[..., 2::-1]  # BGRA -> RGB, zero copy (negative strides)
         arr = arr.copy() if copy else arr
         arr.setflags(write=copy)
+        # NOTE: pinning the mmap onto the returned view with `arr._kwc_shm = (mm, h)` does
+        # NOT work -- these are numpy *views*, which reject new attributes, and wrapping it
+        # in `except AttributeError` made the fix a silent placebo (verified: hasattr() was
+        # False). numpy already holds the buffer via `arr.base`, so lifetime is unchanged;
+        # doing this properly needs an ndarray subclass or an explicit keepalive registry.
+        # See BUG-4 in AGENTS.md -- the real protection here is the single-read snapshot
+        # above, not any reference trick.
         return arr
 
     def grab(

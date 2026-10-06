@@ -248,12 +248,18 @@ cause. If you are staring at a mysterious `int`/`Slot_Array_4`/segfault in `grab
   single clean pass proves nothing. Also try with `gc` pressure (allocate in the loop) and
   with concurrent `restart()`/`close()`.
 * **Fix directions** (none applied yet):
-  1. `_view()`: snapshot **all** slot/header fields into locals (width, height, stride,
-     offset, seq) *before* computing offsets and building arrays — never read the shared
-     struct twice for one frame (kills torn reads).
-  2. Keep the buffer alive for the lifetime of every zero-copy result: attach the mmap (and
-     the `_Hdr`) to the returned array, e.g. `arr._kwc_ref = (self._mm, hdr)`, so GC cannot
-     free the mapping underneath a live view.
+  1. **APPLIED**: `_view()` now snapshots `slots`/`hdr_size`/`slot_bytes` once up front and
+     `_check_error()` reads `h.error` once (kills BUG-4b's `daemon error: Success`). Still
+     open: `sl.*` fields are read more than once in places, and `status`/`format` should be
+     snapshotted the same way. Verified: windows suite green, `latest(rgb=True)` at 460k it/s
+     for 8 s with `-X dev`, no warning — but **this does not prove BUG-4 is gone**, it is
+     flaky by nature; do not close this entry on a clean run.
+  2. **TRIED AND REJECTED — do not repeat this exact attempt**: `arr._kwc_shm = (mm, hdr)`
+     silently does nothing because these are numpy **views**, which reject new attributes;
+     wrapped in `except AttributeError` it looked like a fix while `hasattr(arr,'_kwc_shm')`
+     was False. numpy already keeps the buffer via `arr.base`. A real keepalive needs an
+     `ndarray` subclass or an explicit registry. **General lesson: a fix wrapped in a broad
+     `except` that never asserts anything is a placebo — verify the effect, not the intent.**
   3. Never mutate `self._mm`/`self._hdr` while views may be outstanding — or make `close()`
      explicitly invalidate them and document that outstanding views become invalid.
   4. Run the suite under `-X dev` + `PYTHONFAULTHANDLER=1` in CI with a stress target so
