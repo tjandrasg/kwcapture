@@ -34,7 +34,65 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 60 functional checks. See `README.md` for user-facing docs; this file
 is the investigation log + gotchas.
 
-## FRESH STATUS — 2026-10-06 ~23:05 (this is the current truth)
+## FRESH STATUS — 2026-10-07 ~02:30 (this is the current truth)
+
+* **BUG-4 is not a kwcapture bug, and quite possibly not a software bug at all.** It is
+  arbitrary memory faults on **this machine**, and kwcapture's zero-copy loop is simply the
+  thing that notices first. Full evidence and measurements in `AGENTS.md` BUG-4 and
+  `probe/FAULT_RATE_RESULTS.txt`. In one hour of measuring:
+  - the historic symptoms reproduce with **no kwcapture, no daemon, no thread** — plain
+    `np.frombuffer(mmap, …)` (`probe/race_bisect.py`, `probe/corruption_rate.py`);
+  - the hardened v0.4.0 read path and the old HEAD read path fault at **the same rate**
+    (40M-read rounds, 4 each, see FAULT_RATE_RESULTS.txt); caching the numpy view instead
+    of building one per frame changed nothing either (3/3 still faulted);
+  - nonsense now appears anywhere: `_view()` returning an array of **shape (1, 3, 2560, 4)**
+    (ndim 4 is unconstructable there), a module-level **int** resolving as
+    `module 'numpy' has no attribute 'HDR'`, `'int' object is not callable`,
+    `'int' + 'Capture'` inside `tests/test_ring_reader.py` — a test that never creates a
+    `Capture` at all — and `double free or corruption (out)` in numpy's array dealloc.
+* **The machine right now:** `MemFree` ≈ 1 GB of 131 GB, `SwapTotal` = 0, `Shmem` = 79 GB;
+  `llama-server` (the model serving these agent sessions) holds **103 GB RSS** including a
+  72 GB shared mapping; `pgscan_direct` 331k / `allocstall_movable` 318 (direct reclaim is
+  live); non-ECC RAM (`EDAC ie31200: No ECC support`); the box already **oopsed in the
+  kernel's page-reclaim path** today (`BUG: kernel NULL pointer dereference` in
+  `free_pages_and_swap_cache`, PID `nvidia-smi`, tainted kernel 7.0.0-2018-nvidia-bos +
+  NVIDIA 610.57.04), and `/var/crash` holds a **SIGBUS** (signal 7) for
+  `tests/test_kwcapture.py quick` — i.e. a page of the ring that could not be
+  materialised, which is the mechanism that fits "flaky, GC/timing-dependent, nonsense
+  values" far better than any race in our code.
+  **Next diagnostic (do this before ever re-opening BUG-4):** run
+  `KWC_ITERS=40000000 .venv/bin/python -X dev probe/fault_rate.py` on a machine that is not
+  holding a 100 GB model, or with `llama-server` stopped. If it is clean there, BUG-4 closes
+  as environment and nothing in this repo needs changing.
+* **What v0.4.0 still fixes** (real bugs found while chasing it, all covered by tests — see
+  `tests/test_ring_reader.py`): torn per-frame metadata (two fields from two frames could
+  make one shape), unchecked offsets/counts handed to numpy, a *writable* ring mapping in
+  the client, reading a slot the daemon had already recycled, and a frame read spanning a
+  `restart()`/`close()`. None of these is "the crash"; all of them are wrong behaviour.
+
+## FRESH STATUS — 2026-10-07 ~00:40 (superseded by the section above; kept for the
+ repro observations — its "mitigation cuts exposure" claim was wrong, see the fault-rate
+ table in `probe/FAULT_RATE_RESULTS.txt`)
+
+* **BUG-4 is not ours.** The whole symptom family reproduces **without kwcapture, without
+  the daemon and without a second writer**: a tight loop of
+  `np.frombuffer(mmap, count=…, offset=…)` (+ reshape / width slice / `setflags`) corrupts
+  memory and eventually kills the interpreter — `probe/race_bisect.py` (historic
+  `TypeError: 'int' object is not callable` at iteration 326,533; **the same script with
+  ctypes removed outright SIGSEGVs**), `probe/corruption_rate.py` (`IndexError: only
+  integers, slices … are valid indices`, `arr.ctypes` evaluating to a **`str`**,
+  `AttributeError: module 'numpy' has no attribute 'HDR'` for a **module-level int**,
+  `double free or corruption (out)` in numpy's array dealloc).
+  Rate ~1 per 10^5–10^7 view constructions, non-deterministic (one 240M-iteration matrix
+  run was completely clean) — which is exactly why three sessions could not pin it and why
+  "it passed once" was never evidence. At a real ~40 fps capture rate the expected wait is
+  days.
+* Repro environment: `/usr/bin/python3.14` 3.14.4 (GCC 15.2, GIL build); venv numpy 2.5.3
+  **and** system numpy 2.3.5 both fault. ctypes-only loops and pure-Python checksum stress
+  stay clean; `np.frombuffer` alone and `+reshape` were clean at 4M — it needs the view-op
+  chain *and*, as it turns out, this machine (see the section above).
+
+## FRESH STATUS — 2026-10-06 ~23:05 (superseded by the section above)
 
 * **v0.3.0 is released** (code, tag, GitHub release with 3 assets, PyPI sdist **+ the first
   prebuilt manylinux wheel** → `pip install kwcapture` needs no compiler). CI is green.
@@ -194,14 +252,98 @@ Relevant on non-glibc/musl or odd SONAMEs. Unchanged since the initial release
   `'int' object is not callable` origin story above is still unconfirmed; the guard only
   makes that whole family uninvokable. **If the crash ever reappears, read this section.**
 
-### BUG-4 (THE FATAL ONE, unfixed, flaky): memory-safety race in the zero-copy read path
+### BUG-4 (ROOT-CAUSED 2026-10-07, NOT OURS): corruption while reading shared memory zero-copy
 
-**This is the bug earlier sessions kept hitting and never writing down. It is NOT a typo and
-it is NOT statically findable — `'int' object is not callable' is a memory-corruption
-symptom here, not a name error.** Reconstructed 2026-10-06 from the previous session's saved
-transcript (`chat_his.jsonl`, lines ~349–381); that session died mid-bisect without a root
-cause. If you are staring at a mysterious `int`/`Slot_Array_4`/segfault in `grab()`/`latest()`,
-**read this whole entry first.**
+> **STATUS — 2026-10-07 ~02:30: not a kwcapture bug, and most likely not a software bug at
+> all — see the "memory faults on this box" block below this quote. What follows is the
+> bisect record; the conclusion in it ("numpy/CPython bug") was written before the machine
+> itself was checked and is too strong.** It is **not a race in kwcapture** and never was. `probe/race_bisect.py` and `probe/corruption_rate.py` in
+> this repo reproduce the exact historic symptoms with **no kwcapture, no daemon, no
+> second writer, no thread** — a tight loop that builds numpy views over an `mmap`:
+>
+> ```
+> probe/race_bisect.py  MODE=both   TypeError: 'int' object is not callable  @ iter 326,533
+>                     MODE=numpy    Segmentation fault   <-- no ctypes involved at all
+>                     MODE=ctypes   clean (3.9M it/s)
+> probe/corruption_rate.py  MODE=A  IndexError: only integers, slices … @ iter 2,492,225
+>                           MODE=C  double free or corruption (out) → abort in numpy's
+>                                   array dealloc (_Py_Dealloc → _multiarray_umath → free)
+> ```
+> Other things observed on the same box while hunting it: `arr.ctypes` evaluated to a
+> **`str`**; a module-level **int** `HDR` raised `AttributeError: module 'numpy' has no
+> attribute 'HDR'` (i.e. the interpreter resolved a global against the wrong object); a
+> `ValueError: cannot reshape array of size 1` when the geometry was a fixed 640×480×2560.
+> Those are mis-executed bytecode / a corrupted heap inside **CPython 3.14.4
+> (`/usr/bin/python3.14`, GCC 15.2) + numpy (venv 2.5.3 *and* system 2.3.5 both crashed)**,
+> not a logic error in this package.
+>
+> **Rate: ~1 event per 10^5–10^7 view constructions**, and it is not deterministic: a
+> 240M-iteration matrix run came back completely clean, and the same script crashes on one
+> run and not the next. That is the whole reason three sessions could not pin it — and why
+> "I ran it once and it was fine" was never evidence. At a real ~40 fps capture rate the
+> expected time to one event is **days**, which is why nobody hits this in normal use.
+>
+> **HEAD-TO-HEAD, 2026-10-07 ~02:00 — rewriting the read path does not change anything.**
+> `probe/fault_rate.py` (40M `latest(rgb=True)` reads per round, ~480k reads/s, `-X dev`),
+> old = `git worktree` of HEAD, new = the hardened path. Full table in
+> `probe/FAULT_RATE_RESULTS.txt`:
+>
+> ```
+> old: faulted in 4/4 rounds   (~13M, ~1M, 0 reads, early)   '_Hdr' has no attribute '_hdr',
+>                                                                      shape=(1, 3, 2560, 4)
+> new: faulted in 4/4 rounds   (<1M, <1M, ~24M, ~?)            'Capture' - int,
+>                                                        'int' % 'mmap.mmap', SIGSEGV
+> ```
+>
+> Caching one numpy array per slot instead of building a view per frame (removing ~6 orders
+> of magnitude of buffer-export churn) **also faulted 3/3** — so it is not the export churn
+> either. That variant was reverted; the read path stays simple.
+>
+> **MEMORY FAULTS ON THIS BOX — the likeliest explanation.** While measuring, the fault
+> rate rose until even `tests/test_ring_reader.py` — synthetic ring, no daemon, no
+> threads — faulted, with `'int' + 'Capture'` in code that never creates a `Capture`. The
+> machine's state at the time: `MemFree` ≈ 1 GB of 131 GB, **`SwapTotal` = 0**,
+> `Shmem` = 79 GB, `pgscan_direct` 331k / `allocstall_movable` 318 (direct reclaim live),
+> `pgmajfault` 57k — because **`llama-server` (the model these agent sessions run on)
+> holds 103 GB RSS, including a 72 GB shared mapping**. Non-ECC RAM
+> (`EDAC ie31200: No ECC support`). The kernel has already oopsed here once today:
+> `BUG: kernel NULL pointer dereference … Oops: [#1] SMP NOPTI` in
+> `free_pages_and_swap_cache+0x50` (page reclaim), PID `nvidia-smi`, tainted
+> (`[P]ROPRIETARY [O]OT [E]UNSIGNED`) kernel `7.0.0-2018-nvidia-bos` + NVIDIA 610.57.04,
+> ASRock Z790 Steel Legend. And `/var/crash/_usr_bin_python3.14.1000.crash` records
+> **`Signal: 7` / `SIGBUS`** for `.venv/bin/python tests/test_kwcapture.py quick` — a page
+> of the ring that could not be materialised, which is exactly the failure mode that looks
+> like "flaky, GC/timing-dependent, impossible values".
+>
+> **Decisive next experiment (run it before touching this code again):**
+> `KWC_ITERS=40000000 .venv/bin/python -X dev probe/fault_rate.py` on another machine, or
+> with `llama-server` stopped. Clean there ⇒ BUG-4 is environmental, closes, and nothing
+> here needs changing. Faults there too on the same numpy/CPython ⇒ then and only then it
+> is worth reporting upstream, with `probe/corruption_rate.py`'s ~20-line core and the
+> `double free or corruption (out)` dealloc trace.
+>
+> **What v0.4.0 changed** — real correctness fixes in the read path, *not* a mitigation of
+> the fault (measured unchanged, above). See the `_view()`/`_descriptor()` comments:
+> one contiguous read of the slot descriptor instead of a ctypes shadow object plus
+> repeated field reads (two fields could previously come from two different frames); ring
+> geometry validated once per generation; every value bounds-checked before it becomes an
+> offset/count/shape (nonsense used to be able to hand numpy the header bytes as pixels);
+> the client's data mapping is now **read-only**, so views are read-only for free and no
+> client can write into the ring; `grab()` takes the newest published frame instead of the
+> exact one it asked for (a slot the daemon had already recycled is no longer read);
+> a torn `copy=True` read is retaken once; and a generation counter refuses to return a
+> frame that spans a `restart()`/`close()`.
+> **Never write "BUG-4 fixed" — write "not ours, guardrails added, fault rate unchanged".**
+> Repros and measurement: `probe/race_bisect.py`, `probe/corruption_rate.py`,
+> `probe/fault_rate.py`, `probe/FAULT_RATE_RESULTS.txt`. Deterministic guardrail tests:
+> `tests/test_ring_reader.py` (no compositor needed, so they run in CI).
+
+The rest of this entry is the original hunt, kept because the reasoning is why we believed
+it was a race for three sessions. **This is the bug earlier sessions kept hitting and never
+writing down. It is NOT a typo and it is NOT statically findable — `'int' object is not
+callable' is a memory-corruption symptom, not a name error.** Reconstructed 2026-10-06 from
+the previous session's saved transcript (`private/chat_his.jsonl`, lines ~349–381); that
+session died mid-bisect without a root cause.
 
 * **Symptoms, all three from the same stress run family:**
   1. `TypeError: "'int' object is not callable"` — hit inside `Capture.latest(rgb=True)`
@@ -233,23 +375,33 @@ cause. If you are staring at a mysterious `int`/`Slot_Array_4`/segfault in `grab
   `PYTHONFAULTHANDLER=1 .venv/bin/python -X dev`, and **repeat the run many times** — a
   single clean pass proves nothing. Also try with `gc` pressure (allocate in the loop) and
   with concurrent `restart()`/`close()`.
-* **Fix directions** (none applied yet):
-  1. **APPLIED**: `_view()` now snapshots `slots`/`hdr_size`/`slot_bytes` once up front and
-     `_check_error()` reads `h.error` once (kills BUG-4b's `daemon error: Success`). Still
-     open: `sl.*` fields are read more than once in places, and `status`/`format` should be
-     snapshotted the same way. Verified: windows suite green, `latest(rgb=True)` at 460k it/s
-     for 8 s with `-X dev`, no warning — but **this does not prove BUG-4 is gone**, it is
-     flaky by nature; do not close this entry on a clean run.
+* **Fix directions, 2026-10-07 status:**
+  1. **APPLIED (v0.3.x)**: `_view()` snapshotted `slots`/`hdr_size`/`slot_bytes` once and
+     `_check_error()` reads `h.error` once (killed BUG-4b's `daemon error: Success`).
   2. **TRIED AND REJECTED — do not repeat this exact attempt**: `arr._kwc_shm = (mm, hdr)`
      silently does nothing because these are numpy **views**, which reject new attributes;
      wrapped in `except AttributeError` it looked like a fix while `hasattr(arr,'_kwc_shm')`
-     was False. numpy already keeps the buffer via `arr.base`. A real keepalive needs an
-     `ndarray` subclass or an explicit registry. **General lesson: a fix wrapped in a broad
-     `except` that never asserts anything is a placebo — verify the effect, not the intent.**
-  3. Never mutate `self._mm`/`self._hdr` while views may be outstanding — or make `close()`
-     explicitly invalidate them and document that outstanding views become invalid.
-  4. Run the suite under `-X dev` + `PYTHONFAULTHANDLER=1` in CI with a stress target so
-     this stops being invisible.
+     was False. numpy already keeps the buffer via `arr.base`. **General lesson: a fix
+     wrapped in a broad `except` that never asserts anything is a placebo — verify the
+     effect, not the intent.** (Re-confirmed in 0.4.0: an outstanding view really does keep
+     the mapping alive — `tests/test_ring_reader.py::lifetime_section` asserts it, and
+     `mmap.close()` refuses with `BufferError` while a view exists.)
+  3. **APPLIED (v0.4.0)**: the frame path no longer re-reads shared memory. `_descriptor()`
+     takes ONE contiguous `_SLOT_SIZE` read per frame, `_start_once()` caches the
+     generation's `slots`/`hdr_size`/`slot_bytes`/`len(mm)` via `_check_ring_geometry()`,
+     and `_view()` validates geometry + bounds before touching numpy. `close()`/`restart()`
+     bump `_gen`, and a read that spans one raises `DaemonDead` instead of mixing rings; an
+     outstanding view keeps its mapping and stays readable (documented in `grab()`).
+  4. **APPLIED (v0.4.0)**: `tests/test_ring_reader.py` runs the reader against a synthetic
+     ring — invalid descriptors, a concurrent writer, ~4.5M reads in 6 s — under `-X dev`
+     **in CI** (`.github/workflows/ci.yml`), so this path is no longer untested off a
+     Plasma desktop.
+  5. **STILL OPEN / NOT OURS**: the numpy+CPython fault itself. If you are asked to "finish
+     BUG-4", the useful next steps are upstream, not here: reduce `probe/corruption_rate.py`
+     further (it is already a ~20-line core), report it against numpy with the
+     `double free or corruption (out)` dealloc trace, and re-test on a different kernel /
+     machine to separate numpy from this box. A `PYTHONMALLOC=debug` run is the next
+     diagnostic — it was not tried yet.
 
 #### BUG-4b: `CaptureError: daemon error: Success` — double read of `hdr.error`
 
@@ -396,8 +548,11 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 
 1. Bump the version in **both** `pyproject.toml` and `kwcapture/__init__.py`, update
    `CHANGELOG.md` + `README.md` (including the release-wheel URL at the top of README).
-2. `make && .venv/bin/python tests/test_kwcapture.py` — everything must pass on the real
-   desktop (CI only checks that it *builds and imports*).
+2. `make && .venv/bin/python -X dev tests/test_kwcapture.py` — everything must pass on the
+   real desktop (CI only checks that it *builds and imports*, plus
+   `tests/test_ring_reader.py`, which needs no compositor). Check the count of `[PASS]`
+   lines against the number claimed in CHANGELOG.md, and run
+   `.venv/bin/python -X dev tests/test_ring_reader.py` too — it is the BUG-4 guardrail.
 3. `git commit` the lot, then `git tag vX.Y.Z && git push origin main --follow-tags`.
 4. Build the artefacts here: `.venv/bin/python -m build` → `dist/*.tar.gz` +
    `dist/*-py3-none-linux_x86_64.whl`. Sanity check the wheel in a throwaway venv **from

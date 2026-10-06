@@ -37,6 +37,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsystemd-dev libwayland-dev pkg-config
 
+      - name: Ring-reader tests (no compositor needed)
+        # BUG-4 guardrail: the only automated coverage the zero-copy read path gets
+        # outside a Plasma desktop. Run it before we ship anything built from this tree.
+        run: |
+          python -m pip install --quiet numpy
+          python -X dev tests/test_ring_reader.py quick
+
       - name: Build sdist
         run: |
           python -m pip install --upgrade pip build

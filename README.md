@@ -68,7 +68,7 @@ pip install "kwcapture[fast]"             # + OpenCV: ~8x faster resize/encode
 pip install "kwcapture @ git+https://github.com/tjandrasg/kwcapture.git"
 
 # or the prebuilt wheel straight from the release page:
-pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.3.0/kwcapture-0.3.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.4.0/kwcapture-0.4.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
 ```
 
 Needs **KDE Plasma with KWin on Wayland**. The PyPI wheel ships the small native helper
@@ -168,6 +168,8 @@ Notes:
 
 * `grab()` returns a **read-only view** of the shared ring, overwritten after `slots`
   further frames — use `copy=True` (or `.copy()`) to keep a frame, or `shot()`/`to_rgb()`.
+  The ring is mapped read-only, so a view can never write into it, and a view stays
+  readable after `close()` — frozen at the frame that was current when you closed.
 * `latest()` returns the newest published frame **without** asking KWin for one.
 * `hide_caller_windows=True` by default: KWin hides the capturing process' own windows,
   so your overlay/terminal does not end up in the shot (`--no-hide-caller` to disable).
@@ -215,8 +217,10 @@ How the handles are found (and what they can and cannot do):
   window's own buffer, so you get the whole client area, and nothing of the windows on
   top. A **minimised** window returns a frame, but it is a **stale snapshot**: KWin stops
   rendering windows that are minimised, so you get the last buffer it held — the same bytes
-  every time, with no error to tell you. Capture the window while it is mapped if you need
-  its current contents.
+  every time. `Capture(stale_check=True)` makes `grab()` consult KWin (throttled) and set
+  **`stale_frame`** so this cannot pass unnoticed, and warn once when a window goes stale;
+  `Capture.window_minimized` asks on demand. Capture the window while it is mapped if you
+  need its current contents.
 * A handle is only valid while the window lives. If the window is closed, `grab()`/`latest()`
   raise **`WindowGone`** — the helper stays alive, the other captures are unaffected, and
   `list_windows()` no longer reports it.
@@ -283,6 +287,8 @@ make wheel          # dist/*.whl
 | `AmbiguousWindow` | several windows share that name/caption — pass the handle from `kwcapture windows` |
 | `WindowGone: the window has nothing to capture` | the window was closed (or is being unmapped). The helper is fine: `list_windows()` again and make a new `Capture` |
 | `unsupported kwcapture ABI 1` | an old helper binary (`$KWCAPTURE_BIN`, or a stale `kwcapture/bin`): rebuild with `kwcapture setup` |
+| `frame N reports an invalid geometry` / `outside the …-byte ring` | the client refused a frame descriptor that cannot fit the ring (old/mismatched helper, or a ring truncated under it). `Capture.restart()`; if it repeats, `kwcapture setup` to rebuild the helper |
+| `the ring was replaced by restart()/close() while this frame was being read` | you grabbed from another thread while something called `restart()`; a single `Capture` is not thread-safe for lifecycle + reads |
 | works in a terminal but not from cron/SSH | you need `WAYLAND_DISPLAY` **and** `DBUS_SESSION_BUS_ADDRESS` of the graphical session |
 | colours wrong somewhere | `grab()` is BGRA; `shot()`/`to_rgb()` are RGB |
 

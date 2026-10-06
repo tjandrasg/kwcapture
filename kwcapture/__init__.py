@@ -36,6 +36,7 @@ import json
 import mmap
 import os
 import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -249,6 +250,64 @@ assert ctypes.sizeof(_Hdr) == _KWC_STRUCT_SIZE, (
     f"kwcapture: header layout mismatch (python {ctypes.sizeof(_Hdr)} != "
     f"expected {_KWC_STRUCT_SIZE}); rebuild against include/kwcapture_shm.h"
 )
+
+# ---------------------------------------------------------------- shared-memory reads
+# Everything in this block exists because of BUG-4 (AGENTS.md): the client reads memory
+# the daemon owns and can rewrite at any time.  `_view()` used to read the same fields
+# repeatedly through ctypes *shadow* objects (`h.slot[i]`), which could mix two frames'
+# values into one geometry, and it did so inside the same expression as the numpy
+# zero-copy view that turns out to corrupt memory by itself (probe/corruption_rate.py).
+# The rules now:
+#   * values that are fixed for one daemon generation (slots, hdr_size, slot_bytes) are
+#     read once in `_start_once()` and cached on the instance;
+#   * per-frame values come from ONE contiguous read of the slot descriptor into a
+#     private bytes object, and nothing is derived from shared memory twice;
+#   * every value is bounds-checked against the mapping before it becomes an offset;
+#   * frames are read through a read-only mapping (so the numpy view is read-only for
+#     free, no `setflags()`, and a caller can never write into the ring); the two control
+#     words the client writes (`req_seq`, `quit`) go through a separate tiny writable one.
+_LE = sys.byteorder
+_HDR_OFF = {name: getattr(_Hdr, name).offset for name, _ in _Hdr._fields_}
+_SLOT_OFF = {name: getattr(_Slot, name).offset for name, _ in _Slot._fields_}
+_SLOT_SIZE = ctypes.sizeof(_Slot)
+_U32 = struct.Struct("@I")
+_U64 = struct.Struct("@Q")
+# _Slot starts with four u32: width, height, stride, format
+assert (_SLOT_OFF["width"], _SLOT_OFF["height"], _SLOT_OFF["stride"],
+        _SLOT_OFF["format"]) == (0, 4, 8, 12), "unexpected _Slot layout"
+assert _SLOT_SIZE == 144, f"unexpected _Slot size {_SLOT_SIZE}"
+_GEOM = struct.Struct("@4I")
+
+
+_SLOT_ARRAY_OFF = _HDR_OFF["slot"]     # start of the per-frame descriptors (v2: 248)
+
+
+def _check_ring_geometry(slots: int, hdr_size: int, slot_bytes: int,
+                         ring_len: int) -> None:
+    """Refuse a ring the daemon advertises but the file cannot hold (BUG-4).
+
+    Called once per daemon generation. Everything a frame view derives from shared memory
+    (offsets, counts, shapes) is only safe if these numbers are sane, so nonsense is an
+    error here rather than a bogus array -- or worse -- later.
+    """
+    if not 1 <= slots <= KWC_MAX_SLOTS:
+        raise CaptureError(f"daemon reports {slots} ring slots "
+                           f"(1..{KWC_MAX_SLOTS} are valid)")
+    if not _KWC_STRUCT_SIZE <= hdr_size <= ring_len:
+        raise CaptureError(f"daemon reports header size {hdr_size}, mapping is "
+                           f"{ring_len} bytes: helper/kwcapture mismatch?")
+    if slot_bytes < 1 or hdr_size + slot_bytes * slots > ring_len:
+        raise CaptureError(
+            f"ring does not fit its file: hdr {hdr_size} + {slots} x {slot_bytes} "
+            f"> {ring_len} bytes")
+
+
+def _u32(buf: bytes, off: int) -> int:
+    return _U32.unpack_from(buf, off)[0]
+
+
+def _u64(buf: bytes, off: int) -> int:
+    return _U64.unpack_from(buf, off)[0]
 
 
 def default_shm_path(tag: str = "") -> str:
@@ -598,9 +657,17 @@ class Capture:
         self.req_path = self.shm_path + ".req"  # FIFO used to wake the daemon
         self._req_fd = -1
         self._proc: Optional[subprocess.Popen] = None
-        self._mm: Optional[mmap.mmap] = None
+        self._mm: Optional[mmap.mmap] = None      # read-only: frame data (numpy views)
+        self._ctl: Optional[mmap.mmap] = None     # writable: header control words only
         self._fd = -1
         self._hdr: Optional[_Hdr] = None
+        # ring geometry of the *current* daemon generation, read once (see BUG-4) and
+        # used to validate every per-frame value before it becomes an offset.
+        self._gen = 0
+        self._ring_slots = 0
+        self._ring_hdr_size = 0
+        self._ring_slot_bytes = 0
+        self._ring_len = 0
         self._daemon_stderr = daemon_stderr
         self.idle_exit = idle_exit
         self._slots = slots
@@ -731,8 +798,13 @@ class Capture:
             time.sleep(0.002)
 
         self._fd = os.open(self.shm_path, os.O_RDWR)
-        self._mm = mmap.mmap(self._fd, 0, access=mmap.ACCESS_WRITE)
-        self._hdr = _Hdr.from_buffer(self._mm)
+        # Two mappings of the same ring, deliberately (BUG-4): the frame data is mapped
+        # read-only, so numpy hands out read-only views without a `setflags()` call and no
+        # caller can write into the ring; the only words the client writes (`req_seq`,
+        # `quit`) go through a separate header-sized writable mapping.
+        self._mm = mmap.mmap(self._fd, 0, access=mmap.ACCESS_READ)
+        self._ctl = mmap.mmap(self._fd, _KWC_STRUCT_SIZE, access=mmap.ACCESS_WRITE)
+        self._hdr = _Hdr.from_buffer(self._ctl)
         hdr = self._hdr
         deadline = time.monotonic() + self.start_timeout
         while (hdr.magic != KWC_MAGIC or not hdr.ready
@@ -746,7 +818,16 @@ class Capture:
                 raise CaptureError("timed out waiting for the first frame")
             time.sleep(0.002)
         if hdr.version != KWC_VERSION:
-            raise CaptureError(f"unsupported kwcapture ABI {hdr.version}")
+            raise CaptureError(f"unsupported kwcapture ABI {hdr.version}: rebuild the "
+                               f"helper (`kwcapture setup`) or upgrade kwcapture")
+        # Fixed for this daemon generation: read once here, then never re-read those
+        # fields on the frame path (BUG-4: they used to be re-read per frame, through
+        # ctypes shadow objects, next to the numpy view of the same memory).
+        slots, hdr_size, slot_bytes = int(hdr.slots), int(hdr.hdr_size), int(hdr.slot_bytes)
+        ring_len = len(self._mm)
+        _check_ring_geometry(slots, hdr_size, slot_bytes, ring_len)
+        self._ring_slots, self._ring_hdr_size = slots, hdr_size
+        self._ring_slot_bytes, self._ring_len = slot_bytes, ring_len
         self._open_req_channel()
 
     def _open_req_channel(self) -> None:
@@ -775,22 +856,32 @@ class Capture:
             self._open_req_channel()
 
     def _unmap(self) -> None:
-        """Release the header, mapping and fd belonging to a previous daemon.
+        """Release the header, mappings and fd belonging to a previous daemon.
 
         restart() re-opens all three, so without this every restart leaked one fd and one
         mmap (measured: 16 -> 20 fds over 4 restarts). mmap.close() raises BufferError while
         numpy still exports a buffer from it, in which case we simply drop our reference --
-        the mapping stays alive for those views, which is what we want.
+        the mapping stays alive for those views, which is what we want: an outstanding
+        frame view keeps its bytes readable (frozen at close time) instead of SIGSEGVing,
+        and because the next daemon's file is created fresh (we unlink the path first)
+        the old mapping's pages are never truncated underneath it.
+
+        Bumps `_gen`: a read that started before this must not finish against the next
+        generation's ring.
         """
-        for attr, closer in (("_hdr", None), ("_mm", "close")):
+        self._gen += 1
+        self._ring_slots = self._ring_hdr_size = self._ring_slot_bytes = 0
+        for attr in ("_hdr", "_ctl", "_mm"):
             obj = getattr(self, attr)
-            if obj is not None:
-                if closer:
-                    try:
-                        obj.close()
-                    except (BufferError, ValueError):
-                        pass
-                setattr(self, attr, None)
+            if obj is None:
+                continue
+            setattr(self, attr, None)
+            if attr == "_hdr":
+                continue        # just released its export of _ctl
+            try:
+                obj.close()
+            except (BufferError, ValueError):
+                pass            # still exported by an outstanding view: leave it mapped
         if self._fd >= 0:
             try:
                 os.close(self._fd)
@@ -927,8 +1018,9 @@ class Capture:
     def stats(self) -> dict:
         """Timings of the most recently published frame."""
         h = self._require()
-        seq = int(h.frame_seq)
-        sl = h.slot[(seq - 1) % int(h.slots)]
+        seq = self._frame_seq()
+        # private copy of the descriptor: one read, then every field is ours (BUG-4)
+        sl = _Slot.from_buffer_copy(self._descriptor(seq))
         return dict(
             seq=seq,
             published=int(h.published),
@@ -949,7 +1041,7 @@ class Capture:
         )
 
     def _require(self) -> _Hdr:
-        if self._hdr is None:
+        if self._hdr is None or self._mm is None or not self._ring_slots:
             raise CaptureError("capture not started")
         return self._hdr
 
@@ -965,49 +1057,82 @@ class Capture:
         if h.magic == KWC_MAGIC_GONE or (self._proc and self._proc.poll() is not None):
             raise DaemonDead("kwcapture daemon is no longer running")
 
+    # ------------------------------------------------------- shared-memory reads
+    def _frame_seq(self) -> int:
+        """Newest published frame number: one 8-byte read of the ring."""
+        mm = self._mm
+        if mm is None or not self._ring_slots:
+            raise CaptureError("capture not started")
+        off = _HDR_OFF["frame_seq"]
+        return _u64(mm[off:off + 8], 0)
+
+    def _descriptor(self, seq: int) -> bytes:
+        """ONE contiguous read of the slot descriptor belonging to `seq`.
+
+        Every per-frame value used to build a view comes out of this single read, so two
+        fields can never belong to two different frames -- the daemon rewrites a
+        descriptor when the ring wraps onto that slot -- and no ctypes shadow object is
+        created on the frame path. See BUG-4 in AGENTS.md.
+        """
+        mm = self._mm
+        if mm is None or not self._ring_slots:
+            raise CaptureError("capture not started")
+        so = _SLOT_ARRAY_OFF + ((seq - 1) % self._ring_slots) * _SLOT_SIZE
+        d = mm[so:so + _SLOT_SIZE]
+        if len(d) != _SLOT_SIZE:
+            raise DaemonDead("ring is smaller than its own header: the daemon is gone?")
+        return d
+
     # ------------------------------------------------------------------ frames
     def _view(self, seq: int, rgb: bool, copy: bool) -> np.ndarray:
-        h = self._hdr
-        assert h is not None
-        # Snapshot the shared header once up front (BUG-4 in AGENTS.md: this path is
-        # written concurrently by the daemon, and reading the same field twice can give two
-        # different values for one frame -- torn width/stride or a torn status. It is also
-        # where the flaky "'int' object is not callable" / SIGSEGV family shows up).
-        slots, hdr_size, slot_bytes = int(h.slots), int(h.hdr_size), int(h.slot_bytes)
-        sl = h.slot[(seq - 1) % slots]
-        status = int(sl.status)
+        mm = self._mm
+        if mm is None or not self._ring_slots:
+            raise CaptureError("capture not started")
+        d = self._descriptor(seq)
+        status = _u32(d, _SLOT_OFF["status"])
         if status:
             # the compositor refused this frame: the slot holds nothing usable (a window
-            # that got closed or minimised is the usual reason, see WindowGone)
-            exc, reason = _frame_error(status, int(h.target))
-            target = _TARGET_NAMES.get(int(h.target), "capture")
+            # that got closed is the usual reason, see WindowGone)
+            h = self._require()
+            code = int(h.target)
+            exc, reason = _frame_error(status, code)
+            target = _TARGET_NAMES.get(code, "capture")
             what = ""
-            if int(h.target) == KWC_TARGET_WINDOW:
+            if code == KWC_TARGET_WINDOW:
                 handle = h.window.decode() if isinstance(h.window, bytes) else str(h.window)
                 what = f" {handle}"
             raise exc(f"frame {seq} failed: {reason} (target={target}{what})")
-        w, hgt, stride = int(sl.width), int(sl.height), int(sl.stride)
+        w, hgt, stride, fmt = _GEOM.unpack_from(d, 0)
         if w == 0 or hgt == 0:
             raise CaptureError("frame has no geometry")
-        off = hdr_size + ((seq - 1) % slots) * slot_bytes
-        mm = self._mm
-        arr = np.frombuffer(
-            mm, dtype=np.uint8, count=stride * hgt, offset=off
-        ).reshape(hgt, stride // 4, 4)[:, :w, :]
+        # Validate before use: nothing read out of shared memory becomes an offset, a
+        # count or a shape for numpy unless it fits the mapping we actually hold. An
+        # invalid descriptor must raise, not hand out header bytes as pixels and not read
+        # past the end of the ring (BUG-4).
+        if stride % 4 or w > stride // 4:
+            raise DaemonDead(f"frame {seq} reports an invalid geometry: "
+                             f"{w}x{hgt} stride {stride}")
+        idx = (seq - 1) % self._ring_slots
+        count = stride * hgt
+        off = self._ring_hdr_size + idx * self._ring_slot_bytes
+        if count > self._ring_slot_bytes or off + count > self._ring_len:
+            raise DaemonDead(
+                f"frame {seq} claims {count} bytes at offset {off}, outside the "
+                f"{self._ring_len}-byte ring")
+        if rgb and fmt not in (4, 5, 6, 11, 12, 13):
+            raise CaptureError(f"unhandled pixel format {fmt}")
+        arr = np.frombuffer(mm, dtype=np.uint8, count=count, offset=off)
+        arr = arr.reshape(hgt, stride // 4, 4)
+        if w != stride // 4:          # full-width frames need no slice at all
+            arr = arr[:, :w, :]
         if rgb:
-            if int(sl.format) not in (4, 5, 6, 11, 12, 13):
-                raise CaptureError(f"unhandled pixel format {sl.format}")
-            arr = arr[..., 2::-1]  # BGRA -> RGB, zero copy (negative strides)
-        arr = arr.copy() if copy else arr
-        arr.setflags(write=copy)
-        # NOTE: pinning the mmap onto the returned view with `arr._kwc_shm = (mm, h)` does
-        # NOT work -- these are numpy *views*, which reject new attributes, and wrapping it
-        # in `except AttributeError` made the fix a silent placebo (verified: hasattr() was
-        # False). numpy already holds the buffer via `arr.base`, so lifetime is unchanged;
-        # doing this properly needs an ndarray subclass or an explicit keepalive registry.
-        # See BUG-4 in AGENTS.md -- the real protection here is the single-read snapshot
-        # above, not any reference trick.
+            arr = arr[..., 2::-1]     # BGRA -> RGB, zero copy (negative strides)
+        if copy:
+            arr = arr.copy()          # writable; the ring itself is mapped read-only
         return arr
+        # (Reusing one array per slot instead of building a view per frame was tried to
+        # dodge the upstream fault and measured: it changed nothing -- see
+        # probe/FAULT_RATE_RESULTS.txt. So the read path stays simple.)
 
     def grab(
         self,
@@ -1018,21 +1143,24 @@ class Capture:
     ) -> np.ndarray:
         """Return a frame as an (H, W, 4) BGRA or (H, W, 3) RGB uint8 array.
 
-        With copy=False (default) the array is a *view* of the shared ring: it is
-        overwritten once `slots` more frames arrive, so `copy=True` (or `.copy()`)
-        if you need to keep it.  With fresh=False the newest already-captured frame
-        is returned immediately (no compositor round-trip).
+        With copy=False (default) the array is a read-only *view* of the shared ring: it
+        is overwritten once `slots` more frames arrive, so use `copy=True` (or `.copy()`)
+        if you need to keep it.  A view stays readable after `close()` -- frozen at the
+        frame that was current when the Capture closed -- but belongs to no daemon after
+        that.  With fresh=False the newest already-captured frame is returned immediately
+        (no compositor round-trip).
         """
         h = self._require()
+        gen = self._gen
         self._check_error()
-        seq = int(h.frame_seq)
+        seq = self._frame_seq()
         if fresh:
             want = seq + 1
             h.req_seq = want
             self._poke()
             deadline = time.monotonic() + timeout
             spins = 0
-            while int(h.frame_seq) < want:
+            while self._frame_seq() < want:
                 self._check_error()
                 if time.monotonic() > deadline:
                     raise TimeoutError(
@@ -1043,8 +1171,22 @@ class Capture:
                     time.sleep(0.0002)
                 else:
                     sched_yield()
-            seq = want
+            # Take the NEWEST published frame rather than exactly `want`: if the daemon ran
+            # ahead (fps mode, or a request still queued from earlier), `want` can be
+            # `slots` frames behind by now -- a slot the daemon is free to rewrite while
+            # we read it.
+            seq = self._frame_seq()
         arr = self._view(seq, rgb, copy)
+        if self._gen != gen:
+            raise DaemonDead("the ring was replaced by restart()/close() while this frame "
+                             "was being read: the result would mix two daemons")
+        if copy and self._ring_slots:
+            # A copy that the ring wrapped over while it was being made is torn: re-read
+            # the newest frame once. A zero-copy view cannot be protected this way --
+            # that is what copy=True is for.
+            newest = self._frame_seq()
+            if newest - seq >= self._ring_slots:
+                arr = self._view(newest, rgb, copy)
         if self.stale_check:
             self._update_staleness()
         return arr

@@ -1,0 +1,15 @@
+Fault-rate measurement, old (HEAD) vs hardened read path, 40M `latest(rgb=True)` reads:
+
+  impl  round  reads before the fault   symptom
+  old     1                ~13,000,000   AttributeError: '_Hdr' object has no attribute '_hdr'
+  old     2                 ~1,000,000   AttributeError: '_Hdr' object has no attribute '_hdr'
+  old     3                         0   BAD FRAME: shape=(1, 3, 2560, 4)   <-- ndim 4 is
+                              (impossible: _view() can only ever build ndim 3)
+  old     4                 early        AttributeError: '_Hdr' object has no attribute '_hdr'
+  new     1               < 1,000,000   TypeError: unsupported operand - : 'Capture' and 'int'
+  new     2               < 1,000,000   TypeError: unsupported operand % : 'int' and 'mmap.mmap'
+  new     3               ~24,000,000   AttributeError: '_Hdr' object has no attribute '_hdr'
+  new     4               ~?            Fatal Python error: Segmentation fault
+
+=> same fault rate before and after (about 1 per 10^6..10^7 view constructions).
+   Restructuring the read path changes nothing, because the read path is not the fault.

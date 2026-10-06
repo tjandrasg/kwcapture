@@ -9,6 +9,7 @@
 The window tests launch (and close) their own `kcalc` windows so they can also test
 what happens when a captured window disappears; they skip if kcalc is not installed.
 """
+import gc
 import os
 import shutil
 import signal
@@ -337,7 +338,9 @@ def window_vanish_section():
 
 
 def bug_regression_section():
-    """Regressions for BUG-2 (sched_yield crash) and BUG-3 (fd leak on restart)."""
+    """Regressions for BUG-2 (sched_yield crash), BUG-3 (fd leak on restart) and BUG-4
+    (the zero-copy read path).  The deterministic part of BUG-4 lives in
+    tests/test_ring_reader.py, which needs no compositor and runs in CI."""
     import ctypes
     import os as _os
 
@@ -397,6 +400,81 @@ def bug_regression_section():
                   after - base <= 1, f"{base} -> {after} fds over 4 restarts")
     except Exception as e:  # noqa: BLE001
         check("BUG-3 restart regression ran", False, f"{type(e).__name__}: {e}")
+
+    print("\n== regression: BUG-4 zero-copy read path ==")
+    try:
+        cap = K.Capture(shm=K.default_shm_path("bug4"))
+    except Exception as e:  # noqa: BLE001
+        check("BUG-4 regression ran", False, f"{type(e).__name__}: {e}")
+        return
+    try:
+        first = cap.grab()
+        check("a frame view is read-only without setflags() (RO mapping)",
+              not first.flags.writeable)
+        old = cap.latest()                       # view we keep across a restart
+        old_first = int(old[0, 0, 0])
+        cap.restart()
+        fresh = cap.grab()
+        check("grab works after restart with an outstanding view",
+              fresh.shape[0] > 0, str(fresh.shape))
+        check("the view from before the restart is still readable",
+              old.shape[0] > 0 and int(old[0, 0, 0]) == old_first)
+        check("it was not unmapped out from under us",
+              old.base is not None)
+
+        # hammer the exact path BUG-4 was reported on (latest + grab, GC pressure) and
+        # self-check every frame: wrong shape / wrong dtype / unwritable copy is a failure
+        bad = 0
+        kept = []
+        deadline = time.time() + 3.0
+        n = 0
+        while time.time() < deadline:
+            a = cap.latest(rgb=True)
+            if a.ndim != 3 or a.shape[2] != 3 or a.dtype != np.uint8:
+                bad += 1
+            kept.append(a)
+            b = cap.grab(copy=True)
+            if b.ndim != 3 or b.shape[2] != 4 or not b.flags.writeable:
+                bad += 1
+            n += 1
+            if n % 20 == 0:
+                del kept[:20]
+            if n % 200 == 0:
+                gc.collect()
+        check("latest()/grab() survived a self-checking hammer",
+              bad == 0, f"{n:,} iterations, {bad} bad frames, "
+                        f"{n / 3.0:,.0f} it/s")
+
+        # the historic trigger is `latest()` at hundreds of thousands of calls/s, which is
+        # what BUG-4 was first seen on (probe/corruption_rate.py reproduces it with no
+        # kwcapture in sight); a short burst keeps the pattern visible in the suite
+        burst = 300_000
+        t0 = time.time()
+        for i in range(burst):
+            v = cap.latest(rgb=True)
+            if i % 2000 == 0 and (v.shape[2] != 3 or v.dtype != np.uint8):
+                bad += 1
+        check("latest(rgb=True) burst clean", bad == 0,
+              f"{burst:,} calls in {time.time() - t0:.2f}s "
+              f"({burst / max(1e-9, time.time() - t0):,.0f} it/s)")
+        st = cap.stats()
+        check("stats() and the frame agree on geometry",
+              st["width"] == fresh.shape[1] and st["height"] == fresh.shape[0],
+              f"{st['width']}x{st['height']}")
+        # close() must not pull the mapping out from under a live view
+        held = cap.latest()
+        held_px = int(held[0, 0, 0])
+        cap.close()
+        check("a view stays readable after close() (frozen, not unmapped)",
+              held.shape[0] > 0 and int(held[0, 0, 0]) == held_px)
+        del held
+    except Exception as e:  # noqa: BLE001
+        check("BUG-4 regression ran", False, f"{type(e).__name__}: {e}")
+    finally:
+        try:
+            cap.close()
+        except Exception:
+            pass
 
 
 def _summary() -> int:

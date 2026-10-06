@@ -20,6 +20,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsystemd-dev libwayland-dev pkg-config
 
+      - name: Ring-reader tests (no compositor needed)
+        # The deterministic half of BUG-4 (AGENTS.md): a synthetic ring, a writer thread
+        # and the client's zero-copy reader. It runs here because the functional suite
+        # needs a Plasma session and therefore never ran outside this desktop - which is
+        # exactly why BUG-4 stayed invisible for three sessions.
+        run: |
+          python -m pip install --quiet numpy
+          python -X dev tests/test_ring_reader.py quick
+
       - name: Build sdist and wheel
         run: |
           python -m pip install --upgrade pip build

@@ -18,7 +18,31 @@ Stale-frame detection for window capture, and two real leaks/crashes fixed.
   `AttributeError` — and it is called from `grab()`'s busy-wait, so it took down every
   capture on such a system. Now catches both, and the cached value is guarded with
   `callable()` so a non-callable can never be invoked.
-- Tests: 79 checks (was 68), now also run under `-X dev`.
+- **The zero-copy read path is now read-only and self-validating (BUG-4).** A frame's
+  metadata used to be read out of shared memory several times per `grab()`, through ctypes
+  shadow objects, next to the numpy view of the same mapping — so two fields could belong
+  to two different frames, and nothing checked that the advertised geometry fitted the
+  ring. Now: one contiguous read of the frame descriptor; `slots`/`hdr_size`/`slot_bytes`
+  validated once per daemon generation and every frame's `width`/`height`/`stride`
+  bounds-checked before they become an offset or a shape; the ring is mapped
+  **read-only**, so views are read-only for free and no client can write into the ring;
+  `grab()` takes the newest published frame instead of the exact one it asked for; a
+  `copy=True` read that the ring wrapped over is retaken once; and a read spanning a
+  `restart()`/`close()` raises instead of returning a frame made of two daemons. A view
+  keeps its bytes after `close()` (frozen at the last frame) instead of becoming invalid
+  memory. **Honest caveat — these are correctness fixes, not a fix for the crash:** the
+  flaky `TypeError: 'int' object is not callable` / SIGSEGV family that BUG-4 was about is
+  *not* a kwcapture bug. It reproduces with plain numpy over an `mmap` and no kwcapture
+  involved (`probe/race_bisect.py`, `probe/corruption_rate.py`), and it faults the old and
+  the new read path at the **same rate** (`probe/fault_rate.py`,
+  `probe/FAULT_RATE_RESULTS.txt`) — on this machine, which is running a 100 GB-RSS model
+  server with no swap and whose kernel has oopsed once in page reclaim. See `AGENTS.md`
+  BUG-4 for the whole story and the experiment that would settle it.
+- New `tests/test_ring_reader.py`: the shared-memory reader tested against a synthetic ring
+  (invalid descriptors, a concurrent writer, millions of reads) with **no compositor**
+  needed, so it runs in CI.
+- Tests: 87 functional checks (was 79), now also run under `-X dev`, plus 29 new
+  ring-reader checks that need no compositor — 116 in total.
 
 
 ## 0.3.0
