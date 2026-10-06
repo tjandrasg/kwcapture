@@ -109,6 +109,41 @@ def window_section():
     except K.WindowNotFound:
         check("find_window() raises WindowNotFound", True)
 
+    print("\n== focused window ==")
+    # list_windows(mark_active=False) must not query focus at all
+    check("mark_active=False leaves no window active",
+          not any(w.active for w in K.list_windows(mark_active=False)))
+    check("mark_active=True marks at most one window active",
+          sum(1 for w in K.list_windows() if w.active) <= 1)
+    if not shutil.which("busctl"):
+        print("  [skip] busctl missing: cannot change focus deterministically")
+    else:
+        def _focused(expect, tries=6):
+            """active_window_id() until it matches `expect` (focus changes are async)."""
+            for _ in range(tries):
+                if K.active_window_id() == expect.id:
+                    return True
+                time.sleep(0.2)
+            return False
+
+        a, b = windows[0], windows[min(1, len(windows) - 1)]
+        if not _krunner(0, a.id):
+            print("  [skip] krunner Run failed, cannot drive focus")
+        else:
+            check("active_window_id() follows activation", _focused(a),
+                  f"wanted {a.id}, got {K.active_window_id()}")
+            marked = [w for w in K.list_windows() if w.active]
+            check("list_windows() marks the focused window",
+                  len(marked) == 1 and marked[0].id == a.id,
+                  ", ".join(w.name for w in marked) or "none")
+            check("active_window() returns the focused window",
+                  K.active_window().id == a.id, K.active_window().name)
+            check("active_window() can reuse a pre-fetched list",
+                  K.active_window(windows=windows).id == a.id)
+            if b is not a and _krunner(0, b.id):
+                check("focus moves to another window", _focused(b),
+                      f"wanted {b.id}, got {K.active_window_id()}")
+
     print("\n== per-window capture ==")
     if not shutil.which("kcalc"):
         print("  [skip] kcalc not installed; the capture tests need a window of our own")
@@ -160,6 +195,11 @@ def window_section():
                 f = cap.grab()
                 check("active_window=True captures the focused window",
                       f.shape[0] > 0 and cap.target == "active-window", str(f.shape))
+                # the daemon publishes KWin's windowId, so it must agree with the
+                # no-pixels --active-window-id query
+                check("the daemon reports the same focused handle",
+                      cap.stats()["window"] == K.active_window_id(),
+                      f"{cap.stats()['window']} vs {K.active_window_id()}")
             except K.NoActiveWindow as e:
                 check("active_window=True captures the focused window", False, str(e))
 

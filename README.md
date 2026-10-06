@@ -32,13 +32,16 @@ no cropping by whatever is on top of it:
 
 ```python
 for w in K.list_windows():                # name + handle of every capturable window
-    print(w.id, w.name, w.app_id, w.geometry)
+    print(w.id, w.name, w.app_id, w.geometry, w.active)   # active == has focus
 
 win = K.Capture(window="Kate")            # by name, caption or app id …
 kon = K.Capture(window="{e0b1aab4-4e10-…}")   # … or by the handle it came with
 act = K.Capture(active_window=True)       # whatever has focus
 win.grab()                                # 692x440 KCalc window: ~5 ms, ~185 fps
 win.shot_jpeg(quality=90)                 # just that window
+
+K.active_window()                         # the focused window, as a Window
+K.active_window_id()                      # … or just its KWin handle (~8 ms)
 ```
 
 ## Install
@@ -51,7 +54,7 @@ pip install "kwcapture[fast]"             # + OpenCV: ~8x faster resize/encode
 pip install "kwcapture @ git+https://github.com/tjandrasg/kwcapture.git"
 
 # or the prebuilt linux x86-64 wheel from the release page (no compiler needed):
-pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.2.0/kwcapture-0.2.0-py3-none-linux_x86_64.whl
+pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.3.0/kwcapture-0.3.0-py3-none-linux_x86_64.whl
 ```
 
 Needs **KDE Plasma with KWin on Wayland** and a C compiler plus `libsystemd`/`wayland-client`

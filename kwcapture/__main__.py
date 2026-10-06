@@ -189,14 +189,17 @@ def cmd_screens(argv: argparse.Namespace) -> int:
 
 
 def _window_flags(w: Window) -> str:
-    return ",".join(n for n, on in (("minimized", w.minimized), ("fullscreen", w.fullscreen),
+    return ",".join(n for n, on in (("active", w.active),
+                                    ("minimized", w.minimized), ("fullscreen", w.fullscreen),
                                     ("maximized", w.maximized), ("above", w.keep_above),
                                     ("below", w.keep_below),
                                     ("skip-taskbar", w.skip_taskbar)) if on)
 
 
 def cmd_windows(argv: argparse.Namespace) -> int:
-    windows = list_windows()
+    windows = list_windows(mark_active=not getattr(argv, "no_active", False))
+    if getattr(argv, "active_only", False):
+        windows = [w for w in windows if w.active]
     if argv.filter:
         needle = argv.filter.lower()
         windows = [w for w in windows
@@ -333,6 +336,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument("-f", "--filter", default=None,
                    help="only windows whose name/app id contains this text")
+    p.add_argument("-a", "--active-only", action="store_true",
+                   help="only the window that has focus")
+    p.add_argument("--no-active", action="store_true",
+                   help="do not query which window is focused (skips the ~8 ms query)")
     p.set_defaults(func=cmd_windows)
 
     p = sub.add_parser("grab", help="save one frame")

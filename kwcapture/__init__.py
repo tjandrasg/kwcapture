@@ -50,7 +50,7 @@ from . import _desktop, _native
 from ._desktop import install_desktop_file
 from ._native import NativeBuildError, ensure_binary, find_binary
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "Capture",
@@ -59,6 +59,8 @@ __all__ = [
     "list_screens",
     "list_windows",
     "find_window",
+    "active_window",
+    "active_window_id",
     "Window",
     "to_rgb",
     "resize",
@@ -322,6 +324,7 @@ class Window:
     window_type: int = 0
     layer: int = 0
     desktops: tuple[str, ...] = ()
+    active: bool = False        # has keyboard focus (list_windows() fills this in)
     extra: dict = field(default_factory=dict)
 
     # ``id`` is what CaptureWindow() wants; ``handle``/``uuid`` read better in code
@@ -372,7 +375,47 @@ def is_window_handle(spec: str) -> bool:
     return bool(_HANDLE_RE.match(spec.strip()))
 
 
-def list_windows(binary: Optional[str] = None) -> list[Window]:
+def active_window_id(binary: Optional[str] = None) -> Optional[str]:
+    """KWin handle of the window that has keyboard focus, or None if nothing has it.
+
+    KWin exposes no focus query over D-Bus (`supportInformation` does not list windows
+    either). The helper asks for an active-window capture and reads `windowId` out of
+    the reply, which KWin sends *before* it writes any pixels -- so the pixels are
+    dropped and nothing is copied. About 8 ms, and it needs the same authorisation as
+    a grab (unlike list_windows(), which works unauthorised).
+    """
+    binary = str(_native.resolve(binary))
+    try:
+        out = subprocess.run([binary, "--active-window-id"], capture_output=True,
+                             text=True, timeout=30)
+    except subprocess.SubprocessError as e:
+        raise CaptureError(f"cannot query the focused window: {e}") from e
+    if out.returncode == 2:  # nothing focused (e.g. the desktop has it)
+        return None
+    if out.returncode != 0:
+        raise CaptureError(out.stderr.strip() or "kwcapture --active-window-id failed")
+    return out.stdout.strip() or None
+
+
+def active_window(
+    binary: Optional[str] = None,
+    windows: Optional[list[Window]] = None,
+) -> Window:
+    """The window that has keyboard focus.
+
+    Raises WindowNotFound when nothing is focused or the focused window is not one
+    KWin lists (a panel, overlay or the desktop).
+    """
+    handle = active_window_id(binary)
+    if not handle:
+        raise WindowNotFound("no window has focus")
+    return find_window(handle, windows=windows, binary=binary)
+
+
+def list_windows(
+    binary: Optional[str] = None,
+    mark_active: bool = True,
+) -> list[Window]:
     """Every window KWin considers a normal application window.
 
     KWin's screenshot interface cannot enumerate windows, so the helper asks KWin's
@@ -380,6 +423,10 @@ def list_windows(binary: Optional[str] = None) -> list[Window]:
     handles and `/KWin getWindowInfo(handle)` for the details of each.  Panels, the
     desktop/wallpaper and other special windows are not in that list; if you do have a
     handle for one, `Capture(window=...)` still captures it.
+
+    `mark_active` sets `Window.active` on the focused window (one extra ~8 ms query);
+    pass False to skip it -- the focus query needs KWin's screenshot authorisation,
+    enumeration does not.
     """
     binary = str(_native.resolve(binary))
     out = subprocess.run([binary, "--list-windows", "--json"], capture_output=True,
@@ -390,7 +437,18 @@ def list_windows(binary: Optional[str] = None) -> list[Window]:
         data = json.loads(out.stdout or "[]")
     except json.JSONDecodeError as e:  # pragma: no cover - would mean a broken helper
         raise CaptureError(f"cannot parse the window list: {e}") from e
-    return [Window.from_dict(d) for d in data]
+    windows = [Window.from_dict(d) for d in data]
+    if mark_active:
+        try:
+            focus = active_window_id(binary)
+        except CaptureError:  # not authorised yet, or KWin refused: no active flag
+            focus = None
+        if focus:
+            want = focus.strip("{}").lower()
+            for w in windows:
+                if w.uuid.lower() == want:
+                    w.active = True
+    return windows
 
 
 def _match_score(w: Window, spec: str) -> int:

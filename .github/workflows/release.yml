@@ -43,11 +43,15 @@ jobs:
           python -m build --sdist
 
       - name: Build manylinux wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        # Do NOT pin an old cibuildwheel: each release pins a *dated* manylinux image
+        # tag on quay.io and old tags get removed, so an old pin fails with
+        # "No such image: quay.io/pypa/manylinux_2_28_x86_64:<old-date>" (this broke
+        # the v0.1.0 and v0.2.0 release runs, which pinned 2.21.3 -> 2024.10.07-1).
+        uses: pypa/cibuildwheel@v4.3.0
         env:
           CIBW_BUILD: >-
             cp39-manylinux_x86_64 cp310-manylinux_x86_64 cp311-manylinux_x86_64
-            cp312-manylinux_x86_64 cp313-manylinux_x86_64
+            cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64
           # glibc 2.28 = RHEL/Alma 8 era; fine for any desktop running Plasma 6
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
           # the helper links sd-bus and wayland-client; EL images differ in package
@@ -80,6 +84,9 @@ jobs:
           /tmp/wheeltest/bin/kwcapture --version
 
       - name: Attach to the GitHub release
+        # only for tag pushes: a manual workflow_dispatch run (used to test the wheel
+        # build, or to publish) would otherwise create a release named "main"
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}

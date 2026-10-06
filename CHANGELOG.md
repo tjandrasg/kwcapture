@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+Which window has focus, and prebuilt wheels for PyPI.
+
+- **`Window.active`** — `list_windows()` now marks the window that has keyboard focus
+  (pass `mark_active=False` to skip the extra query). **`active_window()`** returns it as
+  a `Window`, **`active_window_id()`** as a KWin handle (`None` when nothing is focused).
+  CLI: `kwcapture windows` shows an `active` flag, `kwcapture windows -a` lists only the
+  focused window. KWin has no focus query over D-Bus, so the helper asks for an
+  active-window capture and reads `windowId` out of the reply — KWin sends that **before**
+  writing any pixels, so the pixels are dropped: ~8 ms, no copy, no KWin script needed.
+- Fix: the release workflow no longer pins a stale cibuildwheel. Old cibuildwheel
+  releases pin dated manylinux images that have since been removed from quay.io, which
+  made the 0.1.0 and 0.2.0 wheel builds fail; cibuildwheel 4.3 also builds Python 3.14
+  wheels.
+
 ## 0.2.0
 
 Per-window capture and window enumeration.

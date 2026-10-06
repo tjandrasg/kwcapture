@@ -15,35 +15,43 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 60 functional checks. See `README.md` for user-facing docs; this file
 is the investigation log + gotchas.
 
-## SESSION STATUS — 2026-10-06 19:45 (read this if you just woke up)
+## SESSION STATUS — 2026-10-06 20:20 (read this if you just woke up)
 
-**v0.2.0 (per-window capture + window enumeration) is CODE COMPLETE and VERIFIED, but NOT
-RELEASED.** The previous session ran out of context right here.
+**v0.2.0 is RELEASED. v0.3.0 (focus tracking) is done locally and pushed; the remaining
+step is to tag it and finish publishing (see the todo list below).**
 
-* Verified here: `make` clean build, `.venv/bin/python tests/test_kwcapture.py` →
-  **60/60 PASS, 0 failures, 0 skips** (~35 s wall clock, much faster than the 3 min noted
-  below — that estimate is stale). Live desktop, 5 real windows listed, `WindowGone`,
-  two-instance and daemon-restart cases all green.
-* **Uncommitted**: `git status` shows 10 modified files (AGENTS/CHANGELOG/README/bench.py/
-  `kwcapture/__init__.py` +401 / `__main__.py` / `native/kwcapture.c` +628 / shm header /
-  `pyproject.toml` / tests). Nothing is half-finished: no TODO/FIXME markers anywhere, the
-  version is already 0.2.0 in both `pyproject.toml` and `__init__.py`, CHANGELOG has the
-  0.2.0 section, README already advertises the v0.2.0 wheel URL.
-* **`dist/` already holds `kwcapture-0.2.0.tar.gz` + `kwcapture-0.2.0-py3-none-linux_x86_64.whl`,
-  but rebuild them** (`rm -rf build dist && .venv/bin/python -m build`) after any further
-  source edit — they were built before this session and will be stale otherwise.
-* **Still to do (in this order)**: (1) any new feature work; (2) commit; (3) `git tag v0.2.0`
-  + `git push origin main --follow-tags`; (4) rebuild artefacts; (5) twine the sdist to PyPI
-  — PyPI still shows **only 0.1.0**; (6) the tag push triggers `release.yml` which makes the
-  GitHub release — it currently lists **only v0.1.0** — then attach the local `linux_x86_64`
-  wheel + release notes via the REST API. Follow the *Release checklist* section at the bottom.
-* Housekeeping: repo-root `bin/kwcapture` is **stale v0.1.0 debris** (13:07, gitignored, and
-  *not* on `_native`'s search path — the real helper is `kwcapture/bin/kwcapture`). Delete it
-  if it ever confuses a desktop-entry authorisation check.
+* **Released**: commit `61d06df` tagged `v0.2.0`, pushed; **sdist 0.2.0 is on PyPI**
+  (https://pypi.org/project/kwcapture/0.2.0/). The GitHub release for v0.2.0 does NOT
+  exist yet — its workflow run failed (see the cibuildwheel finding below), and the local
+  `linux_x86_64` wheel for it is in `dist/` (rebuild it for 0.3.0 instead).
+* **v0.3.0 = focus tracking**, verified: full suite **68/68 PASS, 0 failures, 0 skips**
+  (~35 s — the "~3 min" note below is stale). New: helper mode `--active-window-id`,
+  `Window.active`, `active_window()`, `active_window_id()`, `list_windows(mark_active=…)`,
+  `kwcapture windows -a/--no-active`. Version already 0.3.0 in `pyproject.toml` +
+  `__init__.py`; CHANGELOG + README updated (README's wheel URL now points at v0.3.0).
+* **CI discovery that explains why no release ever had wheels**: `release.yml` pinned
+  `pypa/cibuildwheel@v2.21.3`, which pulls
+  `quay.io/pypa/manylinux_2_28_x86_64:2024.10.07-1` — **that tag is gone from quay.io**
+  (`Error response from daemon: No such image`), so *both* the v0.1.0 and v0.2.0 release
+  runs failed at "Build manylinux wheels". Fixed to `@v4.3.0` (+ cp314 builds) — verify
+  by dispatching `release.yml` on `main` (now harmless: the release-attach step is gated
+  on `startsWith(github.ref, 'refs/tags/v')`). cibuildwheel is at 4.3.0; newest quay
+  manylinux tags are dated 2026.x. **Read the CI job log with**
+  `curl -sL -H "Authorization: Bearer $TOK" https://api.github.com/repos/tjandrasg/kwcapture/actions/jobs/<id>/logs`
+  — it is **plain text**, not a zip (the `/actions/runs/<id>/logs` endpoint *is* a zip).
+* **TODO for v0.3.0**: (1) `git tag v0.3.0 && git push origin main --follow-tags`; (2)
+  confirm the release run goes green this time (it makes the GitHub release + manylinux
+  wheels); (3) `rm -rf build dist && .venv/bin/python -m build`, sanity-test the wheel in a
+  throwaway venv from `/tmp` (worked for 0.2.0: 159 ms startup, 39.5 fps, per-window grab),
+  twine the **sdist** to PyPI; (4) once CI is green, **also upload the CI-built manylinux
+  wheels to PyPI** — unlike `linux_x86_64` they are accepted, and then `pip install
+  kwcapture` needs no compiler; (5) attach the local `linux_x86_64` wheel + notes to the
+  release (REST API, *Release checklist* below).
+* Housekeeping: repo-root `bin/kwcapture` is **stale v0.1.0 debris** (gitignored, *not* on
+  `_native`'s search path — the real helper is `kwcapture/bin/kwcapture`).
 
-**Next useful features** (see *Ideas not done yet*): mark the active window in
-`list_windows()` (KWin has no D-Bus active-window getter — see the idea for the two routes),
-`Window.pid`, and auto-restart of a dead daemon inside `grab()`.
+**Next useful features** (see *Ideas not done yet*): `Window.pid`, auto-restart of a dead
+daemon inside `grab()`, and non-normal windows (panels/desktop) via a KWin script.
 
 ## Goal
 Make a **fast** full-screen capture program on Wayland. Original experiments
@@ -166,6 +174,36 @@ pixel grab does):
 Only **normal** windows show up (krunner filters `!isNormalWindow()`: no panels/docks,
 desktop, splash, override-redirect, unmanaged). `CaptureWindow` still accepts their
 handles if you obtain them elsewhere.
+
+**The focused window IS observable, cheaply, and needs no KWin script** (v0.3.0;
+this replaces the "no active-window getter over D-Bus" note in *Ideas*):
+* `supportInformation` was checked first and **in Plasma 6.6 it lists no windows at
+  all** — version/drivers/effects/plugins only. That route is dead, don't retry it.
+* KWin replies to `CaptureActiveWindow` **before** writing any pixels, and that reply
+  carries `windowId`. So: make the call with a pipe, parse the reply, `close()` the read
+  end without draining → KWin's writer thread gets POLLERR/EPIPE and abandons the frame.
+  **No errors appear in the kwin journal** (checked with
+  `journalctl --user --since "-3 min" | grep -i kwin`) and it costs **≈8 ms per call
+  including process spawn** (measured: 10 sequential helper invocations in 87 ms) because
+  the compositor's render happens in the writer thread, off the reply path.
+  Implemented as helper mode `--active-window-id` (stdout = handle; **exit 2 = nothing has
+  focus**, exit 1 = error) → `active_window_id()` / `active_window()` / `Window.active`,
+  `list_windows(mark_active=True)` (default; the query needs screenshot authorisation,
+  plain enumeration does not, so failures there are swallowed and leave no flag set).
+* Verified by activating each window with krunner `Run "0_<uuid>"` and asserting the
+  reported handle (4/4 windows matched).
+* `busctl` calls with **no input args** must be written without a type: `activeOutputName`
+  → `busctl --user call org.kde.KWin /KWin org.kde.KWin activeOutputName` → `s "DP-1"`.
+  (Passing `s ""` to it makes the call fail silently — that is what the empty probe output
+  was.) `/KWin` also has `currentDesktop`, `GetAll`, `getWindowInfo`, `queryWindowInfo`,
+  `showDesktop`, `killWindow`. Other KWin objects: `/Scripting`, `/Session`,
+  `/VirtualDesktopManager`, `/Layouts`, `/Effects`, `/ColorPicker`, `/Compositor`,
+  `/ScreenSaver`, `/component/<app>` (per-app entries).
+* `getWindowInfo()` replies **no pid and no focus flag** (confirmed by dumping the whole
+  `a{sv}`): keys are activities, caption, clientMachine, desktopFile, desktops, fullscreen,
+  height, keepAbove/keepBelow, layer, localhost, maximizeHorizontal/Vertical (**ints**, not
+  bools), minimized, noBorder, resourceClass, resourceName, role, skipPager/Switcher/
+  Taskbar, type, uuid, width, x, y.
 
 **A closed window does not produce a D-Bus error**: KWin replies *successfully* with a
 0x0/stride-0 image (the scene item is gone → empty `visibleGeometry`). Treat
@@ -297,10 +335,9 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
    `pip install kwcapture` in a clean venv reports the new version.
 
 ## Ideas not done yet
-* Mark which listed window is *active*: KWin exposes no active-window getter over D-Bus
-  (`CaptureActiveWindow` only captures it); options are the `kwin_supportInformation`
-  dump or a KWin script. Also: `getWindowInfo` gives no pid — a `Window.pid` would need
-  `/proc` matching by app id.
+* ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
+  (`Window.active`, `active_window_id()`, `--active-window-id`).
+* `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.
 * Expose non-normal windows (panels, desktop, overlays): krunner filters them out. A KWin
   script or the qml console could hand out those handles; `Capture(window=…)` accepts them.
 * Window resize handling: the ring slot floor is 5K-sized, so a window growing is fine,

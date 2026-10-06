@@ -1211,6 +1211,60 @@ static int mode_list_windows(sd_bus *bus, int as_json)
 /* --window accepts a handle from --list-windows, or an exact (case-insensitive) name:
  * caption, app id, desktop file or resource name, matching exactly one window.  The
  * Python API additionally allows unique substring matches. */
+/* =============================================== active window, no pixels
+ * KWin has no "which window is focused" call on any of its D-Bus interfaces
+ * (`supportInformation` in Plasma 6.6 does not list windows at all), but
+ * CaptureActiveWindow's reply carries `windowId` and is sent BEFORE any pixels
+ * are written (ScreenShotSinkPipe2::flush() returns the reply, then hands the
+ * fd to a QThreadPool writer). So ask for the focused window, read the reply
+ * and close the pipe: KWin's writer gets POLLERR/EPIPE and abandons the frame.
+ * Costs one compositor render (~10-25 ms), no pixel transfer to us.
+ *
+ * stdout: the handle. Exit 0 = found, 2 = nothing has focus, 1 = error.
+ */
+static int mode_active_window_id(sd_bus *bus)
+{
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    sd_bus_message *call = NULL, *reply = NULL;
+    int fds[2];
+
+    if (pipe2(fds, O_CLOEXEC) < 0)
+        die("pipe failed", errno);
+    /* the options are irrelevant here - we never look at the pixels */
+    opts_t o = {0};
+    o.active_window = 1;
+    o.include_shadow = 1;
+    o.native_resolution = 1;
+    o.hide_caller_windows = 1;
+
+    build_call(bus, &o, &call);
+    sd_bus_message_append(call, "h", fds[1]);
+    int r = sd_bus_call(bus, call, 0, &error, &reply);
+    close(fds[1]);
+    if (r < 0) {
+        /* no focused window is a normal answer (null desktop), not a failure */
+        int no_focus = error.name && strstr(error.name, "NoActiveWindow");
+        if (!no_focus)
+            fprintf(stderr, "kwcapture: %s\n", error.message ? error.message
+                                                             : "CaptureActiveWindow failed");
+        sd_bus_error_free(&error);
+        sd_bus_message_unref(call);
+        close(fds[0]);
+        return no_focus ? 2 : 1;
+    }
+    meta_t m = {0};
+    parse_results(reply, &m);
+    sd_bus_message_unref(reply);
+    sd_bus_message_unref(call);
+    close(fds[0]); /* drop the pixels on the floor */
+    if (!m.window[0]) {
+        fprintf(stderr, "kwcapture: KWin replied without a windowId\n");
+        return 1;
+    }
+    printf("%s\n", m.window);
+    return 0;
+}
+
 static int looks_like_handle(const char *s)
 {
     size_t n = strlen(s);
@@ -1291,6 +1345,8 @@ static void usage(const char *argv0)
             "  (default)          grab one frame\n"
             "  --list             list outputs: NAME WxH refresh x y scale\n"
             "  --list-windows     list capturable windows (handle, name, app, geometry)\n"
+            "  --active-window-id print the handle of the focused window (no pixels)\n"
+            "                     exit 2 = nothing has focus\n"
             "  --bench N          grab N frames and report timings\n"
             "  serve              resident daemon: frames in shared memory for clients\n"
             "\n"
@@ -1334,7 +1390,14 @@ int main(int argc, char **argv)
         const char *a = argv[i];
         if (!strcmp(a, "--list"))
             return mode_list();
-        else if (!strcmp(a, "--list-windows") || !strcmp(a, "windows"))
+        else if (!strcmp(a, "--active-window-id")) {
+            sd_bus *b = NULL;
+            if (sd_bus_open_user(&b) < 0)
+                die("cannot reach the session bus", EIO);
+            int rc = mode_active_window_id(b);
+            sd_bus_unref(b);
+            return rc;
+        } else if (!strcmp(a, "--list-windows") || !strcmp(a, "windows"))
             list_windows = 1;
         else if (!strcmp(a, "--json"))
             as_json = 1;
