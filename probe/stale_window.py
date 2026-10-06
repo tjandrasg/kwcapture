@@ -8,10 +8,15 @@ live frame from a stale one.
 
     .venv/bin/python probe/stale_window.py
 
-Needs: busctl (to minimise/activate) and konsole. Exit code 1 = stale frame
-reproduced (the current, known-bad behaviour); 0 = the grabs changed while
-minimised, i.e. KWin or kwcapture now reports it and this file needs updating.
-See "OPEN BUGS" in AGENTS.md.
+Needs: busctl (to minimise/activate) and konsole.
+
+KWin not rendering minimised windows is compositor behaviour we cannot change, so the
+staleness below is EXPECTED forever. What matters is that kwcapture stops hiding it:
+since v0.4.0 `Capture(stale_check=True)` sets `stale_frame` and warns.
+
+Exit 0 = still stale (as KWin behaves) AND kwcapture reports it.
+Exit 1 = stale but kwcapture did NOT report it (regression), or frames changed while
+minimised (behaviour changed -- update BUG-1 in AGENTS.md).
 """
 
 from __future__ import annotations
@@ -64,8 +69,9 @@ def main() -> int:
     print(f"self-repainting window: {win.id} {win.geometry}")
 
     stale = False
+    surfaced = False
     try:
-        with K.Capture(window=win.id, shm=SHM) as cap:
+        with K.Capture(window=win.id, shm=SHM, stale_check=True) as cap:
             a = cap.grab(copy=True)
             time.sleep(1.6)
             b = cap.grab(copy=True)
@@ -85,6 +91,11 @@ def main() -> int:
             print(f"             differs from the last visible frame: {not (m1 == a).all()}"
                   "   (so it is not even a thumbnail of the moment you minimised)")
 
+            # the point of v0.4.0: kwcapture must TELL us, since KWin's pixels never will
+            surfaced = bool(cap.stale_frame)
+            print(f"             kwcapture stale_frame while minimised: {surfaced}"
+                  "   (must be True since v0.4.0)")
+
             krunner(0, win.id)
             time.sleep(1.5)
             r1 = cap.grab(copy=True)
@@ -95,9 +106,12 @@ def main() -> int:
     finally:
         proc.terminate()
 
-    if stale:
-        print("\nSTALE FRAME REPRODUCED: a minimised window returns identical bytes with")
-        print("no error and no flag. This is BUG-1 in AGENTS.md - still unfixed.")
+    if stale and surfaced:
+        print("\nOK: KWin still serves stale frames for minimised windows (compositor")
+        print("behaviour, by design) and kwcapture flags them via stale_frame.")
+        return 0
+    if stale and not surfaced:
+        print("\nFAIL: frames are stale but Capture.stale_frame did not report it.")
         return 1
     print("\nno stale frame: minimised windows are live now. Update BUG-1 in AGENTS.md.")
     return 0

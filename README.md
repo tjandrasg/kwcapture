@@ -44,6 +44,20 @@ K.active_window()                         # the focused window, as a Window
 K.active_window_id()                      # … or just its KWin handle (~8 ms)
 ```
 
+**A minimised window returns stale pixels** — KWin stops rendering it, so every grab repeats
+the same buffer and nothing tells you. Ask explicitly, or opt in to a per-grab check:
+
+```python
+win = K.Capture(window="Kate", stale_check=True)   # opt-in: one throttled query per grab
+frame = win.grab()
+if win.stale_frame:             # the window is minimised -> frame is an old snapshot
+    ...
+win.window_minimized            # ask KWin right now (a D-Bus round trip; not per frame)
+```
+
+`stale_check` is off by default because the check costs a round trip; without it
+`stale_frame` stays `False`, which means *unknown* rather than *fresh*.
+
 ## Install
 
 ```bash

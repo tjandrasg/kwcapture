@@ -88,7 +88,24 @@ that request). Assume a force-push does not un-publish anything.
 > sessions have now lost findings that way. A half-paragraph with the symptom is worth more
 > than a perfect post-mortem that never gets typed. Mark unverified guesses `(unverified)`.
 
-### BUG-1 (confirmed, silent wrong output): a **minimised window captures a STALE frame**
+### BUG-1 (surfaced in v0.4.0; KWin's behaviour itself is unfixable): a **minimised window captures a STALE frame**
+
+> **STATUS — fixed as far as it can be fixed (v0.4.0).** KWin simply does not render a
+> minimised window, so the stale pixels are not something we can change; what we can do is
+> **stop letting it be silent**, and that is implemented:
+> * **`Capture(stale_check=True)`** → `grab()` consults `getWindowInfo` (throttled to ~10/s)
+>   and sets **`Capture.stale_frame`**, emitting a one-shot `RuntimeWarning` on the transition
+>   into staleness. Default **off** — the check is a D-Bus round trip and must not tax the
+>   185 fps window path. `stale_frame is False` therefore means *unknown*, not *fresh*.
+> * **`Capture.window_minimized`** — the same answer on demand (raises `CaptureError` for
+>   non-window captures); a window that has vanished entirely counts as minimised.
+> * Regression tests: 6 checks in the window section (flag set/cleared, warning issued,
+>   frames really byte-identical, default off). `probe/stale_window.py` now also asserts the
+>   **surfacing** works and exits 0 when it does — the underlying KWin staleness is expected
+>   to remain forever, so that is no longer a failure condition.
+>
+> Everything below is the original analysis, kept because the reasoning is the useful part.
+
 
 `AGENTS.md` has long said "a minimised window still captures — KWin keeps its buffer".
 That is true only in the sense that you get **pixels back**: they are an **old snapshot**.
@@ -169,10 +186,9 @@ Relevant on non-glibc/musl or odd SONAMEs. Unchanged since the initial release
   3. Run the AST scan (kept below in this section's git history / re-create: parse each file,
      collect int-ish attribute names, look for `ast.Call` whose `func` is an `Attribute` with
      one of those names). It takes seconds and finds the whole family statically.
-* **Fix** (small, safe, and it kills the AttributeError crash regardless of the int story):
-  catch `(OSError, AttributeError)`, keep the fallback a real named function, and guard the
-  cache with `if not callable(_sched_yield)` instead of `is None` so a cached non-callable
-  can never be invoked. **APPLIED** (commit after this one): all three branches verified —
+* **Fix — APPLIED and now covered by tests** (see `regression: BUG-2 sched_yield` in the suite):
+  catch `(OSError, AttributeError)`, keep the fallback a real named function (`_sleep0`), and
+  guard the cache with `if not callable(_sched_yield)` instead of `is None`. **APPLIED** (commit after this one): all three branches verified —
   normal `_FuncPtr`, `AttributeError` → `_sleep0`, and forcibly setting `_sched_yield = 0`
   now *re-initialises* instead of raising, with a real `grab()` still working. The
   `'int' object is not callable` origin story above is still unconfirmed; the guard only
@@ -242,7 +258,21 @@ format), so a concurrent write can produce the self-contradictory message *"daem
 Success"*. Read it into a local **once** and raise from that. Same class of torn read as
 BUG-4; fix together.
 
-### BUG-3 (fixed): fd + log-file leak on every start attempt / restart
+### BUG-3 (fixed in v0.3.x + v0.4.0): two leaks on start/restart
+
+> **Part two, found by the regression test written for part one.** My first fix closed only
+> the leaked `<shm>.log` handle. The new fd-counting test then measured **16 → 20 fds over 4
+> `restart()` calls — exactly one fd per restart** — because `_start_once()` re-opens
+> `_fd`/`_mm`/`_hdr` and nothing released the previous ones. Fixed with a `_unmap()` helper
+> called from `_start_once()` (before re-opening) and from `close()`; the test now asserts
+> `<= 1` fd of drift over 4 restarts and passes.
+> Note `mmap.close()` raises `BufferError` while numpy still exports a buffer, in which case
+> we drop our reference and the mapping stays alive for those views — that is the safe
+> direction, and it is BUG-4's neighbourhood, so touch it carefully.
+>
+> **Lesson: my "fixed" note on BUG-3 was premature — the test is what disproved it.** If a
+> fix has no test, mark it *unverified*.
+
 
 `_start_once()` reset `self._log_file = None` and then opened a fresh `<shm>.log`, dropping
 the handle from the previous attempt without closing it. `_start_once()` runs on **every**

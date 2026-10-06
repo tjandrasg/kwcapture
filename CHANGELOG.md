@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0
+
+Stale-frame detection for window capture, and two real leaks/crashes fixed.
+
+- **`Capture(stale_check=True)`** — KWin does not render a minimised window, so a window
+  capture silently repeats the last buffer forever with no error, no status and nothing in
+  `stats()` to say so. With `stale_check=True`, `grab()` consults KWin (throttled to ~10/s)
+  and sets **`Capture.stale_frame`**, warning once when a window goes stale.
+  **`Capture.window_minimized`** answers the same question on demand for any window capture.
+  Both default to off: the check is a D-Bus round trip and must not tax the fast path.
+  `stale_frame is False` means *unknown*, not *fresh*, unless you enabled the check.
+- Fix: **`restart()` leaked one file descriptor and one mapping per call.** `_start_once()`
+  re-opened the ring fd/mmap without releasing the previous ones (measured 16 → 20 fds over
+  4 restarts). A `_unmap()` helper now runs before re-opening and from `close()`.
+- Fix: `sched_yield()` caught only `OSError`, but a missing libc symbol raises
+  `AttributeError` — and it is called from `grab()`'s busy-wait, so it took down every
+  capture on such a system. Now catches both, and the cached value is guarded with
+  `callable()` so a non-callable can never be invoked.
+- Tests: 79 checks (was 68), now also run under `-X dev`.
+
+
 ## 0.3.0
 
 Which window has focus, and prebuilt wheels for PyPI.

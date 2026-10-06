@@ -40,6 +40,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import warnings
 from ctypes import c_char, c_double, c_uint32, c_uint64, c_uint8
 from dataclasses import dataclass, field
 from typing import Optional, Union
@@ -50,7 +51,7 @@ from . import _desktop, _native
 from ._desktop import install_desktop_file
 from ._native import NativeBuildError, ensure_binary, find_binary
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "Capture",
@@ -560,6 +561,7 @@ class Capture:
         idle_exit: float = 300.0,
         start_timeout: float = 20.0,
         daemon_stderr=None,
+        stale_check: bool = False,
         autostart: bool = True,
     ) -> None:
         self.verbose = verbose
@@ -607,6 +609,13 @@ class Capture:
         self.hide_caller_windows = hide_caller_windows
         self.decoration = decoration
         self.start_timeout = start_timeout
+        # BUG-1: KWin stops rendering a minimised window, so a window capture silently
+        # repeats the last buffer forever -- no exception, no status, nothing in the ring.
+        # The only source of truth is getWindowInfo, which is a D-Bus round trip, so it is
+        # opt-in: stale_check=True makes grab() consult it (throttled) and flag the result.
+        self.stale_check = bool(stale_check)
+        self._stale = False
+        self._stale_checked = 0.0
         if autostart:
             self.start()
 
@@ -675,6 +684,9 @@ class Capture:
         # killed): the file already looks complete, so without this we would map the stale
         # pages and then get SIGBUS'd when the new daemon truncates the file.  The
         # daemon_pid check below is the belt to these braces.
+        # Drop the previous mapping before re-opening: _fd/_mm/_hdr are re-created below and
+        # nothing else closes them, so a restart used to leak one fd each time (BUG-3).
+        self._unmap()
         for stale in (self.shm_path, self.req_path):
             try:
                 os.unlink(stale)
@@ -762,6 +774,30 @@ class Capture:
             self._req_fd = -1
             self._open_req_channel()
 
+    def _unmap(self) -> None:
+        """Release the header, mapping and fd belonging to a previous daemon.
+
+        restart() re-opens all three, so without this every restart leaked one fd and one
+        mmap (measured: 16 -> 20 fds over 4 restarts). mmap.close() raises BufferError while
+        numpy still exports a buffer from it, in which case we simply drop our reference --
+        the mapping stays alive for those views, which is what we want.
+        """
+        for attr, closer in (("_hdr", None), ("_mm", "close")):
+            obj = getattr(self, attr)
+            if obj is not None:
+                if closer:
+                    try:
+                        obj.close()
+                    except (BufferError, ValueError):
+                        pass
+                setattr(self, attr, None)
+        if self._fd >= 0:
+            try:
+                os.close(self._fd)
+            except OSError:
+                pass
+            self._fd = -1
+
     def restart(self) -> None:
         self.start()
 
@@ -789,21 +825,7 @@ class Capture:
 
     def close(self) -> None:
         self.close_daemon()
-        for attr, closer in (("_hdr", None), ("_mm", "close")):
-            obj = getattr(self, attr)
-            if obj is not None:
-                if closer:
-                    try:
-                        obj.close()
-                    except (BufferError, ValueError):
-                        pass
-                setattr(self, attr, None)
-        if self._fd >= 0:
-            try:
-                os.close(self._fd)
-            except OSError:
-                pass
-            self._fd = -1
+        self._unmap()
         if self._log_file is not None:
             try:
                 self._log_file.close()
@@ -854,6 +876,53 @@ class Capture:
         """'screen', 'area', 'window', ... - what this Capture is pointed at."""
         h = self._require()
         return _TARGET_NAMES.get(int(h.target), str(int(h.target)))
+
+    @property
+    def window_minimized(self) -> bool:
+        """Whether this Capture's target window is minimised right now.
+
+        Ask KWin once per call (a D-Bus round trip), so do not call it per frame.
+        A window that has disappeared entirely counts as minimised: either way there is
+        nothing live to capture, so the frame you get is a stale snapshot (see BUG-1).
+        Only meaningful for ``window=`` / ``active_window=True`` captures.
+        """
+        handle = self.window_id or (self.stats().get("window") or "")
+        if not handle:
+            raise CaptureError(
+                "window_minimized needs a window= or active_window=True capture"
+            )
+        try:
+            return find_window(handle, binary=self.binary).minimized
+        except WindowNotFound:
+            return True
+
+    @property
+    def stale_frame(self) -> bool:
+        """True if the newest frame is known to be a stale snapshot (see BUG-1).
+
+        Only ever becomes True when the Capture was created with ``stale_check=True``;
+        without it nothing consults KWin and this stays False, which means "unknown".
+        """
+        return self._stale
+
+    def _update_staleness(self) -> None:
+        """Consult KWin (at most ~10x/s) and flag/warn when a window goes stale."""
+        now = time.monotonic()
+        if now - self._stale_checked < 0.1:
+            return
+        self._stale_checked = now
+        try:
+            minimized = self.window_minimized
+        except CaptureError:
+            return
+        if minimized and not self._stale:
+            warnings.warn(
+                f"kwcapture: the captured window {self.window_id or self.window_name or ''} "
+                "is minimised, so frames are a STALE snapshot - KWin does not render "
+                "minimised windows and every grab repeats the same buffer (see BUG-1 in "
+                "AGENTS.md). Map/activate the window, or stop polling it.",
+                RuntimeWarning, stacklevel=3)
+        self._stale = minimized
 
     def stats(self) -> dict:
         """Timings of the most recently published frame."""
@@ -975,7 +1044,10 @@ class Capture:
                 else:
                     sched_yield()
             seq = want
-        return self._view(seq, rgb, copy)
+        arr = self._view(seq, rgb, copy)
+        if self.stale_check:
+            self._update_staleness()
+        return arr
 
     def latest(self, rgb: bool = False, copy: bool = False) -> np.ndarray:
         """Newest published frame without asking the compositor for a new one."""

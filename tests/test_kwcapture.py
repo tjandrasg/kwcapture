@@ -226,6 +226,46 @@ def window_section():
         else:
             print("  [skip] busctl missing: no minimise round-trip test")
 
+        # BUG-1: KWin does not render a minimised window, so its frames go stale and the
+        # ring gives no sign of it. Capture(stale_check=True) must ask getWindowInfo and
+        # flag the result; without it nothing extra is queried and the flag stays False
+        # (meaning "unknown", not "fresh").
+        if shutil.which("busctl"):
+            import warnings as _warn
+            try:
+                with K.Capture(window=w.id, shm=K.default_shm_path("winstale"),
+                               stale_check=True) as cap:
+                    cap.grab()
+                    check("stale_frame is False while the window is mapped",
+                          cap.stale_frame is False and cap.window_minimized is False)
+                    if not _krunner(2, w.id):
+                        print("  [skip] could not minimise; stale checks skipped")
+                    else:
+                        time.sleep(1.0)
+                        with _warn.catch_warnings(record=True) as caught:
+                            _warn.simplefilter("always")
+                            s1 = cap.grab(copy=True)
+                            time.sleep(0.4)
+                            s2 = cap.grab(copy=True)
+                        check("stale_check flags a minimised window",
+                              cap.stale_frame is True and cap.window_minimized is True)
+                        check("going stale warns once",
+                              any("STALE" in str(x.message) for x in caught),
+                              ", ".join(str(x.message)[:40] for x in caught))
+                        check("minimised frames really are byte-identical (why we flag)",
+                              bool((s1 == s2).all()))
+                        _krunner(0, w.id)
+                        time.sleep(1.0)
+                        cap.grab()
+                        check("stale_frame clears when the window is restored",
+                              cap.stale_frame is False)
+            except Exception as e:  # noqa: BLE001
+                check("stale_check works", False, f"{type(e).__name__}: {e}")
+            with K.Capture(window=w.id, shm=K.default_shm_path("winstale2")) as cap2:
+                cap2.grab()
+                check("stale_check defaults to off",
+                      cap2.stale_check is False and cap2.stale_frame is False)
+
         # Two windows with the same caption are ambiguous.  (kcalc is a unique
         # application, so this ranking is checked on a synthetic list rather than by
         # starting a second copy.)
@@ -294,6 +334,69 @@ def window_vanish_section():
         if p.poll() is None:
             p.kill()
     check("other captures still work afterwards", K.grab(copy=True).shape[0] > 0)
+
+
+def bug_regression_section():
+    """Regressions for BUG-2 (sched_yield crash) and BUG-3 (fd leak on restart)."""
+    import ctypes
+    import os as _os
+
+    print("\n== regression: BUG-2 sched_yield ===")
+    saved = K._sched_yield
+    try:
+        K.sched_yield()
+        check("sched_yield() uses libc's function when present",
+              callable(K._sched_yield) and K._sched_yield is not K._sleep0,
+              type(K._sched_yield).__name__)
+
+        class NoSym:  # CDLL succeeds, the symbol lookup does not -> AttributeError
+            def __init__(self, *a, **k):
+                pass
+
+            def __getattr__(self, name):
+                raise AttributeError(name)
+
+        real = ctypes.CDLL
+        ctypes.CDLL = NoSym
+        try:
+            K._sched_yield = None
+            K.sched_yield()          # used to propagate AttributeError out of grab()
+            check("missing libc symbol falls back instead of crashing",
+                  K._sched_yield is K._sleep0)
+        finally:
+            ctypes.CDLL = real
+
+        K._sched_yield = 0           # the cached-int state that produced the TypeError
+        K.sched_yield()
+        check("a non-callable cache re-initialises (no 'int' object is not callable)",
+              callable(K._sched_yield))
+    finally:
+        K._sched_yield = saved
+
+    print("\n== regression: BUG-3 fd leak on restart ==")
+    def open_fds():
+        try:
+            return len(_os.listdir("/proc/self/fd"))
+        except OSError:
+            return -1
+
+    try:
+        with K.Capture(shm=K.default_shm_path("fdleak")) as cap:
+            cap.grab()
+            try:
+                cap.window_minimized
+                check("window_minimized needs a window target", False, "no exception raised")
+            except K.CaptureError:
+                check("window_minimized needs a window target", True)
+            base = open_fds()
+            for _ in range(4):
+                cap.restart()
+                cap.grab()
+            after = open_fds()
+            check("restart() does not leak file descriptors",
+                  after - base <= 1, f"{base} -> {after} fds over 4 restarts")
+    except Exception as e:  # noqa: BLE001
+        check("BUG-3 restart regression ran", False, f"{type(e).__name__}: {e}")
 
 
 def _summary() -> int:
@@ -447,6 +550,8 @@ def main():
     gone = not cap.alive
     check("idle_exit reaps an unused daemon", gone, f"pid {pid} alive={cap.alive}")
     cap.close()
+
+    bug_regression_section()
 
     print("\n== throughput sanity ==")
     with K.Capture() as cap:
