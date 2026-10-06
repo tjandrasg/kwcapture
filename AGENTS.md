@@ -1,7 +1,10 @@
 # AGENTS.md — fast screen capture on Wayland (KDE Plasma 6 / KWin)
 
 Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`, release `v0.1.0` with a
-prebuilt `linux_x86_64` wheel attached). Not on PyPI yet — the name is unclaimed.
+prebuilt `linux_x86_64` wheel attached) and on PyPI as **`kwcapture`**
+(https://pypi.org/project/kwcapture/) — publish new versions with
+`.venv/bin/python -m twine upload -r pypi dist/*` (credentials in `~/.pypirc`; never
+commit or print them). Author: Tjandra Satria Gunawan <tjandra.satria@sci.ui.ac.id>.
 `origin` is SSH (`git@github.com:tjandrasg/kwcapture.git`). There is no `gh` CLI here, so
 repo/release admin (creating releases, uploading assets, topics) is done with the GitHub
 REST API via `curl` using whatever credential is configured for github.com — never commit
@@ -38,8 +41,8 @@ and dies when `$DISPLAY` is unset. Both unusable.
 Install story: **self-configuring** — first `Capture()` finds/builds the helper, writes the
 desktop entry, retries while KDE's service cache notices it. Verified in a *fresh* venv
 (`pip install dist/*.whl`, numpy only, no desktop entry present): ready in ~150 ms, 37.9 fps,
-numpy-only fallback resize worked. **`kwcapture` is still an unclaimed name on PyPI (HTTP 404)**
-— publish with `pip install twine && twine upload dist/*` (wheel + sdist) when ready.
+numpy-only fallback resize worked. Also verified installing straight from GitHub and from
+the release wheel URL. Published on PyPI: `pip install kwcapture`.
 
 ## Results (2560x1440@164.69Hz, Plasma 6.6 / kwin 6.6.6, i9-13900K)
 ```
