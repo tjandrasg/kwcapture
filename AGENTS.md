@@ -15,15 +15,18 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 60 functional checks. See `README.md` for user-facing docs; this file
 is the investigation log + gotchas.
 
-## SESSION STATUS — 2026-10-06 20:20 (read this if you just woke up)
+## SESSION STATUS — 2026-10-06 21:00 (read this if you just woke up)
 
-**v0.2.0 is RELEASED. v0.3.0 (focus tracking) is done locally and pushed; the remaining
-step is to tag it and finish publishing (see the todo list below).**
+**v0.2.0 and v0.3.0 are both pushed and on PyPI (sdist). What is left is the GitHub
+release assets and the manylinux wheels — see *TODO* below and check whether the tag's
+`release.yml` run went green before doing anything else.**
 
-* **Released**: commit `61d06df` tagged `v0.2.0`, pushed; **sdist 0.2.0 is on PyPI**
-  (https://pypi.org/project/kwcapture/0.2.0/). The GitHub release for v0.2.0 does NOT
-  exist yet — its workflow run failed (see the cibuildwheel finding below), and the local
-  `linux_x86_64` wheel for it is in `dist/` (rebuild it for 0.3.0 instead).
+* **On PyPI**: `kwcapture` 0.1.0, 0.2.0 and **0.3.0** — all **sdist only** so far.
+* **Tags**: `v0.2.0` = `61d06df`, `v0.3.0` = `2c0118a` (both pushed to origin/main).
+* **v0.2.0 has no GitHub release** — its `release.yml` run failed on the stale
+  cibuildwheel pin (below). Its local wheel `dist/kwcapture-0.2.0-py3-none-linux_x86_64.whl`
+  still exists if you want to attach it by hand; otherwise skip it and let 0.3.0 be the
+  first release with real assets.
 * **v0.3.0 = focus tracking**, verified: full suite **68/68 PASS, 0 failures, 0 skips**
   (~35 s — the "~3 min" note below is stale). New: helper mode `--active-window-id`,
   `Window.active`, `active_window()`, `active_window_id()`, `list_windows(mark_active=…)`,
@@ -39,14 +42,28 @@ step is to tag it and finish publishing (see the todo list below).**
   manylinux tags are dated 2026.x. **Read the CI job log with**
   `curl -sL -H "Authorization: Bearer $TOK" https://api.github.com/repos/tjandrasg/kwcapture/actions/jobs/<id>/logs`
   — it is **plain text**, not a zip (the `/actions/runs/<id>/logs` endpoint *is* a zip).
-* **TODO for v0.3.0**: (1) `git tag v0.3.0 && git push origin main --follow-tags`; (2)
-  confirm the release run goes green this time (it makes the GitHub release + manylinux
-  wheels); (3) `rm -rf build dist && .venv/bin/python -m build`, sanity-test the wheel in a
-  throwaway venv from `/tmp` (worked for 0.2.0: 159 ms startup, 39.5 fps, per-window grab),
-  twine the **sdist** to PyPI; (4) once CI is green, **also upload the CI-built manylinux
-  wheels to PyPI** — unlike `linux_x86_64` they are accepted, and then `pip install
-  kwcapture` needs no compiler; (5) attach the local `linux_x86_64` wheel + notes to the
-  release (REST API, *Release checklist* below).
+* **DONE already**: cibuildwheel pin fixed; `ci.yml` green on `2c0118a`; v0.3.0 artefacts
+  built locally and sanity-tested in a throwaway venv from `/tmp` (179 ms startup, 5 windows
+  listed, `Window.active` correct, `active_window()`/`active_window_id()` correct, focused
+  window grabbed 698x548); v0.3.0 sdist twined to PyPI; `v0.3.0` tagged and pushed.
+* **TODO for v0.3.0** (only these):
+  1. Check the tag's run: `curl -s -H "Authorization: Bearer $TOK"
+     https://api.github.com/repos/tjandrasg/kwcapture/actions/runs?per_page=3` (TOK from
+     `~/.git-credentials`). A full cibuildwheel run for 6 interpreters takes **15-25 min**;
+     **the job log 404s with `BlobNotFound` until the job finishes**, so poll the *status*,
+     not the log. Remember `exec_shell_command` has a **hard 60 s cap** — sleep ≤ 50 s.
+  2. If green: the workflow has already created the GitHub release with the sdist + 6
+     manylinux wheels. Then (a) attach the local `dist/*-py3-none-linux_x86_64.whl` via the
+     uploads.github.com API (*Release checklist*), (b) **upload the CI manylinux wheels to
+     PyPI too** — unlike `linux_x86_64` they are accepted, and then `pip install kwcapture`
+     needs no compiler at all: download the release assets and
+     `.venv/bin/python -m twine upload -r pypi dist/kwcapture-0.3.0-*manylinux*.whl`.
+     Verify with `curl -s https://pypi.org/pypi/kwcapture/json`.
+     **If you do this, update README** (the "needs a C compiler" paragraph) — it currently
+     says a compiler is needed, which stops being true for manylinux wheel users.
+  3. Add release notes to the release body (`PATCH .../releases/<id>`).
+  4. If the run failed again: fetch the job log (plain text, see the curl note below), fix,
+     delete/re-point the tag (`git tag -f v0.3.0 && git push -f origin v0.3.0`).
 * Housekeeping: repo-root `bin/kwcapture` is **stale v0.1.0 debris** (gitignored, *not* on
   `_native`'s search path — the real helper is `kwcapture/bin/kwcapture`).
 
@@ -269,9 +286,11 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   `wl_output.mode`. Connector name (`DP-1`) is the `wl_output.name` event → needs binding v4.
 * `pkill -f kwcapture` from a shell command **matches that same shell command** and kills
   itself; use `pkill -f 'bin/kwcaptur[e] serv[e]'` or a unique `--shm` path to match.
-* **The exec_shell tool's default timeout is 10 s** (it accepts longer values — pass
-  `timeout=` explicitly). The full `tests/test_kwcapture.py` run is ~3 min; use
-  `... quick` (~2 min) or `... windows` (~30 s), or background it and read the log.
+* **The exec_shell tool's default timeout is 10 s and the hard maximum is 60 s** — passing
+  `timeout: 120`/`180` still gets killed at 60 s (`exit due to timed out`), so `sleep 120`
+  never works: sleep ≤50 s per call and poll. The full `tests/test_kwcapture.py` run is
+  actually **~35 s** (the earlier "~3 min" estimate was stale); `... quick` and `... windows`
+  (~30 s) still exist, or background it with `nohup … > /tmp/x.log 2>&1 &` and read the log.
 * `PIL.ImageGrab` can leave a `spectacle` process holding your stdout pipe open (looks like
   a hang); `bench.py` reaps the ones it started.
 
