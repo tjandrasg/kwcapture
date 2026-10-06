@@ -31,10 +31,44 @@ configured for github.com (it is in `~/.git-credentials`) — never commit or pr
 
 Working dir: `~/way_scr_cap`. **Read this first if you are a fresh session.**
 Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayland capture,
-Python API + CLI + 60 functional checks. See `README.md` for user-facing docs; this file
-is the investigation log + gotchas.
+Python API + CLI + 87 functional + 29 ring-reader checks. See `README.md` for user-facing
+docs; this file is the investigation log + gotchas.
 
-## FRESH STATUS — 2026-10-07 ~02:30 (this is the current truth)
+## FRESH STATUS — 2026-10-07 ~05:30 — **v0.4.0 is RELEASED everywhere** (current truth)
+
+The previous session committed and tagged v0.4.0 but ran out of context **before publishing
+it**: PyPI was still serving 0.3.0 and the GitHub release had an empty body. Both are now
+finished and verified.
+
+* **PyPI: `kwcapture 0.4.0` is live** (`pip install kwcapture` → 0.4.0, verified from a
+  clean venv with `--no-cache-dir`, and it captures for real: 1440x2560x4 grab +
+  `list_windows()`). Published **sdist + the CI `manylinux_2_28` wheel**, so no compiler is
+  needed. The uploaded files are **byte-identical to the GitHub release assets** — I
+  downloaded them back off the release and compared sha256 (`2b69d155…` wheel,
+  `1575298b…` sdist) rather than publishing my local build, so "what GitHub serves" ==
+  "what `pip` installs". The local sdist differs only in mtimes: same 35 files.
+* **GitHub release `v0.4.0`**: 3 assets (manylinux wheel, sdist, and the local
+  `linux_x86_64` wheel, same set as v0.3.0) + a 4 kB release-notes body.
+* **Test counts verified, not assumed**: 87 `[PASS]` functional + 29 `[PASS]` ring-reader
+  = **116**, exactly what `CHANGELOG.md` claims.
+* **Gotchas learned while releasing (save yourself the time):**
+  - Redirecting the test output to a file **loses every `[PASS]` line when the process dies
+    hard** (block buffering, no flush on SIGSEGV) — it looks like the suite never ran.
+    Use `python -u` whenever a fault is possible.
+  - A wheel smoke test run with the repo as CWD silently imports `./kwcapture/`, **not the
+    wheel**. Always `cd /tmp` and assert `'site-packages' in kwcapture.__file__`.
+  - PyPI's aggregate `/pypi/<pkg>/json` is Fastly-cached and lags a minute or two after an
+    upload; `/pypi/<pkg>/<version>/json` and `/simple/<pkg>/` show it immediately. Do not
+    conclude the upload failed from the aggregate endpoint.
+  - `twine upload -r pypi` (token in `~/.pypirc`) accepts the manylinux wheel fine — the CI
+    `publish` job / trusted publishing is **not** required. PyPI still rejects plain
+    `linux_x86_64` wheels, so that one goes to the GitHub release only.
+  - No `gh` CLI on this box; the REST API with the `github.com` token from
+    `~/.git-credentials` does assets (`uploads.github.com/releases/<id>/assets`) and notes
+    (`PATCH /repos/…/releases/<id>`).
+
+## FRESH STATUS — 2026-10-07 ~02:30 (superseded by the section above; the BUG-4 findings
+ below still stand — the next section adds two fresh data points from the release run)
 
 * **BUG-4 is not a kwcapture bug, and quite possibly not a software bug at all.** It is
   arbitrary memory faults on **this machine**, and kwcapture's zero-copy loop is simply the
@@ -64,6 +98,18 @@ is the investigation log + gotchas.
   `KWC_ITERS=40000000 .venv/bin/python -X dev probe/fault_rate.py` on a machine that is not
   holding a 100 GB model, or with `llama-server` stopped. If it is clean there, BUG-4 closes
   as environment and nothing in this repo needs changing.
+* **Two more data points during the v0.4.0 release run (~05:15), both consistent with the
+  above.** (1) `tests/test_ring_reader.py` died once with `Fatal Python error: Segmentation
+  fault` inside `_view()` while the concurrent-writer section was running — and the
+  **unbuffered re-run passed in full** (2,064,186 frames accepted, 325,764 cleanly refused,
+  **0 invalid**). The guardrail is subject to the same fault; it is not a deterministic
+  failure, and CI on the tag was green. (2) `KWC_MODE=both probe/race_bisect.py` — which
+  imports only `ctypes`, `mmap` and `numpy`, **never kwcapture** — died with `Fatal Python
+  error: Bus error` at `probe/race_bisect.py:100`, i.e. a page of a private file mapping
+  that could not be materialised (SIGBUS, the mechanism named above), while `KWC_MODE=numpy`
+  completed **4,000,000 clean iterations** in the same minute. `free` right now: 95 GB used
+  of 125 GB, `Swap: 0`, `llama-server` 104 GB RSS. New symptom string for the family:
+  *Bus error*.
 * **What v0.4.0 still fixes** (real bugs found while chasing it, all covered by tests — see
   `tests/test_ring_reader.py`): torn per-frame metadata (two fields from two frames could
   make one shape), unchecked offsets/counts handed to numpy, a *writable* ring mapping in
@@ -557,17 +603,28 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 4. Build the artefacts here: `.venv/bin/python -m build` → `dist/*.tar.gz` +
    `dist/*-py3-none-linux_x86_64.whl`. Sanity check the wheel in a throwaway venv **from
    outside the checkout** (`/tmp`), including a real `Capture()` + `list_windows()`.
-5. PyPI (sdist only — PyPI rejects `linux_x86_64`): `rm -f dist/*linux_x86_64.whl.copy`
-   and `.venv/bin/python -m twine upload -r pypi dist/kwcapture-X.Y.Z.tar.gz`.
-   Verify with `curl -s https://pypi.org/pypi/kwcapture/json`.
+5. PyPI — publish **the sdist + the CI manylinux wheel**, not the sdist alone: the manylinux
+   wheel is what makes `pip install kwcapture` need no compiler. Take both **from the GitHub
+   release of that tag** (so PyPI serves bytes identical to GitHub) rather than the local
+   build, `twine check` them, then
+   `.venv/bin/python -m twine upload -r pypi /tmp/publish/*` (token: `~/.pypirc`).
+   Do **not** upload the local `linux_x86_64` wheel — PyPI rejects it.
+   Before uploading, confirm the sdist carries no local-only files:
+   `find <unpacked> -iname '*private*' -o -iname '*.jsonl'` and grep the tree for
+   `ghp_`/`pypi-AgEIcHlwaS`. Verify with `curl -s
+   https://pypi.org/pypi/kwcapture/<X.Y.Z>/json` (**not** the aggregate endpoint — it is
+   Fastly-cached and lags ~1-2 min after a successful upload) and finally with a real
+   `pip install --no-cache-dir kwcapture` in a throwaway venv **outside the checkout**.
 6. The tag push runs `release.yml`, which builds the sdist + manylinux wheels and creates
    the GitHub release (via `gh` on the runner, `github.token`). Then upload the local
    `linux_x86_64` wheel as an extra release asset with the REST API:
    `curl -X POST -H "Authorization: Bearer $TOK" -H "Content-Type: application/octet-stream" \
     --data-binary @dist/<wheel> https://uploads.github.com/repos/tjandrasg/kwcapture/releases/<id>/assets?name=<wheel>`
    (token from `~/.git-credentials`, release id from `/repos/.../releases/tags/vX.Y.Z`).
-7. Add the release notes to the GitHub release body (`PATCH …/releases/<id>`), and confirm
-   `pip install kwcapture` in a clean venv reports the new version.
+7. Add the release notes to the GitHub release body (`PATCH …/releases/<id>`) — CI only
+   writes the `**Full Changelog**` stub, so a release with an empty body is a missed step,
+   not a finished one. Then update this AGENTS.md with a `FRESH STATUS` section recording
+   what shipped and what was verified, and commit + push that too.
 
 ## Ideas not done yet
 * ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
