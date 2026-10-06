@@ -41,6 +41,11 @@ stale frame with no error) was known to two earlier sessions and never written d
 re-deriving it cost a whole investigation. If you add anything this session, add it there
 the moment you see it.
 
+**BUG-4 is the fatal one** (flaky `TypeError: 'int' object is not callable` + segfault in the
+zero-copy read path). Recovered from the user's saved transcript `chat_his.jsonl`; it is NOT
+a typo and no static search will ever find it. Read that entry before debugging anything
+that looks like a weird int/Slot_Array error in grab()/latest().
+
 * **PyPI**: `0.3.0` = sdist + `py3-none-manylinux2014/2_17/2_28_x86_64` wheel (so
   `pip install kwcapture` needs no compiler now); `0.1.0`/`0.2.0` are sdist-only.
 * **GitHub**: release `v0.3.0` (id 404767000) with the manylinux wheel + sdist (from CI)
@@ -202,6 +207,64 @@ Relevant on non-glibc/musl or odd SONAMEs. Unchanged since the initial release
   now *re-initialises* instead of raising, with a real `grab()` still working. The
   `'int' object is not callable` origin story above is still unconfirmed; the guard only
   makes that whole family uninvokable. **If the crash ever reappears, read this section.**
+
+### BUG-4 (THE FATAL ONE, unfixed, flaky): memory-safety race in the zero-copy read path
+
+**This is the bug earlier sessions kept hitting and never writing down. It is NOT a typo and
+it is NOT statically findable — `'int' object is not callable' is a memory-corruption
+symptom here, not a name error.** Reconstructed 2026-10-06 from the previous session's saved
+transcript (`chat_his.jsonl`, lines ~349–381); that session died mid-bisect without a root
+cause. If you are staring at a mysterious `int`/`Slot_Array_4`/segfault in `grab()`/`latest()`,
+**read this whole entry first.**
+
+* **Symptoms, all three from the same stress run family:**
+  1. `TypeError: "'int' object is not callable"` — hit inside `Capture.latest(rgb=True)`
+     after **~22,400 iterations/second** sustained, with a **healthy ring header**
+     (`magic 0x4b574350 version 2 error 0 quit 0 ready 1 frame_seq 159 published 159
+     2560x1440 stride 10240 format 6 target 0`) — i.e. the daemon was fine, the *client*
+     blew up.
+  2. `CaptureError: daemon error: Success` raised from `_check_error()` — impossible unless
+     the header was read **twice** (non-zero in the `if`, then 0 when formatting the
+     message): a TOCTOU on shared memory. See BUG-4b.
+  3. **`Segmentation fault`** — outright, in more than one configuration.
+* **Flaky and GC/timing-dependent, so it does NOT reproduce in a short rerun** (one clean
+  4 s run passed; the bisect harness showed `MODE=numpy_only` and `MODE=nosetflags` OK in
+  one pass while `ctypes_numpy` crashed in another). The previous session's own conclusion:
+  *"a genuine memory-safety bug that is timing/GC-dependent"*.
+* **Where it lives: the client's zero-copy path**, not the daemon — `_view()` builds numpy
+  arrays over the same `mmap` that `_Hdr.from_buffer(self._mm)` maps and that the daemon is
+  writing concurrently, and `close()`/`restart()` can replace `self._mm` while a returned
+  zero-copy view or the `_hdr` object still refers to the old buffer.
+* **Why every static search for it fails** (do not repeat these):
+  - an AST/regex scan for int-shaped fields called with `()` finds nothing — no such call
+    exists; the `int` is *garbage that a name resolved to*, or a ctypes object whose
+    backing buffer was released under it;
+  - `git log -S` finds nothing (never committed as a typo);
+  - apport never records a plain `TypeError`, and the SIGSEGV entries in `/var/crash` are
+    the *stale-ring* SIGBUS class, not this one.
+* **Reproduce** (budget time — it is flaky by nature): loop `cap.latest(rgb=True)` and
+  `cap.grab()` for tens of seconds at full speed against a live daemon, under
+  `PYTHONFAULTHANDLER=1 .venv/bin/python -X dev`, and **repeat the run many times** — a
+  single clean pass proves nothing. Also try with `gc` pressure (allocate in the loop) and
+  with concurrent `restart()`/`close()`.
+* **Fix directions** (none applied yet):
+  1. `_view()`: snapshot **all** slot/header fields into locals (width, height, stride,
+     offset, seq) *before* computing offsets and building arrays — never read the shared
+     struct twice for one frame (kills torn reads).
+  2. Keep the buffer alive for the lifetime of every zero-copy result: attach the mmap (and
+     the `_Hdr`) to the returned array, e.g. `arr._kwc_ref = (self._mm, hdr)`, so GC cannot
+     free the mapping underneath a live view.
+  3. Never mutate `self._mm`/`self._hdr` while views may be outstanding — or make `close()`
+     explicitly invalidate them and document that outstanding views become invalid.
+  4. Run the suite under `-X dev` + `PYTHONFAULTHANDLER=1` in CI with a stress target so
+     this stops being invisible.
+
+#### BUG-4b: `CaptureError: daemon error: Success` — double read of `hdr.error`
+
+`_check_error()` reads the shared `error` field more than once (once to decide, once to
+format), so a concurrent write can produce the self-contradictory message *"daemon error:
+Success"*. Read it into a local **once** and raise from that. Same class of torn read as
+BUG-4; fix together.
 
 ### BUG-3 (fixed): fd + log-file leak on every start attempt / restart
 
