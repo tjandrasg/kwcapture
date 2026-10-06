@@ -203,16 +203,24 @@ def window_section():
             except K.NoActiveWindow as e:
                 check("active_window=True captures the focused window", False, str(e))
 
-        # a minimised window keeps its buffer in KWin, so it is still capturable
+        # A minimised window returns a frame, but it is a STALE SNAPSHOT: KWin stops
+        # rendering it, so every grab repeats the last buffer and nothing tells you.
+        # The old name of these checks ("minimised windows still capture") made that
+        # sound like a feature and helped hide BUG-1 -- see "OPEN BUGS" in AGENTS.md and
+        # probe/stale_window.py, which proves staleness with a self-repainting window.
         if _krunner(2, w.id):
             time.sleep(0.7)
             check("list_windows reports a minimised window", K.find_window(w.id).minimized)
             try:
                 with K.Capture(window=w.id, shm=K.default_shm_path("winmin")) as cap:
                     f = cap.grab(timeout=3.0)
-                check("minimised windows still capture", f.shape[0] > 0, str(f.shape))
+                # kcalc does not repaint, so this cannot tell live from stale; it only
+                # asserts we get a frame at all and do not wedge the ring.
+                check("minimised window returns a frame (contents are STALE - BUG-1)",
+                      f.shape[0] > 0, str(f.shape))
             except K.CaptureError as e:
-                check("minimised windows still capture", False, f"{type(e).__name__}: {e}")
+                check("minimised window returns a frame (STALE - BUG-1)", False,
+                      f"{type(e).__name__}: {e}")
             _krunner(0, w.id)
             time.sleep(0.7)
         else:

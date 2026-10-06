@@ -199,7 +199,10 @@ How the handles are found (and what they can and cannot do):
   composite it or drop the alpha channel before saving a JPEG.
 * A window that is **covered by other windows is not clipped**: KWin renders that
   window's own buffer, so you get the whole client area, and nothing of the windows on
-  top. A **minimised** window still captures (KWin keeps its buffer).
+  top. A **minimised** window returns a frame, but it is a **stale snapshot**: KWin stops
+  rendering windows that are minimised, so you get the last buffer it held — the same bytes
+  every time, with no error to tell you. Capture the window while it is mapped if you need
+  its current contents.
 * A handle is only valid while the window lives. If the window is closed, `grab()`/`latest()`
   raise **`WindowGone`** — the helper stays alive, the other captures are unaffected, and
   `list_windows()` no longer reports it.

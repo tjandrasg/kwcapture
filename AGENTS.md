@@ -86,6 +86,62 @@ is clean and `main` is pushed. Start from *Ideas not done yet* if you want new w
 **Next useful features** (see *Ideas not done yet*): `Window.pid`, auto-restart of a dead
 daemon inside `grab()`, and non-normal windows (panels/desktop) via a KWin script.
 
+## OPEN BUGS — found, not yet fixed
+
+> **RULE FOR FRESH SESSIONS: anything that looks wrong goes in this section the moment you
+> see it, before you chase it.** Do not investigate first and write it up later — two
+> sessions have now lost findings that way. A half-paragraph with the symptom is worth more
+> than a perfect post-mortem that never gets typed. Mark unverified guesses `(unverified)`.
+
+### BUG-1 (confirmed, silent wrong output): a **minimised window captures a STALE frame**
+
+`AGENTS.md` has long said "a minimised window still captures — KWin keeps its buffer".
+That is true only in the sense that you get **pixels back**: they are an **old snapshot**.
+KWin stops rendering a minimised window's scene item, so the buffer holds whatever it last
+held and **every grab returns identical bytes forever** — no exception, no `status`, no
+flag, nothing in `stats()` to tell you the frame is dead. A caller polling a background
+window gets a frozen image and believes it is live. This is the worst kind of bug: it is
+silent, and "it returned a frame" looks like success.
+
+* Reproduced 2026-10-06 with a self-repainting window (`konsole --hold -e sh -c
+  'while :; do date; sleep 0.3; done'`) and `Capture(window=…)`, grabbing 1.8 s apart:
+  `1 VISIBLE live repaint differs : True` / `2 MINIMISED two grabs identical : True` /
+  `3 RESTORED live repaint differs : True`. Script was `/tmp/probe_stale.py`; rerun it with
+  `PYTHONPATH=$PWD .venv/bin/python /tmp/probe_stale.py` (needs `busctl` to minimise).
+* Note the stale buffer is **not** the last frame seen before minimising either
+  (`changed vs pre-minimise: True`) — it is whatever KWin rendered last, possibly an
+  animation frame. So it is not even a reliable thumbnail.
+* **Fix direction** (nothing implemented yet): `getWindowInfo` reports `minimized`, so we
+  *can* know. Cheapest honest options:
+  1. a property `Capture.window_minimized` that does one `getWindowInfo` call on demand
+     (do **not** do it per frame — that would add a D-Bus round trip to every grab);
+  2. surface it as a frame status, e.g. a new `KWC_ERR_STALE`/`KWC_FLAG_STALE`, only when
+     the daemon is told to check (`--check-minimised`), so the default fast path is
+     untouched — this needs `KWC_VERSION` bumped to 3 (see the ring-geometry gotcha);
+  3. at minimum, document it in the README's per-window section, which currently implies
+     minimised capture gives you the window's current contents.
+* **Also unverified, same family — test these next** (same silent-staleness shape):
+  window on **another desktop** (switch with `/KWin setCurrentDesktop`), window on another
+  **activity**, and a window that is fully **occluded** (the "occlusion does not crop"
+  claim below was verified only for *geometry*, never for *liveness*).
+
+### Smaller things noticed while reading the code (unverified / judgement calls)
+
+* `Window.maximized` is `maximizeHorizontal && maximizeVertical` (`kwcapture.c`, the
+  `"maximized"` JSON field). KWin 6 **tiles** by maximising one axis only, so a
+  left-tiled window reports `maximized: False` and the per-axis information is thrown away.
+  Probably should be `maximized_h`/`maximized_v` on the dataclass (additive, non-breaking).
+* `h->window` in the ring header is only ever written when `meta.window[0]` is non-empty
+  and is **never cleared**, unlike `h->screen` which is cleared every frame (the
+  `snprintf(h->screen…)` / `snprintf(h->window…)` pair in `advance()`). Benign today
+  because a daemon's target never changes, but it means a failed frame keeps reporting the
+  old handle — asymmetric and waiting to surprise someone.
+* `Capture.screen` is the **requested** output from the constructor (None = active) while
+  `Capture.screen_name` is what KWin actually answered. Two similar names, different
+  meanings; `stats()['screen']` is the actual one. Easy to misread.
+* Passing an **explicit** `shm=` that two `Capture` objects share still reproduces the old
+  SIGBUS (the unique-path fix only applies when you do *not* pass `shm=`).
+
 ## Goal
 Make a **fast** full-screen capture program on Wayland. Original experiments
 (`probe/bench_original.py`, `bench_result.md`): `PIL.ImageGrab` shells out to `spectacle`
@@ -183,8 +239,14 @@ Alternative (NOT used): start the session with `KWIN_SCREENSHOT_NO_PERMISSION_CH
 | decoration + shadow | `visibleGeometry()` = window item's scene rect (incl. shadow); the shadow is transparent (alpha 0) |
 
 Measured on a 692x467 KCalc: client 692x440, `--decoration` 822x598. Occlusion does not
-crop the result (KWin renders that window's item, not the screen region), and a
-**minimised window still captures** — KWin keeps its buffer.
+crop the result (KWin renders that window's item, not the screen region).
+
+**But read *BUG-1* at the top of this file before you capture a minimised window:** it
+"captures" only in the sense that bytes come back — they are a **stale frozen buffer**,
+identical on every grab, with no error and no flag. The old wording here ("a minimised
+window still captures — KWin keeps its buffer") was true-but-misleading and is exactly how
+this stayed hidden. Likewise "occlusion does not crop" was verified for *geometry* only,
+never for *liveness*.
 
 **KWin has no window-list D-Bus call.** What works, and needs no authorisation (only the
 pixel grab does):
