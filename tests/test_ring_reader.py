@@ -19,6 +19,7 @@ for three sessions because the only tests that touched this path needed a Plasma
 """
 from __future__ import annotations
 
+import errno
 import gc
 import mmap
 import os
@@ -282,6 +283,83 @@ def lifetime_section():
             ring.close()
 
 
+def daemon_error_section():
+    """The daemon's error words, translated the way grab() will see them.
+
+    This is the resize path: the helper cannot grow a ring a client has mapped, so it
+    reports ENOSPC and exits, and the client re-opens it at the new size.  All of that
+    hinges on these two classifications, and neither needs a compositor.
+    """
+    print("\n== daemon error words ==")
+    with tempfile.TemporaryDirectory() as td:
+        ring = FakeRing(os.path.join(td, "err.shm"))
+        try:
+            ring.publish(1)
+            ring.h.error = 0
+            try:
+                ring.cap._check_error()
+                check("a healthy ring raises nothing", True)
+            except Exception as e:  # noqa: BLE001
+                check("a healthy ring raises nothing", False, f"{type(e).__name__}: {e}")
+
+            ring.h.error = errno.ENOSPC
+            try:
+                ring.cap._check_error()
+                check("ENOSPC raises RingTooSmall", False, "no exception raised")
+            except K.RingTooSmall as e:
+                check("ENOSPC raises RingTooSmall", True, str(e)[:78])
+            except Exception as e:  # noqa: BLE001
+                check("ENOSPC raises RingTooSmall", False,
+                      f"{type(e).__name__}: {e}")
+            check("RingTooSmall is classified recoverable (grab() retries)",
+                  ring.cap._recoverable(K.RingTooSmall("x")))
+
+            # the per-frame flavour of the same condition
+            ring.h.error = 0
+            ring.publish(2, status=errno.ENOSPC)
+            try:
+                ring.cap._view(2, rgb=False, copy=False)
+                check("a frame carrying ENOSPC raises RingTooSmall", False,
+                      "no exception raised")
+            except K.RingTooSmall as e:
+                check("a frame carrying ENOSPC raises RingTooSmall", True, str(e)[:78])
+            except Exception as e:  # noqa: BLE001
+                check("a frame carrying ENOSPC raises RingTooSmall", False,
+                      f"{type(e).__name__}: {e}")
+
+            ring.h.error = 0
+            ring.publish(3, status=errno.ETIMEDOUT)
+            try:
+                ring.cap._view(3, rgb=False, copy=False)
+                check("some other errno on a frame stays a plain CaptureError", False,
+                      "no exception raised")
+            except K.RingTooSmall:
+                check("some other errno on a frame stays a plain CaptureError", False,
+                      "misclassified as RingTooSmall")
+            except K.CaptureError as e:
+                check("some other errno on a frame stays a plain CaptureError", True,
+                      str(e)[:78])
+
+            ring.h.error = 0
+            ring.publish(4, status=0)
+            ring.h.magic = K.KWC_MAGIC_GONE
+            try:
+                ring.cap._check_error()
+                check("a shut-down daemon raises DaemonDead", False, "no exception raised")
+            except K.DaemonDead:
+                check("a shut-down daemon raises DaemonDead", True)
+            check("DaemonDead is classified recoverable",
+                  ring.cap._recoverable(K.DaemonDead("x")))
+            # The rule is "restart iff the daemon is not alive". This client owns no
+            # process at all, so a timeout here counts as one that died with its daemon;
+            # the live-daemon half of the rule is covered by resilience_section(), which
+            # has a real daemon to keep running.
+            check("a timeout counts as recoverable only when there is no daemon alive",
+                  ring.cap._recoverable(TimeoutError("x")) and not ring.cap.alive)
+        finally:
+            ring.close()
+
+
 def race_section(seconds: float = 4.0):
     """A writer mutating the ring while the reader reads it: no crash, no impossible frame.
 
@@ -344,6 +422,7 @@ def main() -> int:
           f"kwcapture {K.__version__}")
     geometry_section()
     validation_section()
+    daemon_error_section()
     lifetime_section()
     race_section(3.0 if "quick" in sys.argv else 6.0)
     print()

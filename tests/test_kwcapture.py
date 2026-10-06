@@ -486,6 +486,243 @@ def _summary() -> int:
     return 0
 
 
+def _open_fds():
+    try:
+        return len(os.listdir("/proc/self/fd"))
+    except OSError:
+        return -1
+
+
+def resilience_section():
+    """v0.5: grab() recovers from a dead or reaped daemon, and from a target that outgrew
+    the ring.  The whole point is that the caller does not have to notice."""
+    print("\n== resilience: auto-restart after the daemon dies ==")
+    with K.Capture(shm=K.default_shm_path("auto1")) as cap:
+        pid1 = cap.stats()["pid"]
+        f1 = cap.grab(copy=True)
+        check("baseline frame", f1.shape[2] == 4, str(f1.shape))
+        check("no restarts yet", cap.auto_restarts == 0, str(cap.auto_restarts))
+        check("the first frame is not reported as a resize", not cap.resized)
+
+        old_view = cap.grab(copy=False)          # zero-copy view of the current ring
+        os.kill(pid1, signal.SIGKILL)
+        deadline = time.time() + 5
+        while time.time() < deadline and cap.alive:
+            time.sleep(0.05)
+        check("the daemon really is gone", not cap.alive)
+        try:
+            f2 = cap.grab(timeout=8)
+            pid2 = cap.stats()["pid"]
+            check("grab() recovers from SIGKILL without the caller noticing",
+                  f2.shape == f1.shape and pid2 != pid1, f"pid {pid1} -> {pid2} {f2.shape}")
+            check("the recovery is counted", cap.auto_restarts == 1, str(cap.auto_restarts))
+            check("the reason is recorded", "DaemonDead" in cap.last_restart_reason,
+                  cap.last_restart_reason[:70])
+            check("the consecutive-restart streak resets when frames flow again",
+                  cap._restart_streak == 0)
+            check("a same-size frame is not reported as a resize", not cap.resized)
+            check("frames keep flowing after the recovery",
+                  cap.grab(copy=True).shape == f1.shape)
+            check("a view from before the restart is still readable (frozen, not unmapped)",
+                  old_view.shape == f2.shape and int(old_view[0, 0, 0]) >= 0)
+        except Exception as e:  # noqa: BLE001
+            check("grab() recovers from SIGKILL without the caller noticing", False,
+                  f"{type(e).__name__}: {e}")
+
+    print("\n== resilience: auto-restart does not leak (BUG-3 through the auto path) ==")
+    with K.Capture(shm=K.default_shm_path("auto2")) as cap:
+        cap.grab()
+        base = _open_fds()
+        try:
+            for _ in range(3):
+                os.kill(cap.stats()["pid"], signal.SIGKILL)
+                time.sleep(0.2)
+                cap.grab(timeout=8)
+            after = _open_fds()
+            check("3 auto-restarts do not leak file descriptors",
+                  after - base <= 2, f"{base} -> {after} fds over 3 auto-restarts")
+            check("every auto-restart is counted (cumulative)",
+                  cap.auto_restarts == 3, str(cap.auto_restarts))
+        except Exception as e:  # noqa: BLE001
+            check("3 auto-restarts do not leak file descriptors", False,
+                  f"{type(e).__name__}: {e}")
+
+    print("\n== resilience: a daemon reaped for being idle comes back ==")
+    with K.Capture(idle_exit=1.0, shm=K.default_shm_path("autoidle")) as cap:
+        pid = cap.stats()["pid"]
+        time.sleep(2.6)
+        check("idle_exit reaped it", not cap.alive, f"pid {pid}")
+        try:
+            f = cap.grab(timeout=8)
+            check("grab() revives a daemon that was reaped for being idle",
+                  f.shape[0] > 0 and cap.stats()["pid"] != pid,
+                  cap.last_restart_reason[:70])
+        except Exception as e:  # noqa: BLE001
+            check("grab() revives a daemon that was reaped for being idle", False,
+                  f"{type(e).__name__}: {e}")
+
+    print("\n== resilience: what is recoverable, and what is not ==")
+    with K.Capture(shm=K.default_shm_path("auto4")) as cap:
+        check("a dead daemon is recoverable", cap._recoverable(K.DaemonDead("x")))
+        check("a ring the target outgrew is recoverable", cap._recoverable(K.RingTooSmall("x")))
+        check("a closed window is NOT recoverable", not cap._recoverable(K.WindowGone("x")))
+        check("a timeout with a live daemon is NOT recoverable (do not mask a wedged KWin)",
+              not cap._recoverable(TimeoutError("x")))
+        # Exhaust the streak, then kill: it must give up rather than respawn forever.
+        cap._restart_streak = cap.restart_limit
+        os.kill(cap.stats()["pid"], signal.SIGKILL)
+        time.sleep(0.2)
+        try:
+            cap.grab(timeout=3)
+            check("restart_limit stops a restart storm", False, "it kept restarting")
+        except K.CaptureError as e:
+            check("restart_limit stops a restart storm", "giving up" in str(e), str(e)[:95])
+
+    print("\n== resilience: auto_restart=False keeps the old behaviour ==")
+    with K.Capture(auto_restart=False, shm=K.default_shm_path("autooff")) as cap:
+        os.kill(cap.stats()["pid"], signal.SIGKILL)
+        time.sleep(0.3)
+        try:
+            cap.grab(timeout=1.5)
+            check("auto_restart=False raises DaemonDead", False, "no exception raised")
+        except K.DaemonDead:
+            check("auto_restart=False raises DaemonDead", True)
+        except Exception as e:  # noqa: BLE001
+            check("auto_restart=False raises DaemonDead", False,
+                  f"{type(e).__name__}: {e}")
+        check("nothing was restarted behind your back", cap.auto_restarts == 0)
+        cap.restart()
+        check("restart() still revives it explicitly", cap.grab(timeout=8).shape[0] > 0)
+
+
+def _x11_windows():
+    """{x11 id: "x y w h"} for X11/XWayland windows, via wmctrl (empty if unavailable)."""
+    if not shutil.which("wmctrl"):
+        return {}
+    try:
+        out = subprocess.run(["wmctrl", "-lG"], capture_output=True, text=True,
+                             timeout=10).stdout
+    except Exception:  # noqa: BLE001
+        return {}
+    rows = {}
+    for line in out.splitlines():
+        parts = line.split(None, 7)   # id desktop x y w h host title (KWin's column order)
+        if len(parts) >= 6:
+            rows[parts[0]] = parts[2:6]
+    return rows
+
+
+def _set_base(xid, w, h, tries=12):
+    """Resize the xterm and wait for KWin to agree before the Capture is created."""
+    subprocess.run(["wmctrl", "-i", "-r", xid, "-e", f"0,60,60,{w},{h}"], timeout=10)
+    for _ in range(tries):
+        time.sleep(0.4)
+        cands = [x for x in K.list_windows() if (x.app_id or "") == "XTerm"]
+        if len(cands) == 1 and abs(cands[0].geometry[0] - w) <= 8:
+            return True
+    return False
+
+
+def _resize_then_wait(cap, xid, w, h, tries=10):
+    """Resize, then poll until the capture agrees on the new size.
+
+    A window manager takes a moment, and the first frame after a resize can still carry
+    the old geometry, so retry rather than declaring a miss too early. Returns
+    (frame, matched, error).
+    """
+    subprocess.run(["wmctrl", "-i", "-r", xid, "-e", f"0,60,60,{w},{h}"], timeout=10)
+    err = None
+    for _ in range(tries):
+        time.sleep(0.5)
+        try:
+            f = cap.grab(copy=True, timeout=8)
+        except Exception as e:  # noqa: BLE001
+            err = e
+            continue
+        err = None
+        # decorations/shadows: a little slack, but it must have moved to the new size
+        if abs(f.shape[1] - w) <= 60 and abs(f.shape[0] - h) <= 90:
+            return f, True, None
+    return None, False, err
+
+
+def window_resize_section():
+    """v0.5: a window being resized must not wedge, mis-shape or stale-out the capture.
+
+    Uses an xterm because it is an X11 window, so wmctrl can resize it on command; the
+    ring's own resize headroom is what is under test, and `slot_floor` lets the test dial
+    that headroom down until a resize overflows the ring and has to be recovered from.
+    """
+    print("\n== resilience: a resized window ==")
+    if not (shutil.which("xterm") and shutil.which("wmctrl")):
+        print("  [skip] needs xterm + wmctrl")
+        return
+    subprocess.run(["pkill", "-f", "xterm -name kwcttest"], timeout=10)
+    time.sleep(0.6)
+    before = set(_x11_windows())
+    proc = subprocess.Popen(["xterm", "-name", "kwcttest", "-title", "KWCTTEST",
+                             "-geometry", "50x12"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    xid, win = None, None
+    deadline = time.time() + 15
+    try:
+        while time.time() < deadline and not (xid and win):
+            new = set(_x11_windows()) - before
+            xid = sorted(new)[0] if new else None
+            cands = [w for w in K.list_windows() if (w.app_id or "") == "XTerm"]
+            win = cands[0] if len(cands) == 1 else None
+            if not (xid and win):
+                time.sleep(0.3)
+        if not check("launched an xterm we can resize", bool(xid and win),
+                     f"x11={xid} kwin={getattr(win, 'id', None)}"):
+            return
+        # Both sub-tests must start from the SAME known size: the ring is sized from the
+        # first frame, so inheriting whatever size the previous sub-test left behind makes
+        # the "grew" steps below shrink instead (and the overflow never happens).
+        base = (320, 200)
+        steps = ((512, 384), (256, 192), (900, 620))
+        for tiny in (False, True):
+            if not check(f"window set to {base[0]}x{base[1]} "
+                         f"({'tiny' if tiny else 'default'} ring)",
+                         _set_base(xid, base[0], base[1])):
+                continue
+            cap = K.Capture(window=win.id, shm=K.default_shm_path("rz" + ("t" if tiny else "n")),
+                            slot_floor=(96, 64) if tiny else None)
+            try:
+                f0 = cap.grab(copy=True, timeout=8)
+                check(f"window capture works ({'tiny' if tiny else 'default'} ring)",
+                      f0.shape[0] > 0, f"{f0.shape[1]}x{f0.shape[0]} "
+                                       f"slot={cap.slot_bytes / 2**20:.2f}MiB")
+                followed = True
+                for (ww, hh) in steps:
+                    f, ok, err = _resize_then_wait(cap, xid, ww, hh)
+                    if not ok:
+                        followed = False
+                        check(f"resize to {ww}x{hh} is followed "
+                              f"({'tiny' if tiny else 'default'} ring)", False,
+                              f"{type(err).__name__ if err else 'wrong size'}: "
+                              f"{err or (f.shape[1], f.shape[0])}")
+                        break
+                if followed:
+                    check(f"every resize is followed by a frame of the new size "
+                          f"({'tiny' if tiny else 'default'} ring)", True)
+                if tiny:
+                    check("a resize that outgrew the ring healed itself",
+                          cap.auto_restarts > 0
+                          and cap.last_restart_reason.startswith("RingTooSmall"),
+                          f"restarts={cap.auto_restarts} slot now="
+                          f"{cap.slot_bytes / 2**20:.2f}MiB {cap.last_restart_reason[:50]}")
+                else:
+                    check("the default ring absorbed the resizes with no restart at all",
+                          cap.auto_restarts == 0, str(cap.auto_restarts))
+            finally:
+                cap.close()
+    finally:
+        subprocess.run(["pkill", "-f", "xterm -name kwcttest"], timeout=10)
+        if proc.poll() is None:
+            proc.kill()
+
+
 def main():
     quick = "quick" in sys.argv
     if "windows" in sys.argv:
@@ -602,8 +839,8 @@ def main():
         a.close()
         b.close()
 
-    print("\n== failure handling ==")
-    cap = K.Capture()
+    print("\n== failure handling (auto_restart=False: report it, do not recover) ==")
+    cap = K.Capture(auto_restart=False, shm=K.default_shm_path("failh"))
     pid = cap.stats()["pid"]
     os.kill(pid, signal.SIGKILL)
     deadline = time.time() + 5
@@ -630,6 +867,11 @@ def main():
     cap.close()
 
     bug_regression_section()
+    resilience_section()
+    if not quick:
+        window_resize_section()
+    else:
+        print("\n== resilience: a resized window ==\n  [skip] quick mode")
 
     print("\n== throughput sanity ==")
     with K.Capture() as cap:

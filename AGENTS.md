@@ -31,10 +31,50 @@ configured for github.com (it is in `~/.git-credentials`) — never commit or pr
 
 Working dir: `~/way_scr_cap`. **Read this first if you are a fresh session.**
 Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayland capture,
-Python API + CLI + 87 functional + 29 ring-reader checks. See `README.md` for user-facing
+Python API + CLI + 119 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
 
-## FRESH STATUS — 2026-10-07 ~05:30 — **v0.4.0 is RELEASED everywhere** (current truth)
+## FRESH STATUS — 2026-10-07 ~07:10 — resilience features implemented, NOT yet released
+
+`grab()` now survives a dead daemon, a monitor mode change and a window resize. Committed
+on `main` against **v0.4.0 — not released yet** (`CHANGELOG.md` calls it `Unreleased`; the
+next release is 0.5.0). Version numbers in `pyproject.toml`/`__init__.py` are still 0.4.0.
+
+* **`auto_restart=True` (default)**: `DaemonDead`, `RingTooSmall`, or a `TimeoutError` with
+  no daemon alive → restart + one retry per `grab()`. `restart_limit=5` counts *consecutive*
+  restarts (`_restart_streak`, reset by a good frame); `auto_restarts` is cumulative.
+  `auto_restart=False` keeps the pre-0.5 behaviour — the old `== failure handling ==` test
+  now runs that way, which is why it passes with `auto_restart=False` in it.
+* **Why `ENOSPC` cannot be fixed in place**: a client maps the ring at its length when the
+  daemon starts; `ftruncate` it bigger and a slot beyond the old end SIGBUSes the reader.
+  So the helper reports `ENOSPC` and exits, and the ring is rebuilt by a new daemon sized
+  from its first frame. The client must be the one to restart (it unmaps *before* the new
+  daemon truncates the path) — a daemon that re-execed itself would leave clients holding a
+  stale mapping. `--slot-floor WxH` (was a hardcoded 5120×2880) sets the headroom.
+* **Deliberately not recovered**: `WindowGone` (a restart cannot resurrect your window) and
+  `TimeoutError` while the daemon is *alive* (that is KWin being slow/wedged; respawning
+  would mask it). Both are asserted in `resilience_section()`.
+* **Gotchas found building this:**
+  - `tests/test_ring_reader.py` builds a `Capture` via `__new__` (no `__init__`), so any
+    attribute the frame path touches must have a **class-level default** on `Capture`, or
+    the synthetic tests die with `AttributeError`. That is why `auto_restart`,
+    `_last_frame_geom`, `_closed` etc. are declared on the class as well as set in `__init__`.
+  - `wmctrl` only sees **XWayland** windows (KWin has no X11 client list for Wayland
+    windows) — that is why the resize test launches an `xterm`. Its `-lG` column order here
+    is `id desktop x y w h host title`, and `-r` wants the **X11 id**, not kwcapture's
+    QUuid handle (passing a QUuid gives "Cannot convert argument to number").
+  - kwcapture's `Window.geometry` includes decoration/shadow margins (a 304×160 xterm
+    reports 304×188) — never match a window by comparing geometry to a requested size;
+    match on `app_id`, and give frame-size assertions ~60/90 px of slack.
+  - A test that resizes a window must **set the size before creating the `Capture`**: the
+    ring is sized from the first frame, so inheriting a window the previous sub-test left
+    large turns the "grow" steps into shrinks and the overflow never happens (this is
+    exactly how the first version of `window_resize_section` passed for the wrong reason).
+  - `resized` must be False on the first frame (`prev is None` is not a change), and
+    `auto_restarts` must be cumulative or it reads 0 by the time anyone can look at it.
+
+## FRESH STATUS — 2026-10-07 ~05:30 (superseded by the section above; v0.4.0 is indeed
+ released — the BUG-4 findings below still stand)
 
 The previous session committed and tagged v0.4.0 but ran out of context **before publishing
 it**: PyPI was still serving 0.3.0 and the GitHub release had an empty body. Both are now
@@ -632,12 +672,17 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 * `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.
 * Expose non-normal windows (panels, desktop, overlays): krunner filters them out. A KWin
   script or the qml console could hand out those handles; `Capture(window=…)` accepts them.
-* Window resize handling: the ring slot floor is 5K-sized, so a window growing is fine,
-  but a *maximised* window on a >5K display would still hit `ENOSPC` → helper exits.
+* ~~Window resize handling~~ **done** — frames follow the resized window automatically (the
+  per-frame geometry in the slot descriptor was already correct; what was missing was the
+  recovery when it outgrows the ring). See `Capture.resized`, `last_geometry`.
+* ~~Auto-restart the daemon inside `grab()` on `DaemonDead`~~ **done** — `auto_restart=True`
+  is now the default; `restart_limit` bounds the streak. See the resilience notes below.
+* ~~Re-size the ring in place on resolution change instead of erroring out~~ **done,
+  deliberately NOT in place** — the client has the ring mapped at the old length, so growing
+  the file under it would SIGBUS whoever read past the old end. Instead `ENOSPC` →
+  `RingTooSmall` → the daemon is restarted and the ring is *rebuilt* at the new size. Same
+  outcome for the caller, no window where a mapping and a file disagree.
 * Multi-monitor: works via one `Capture` per screen name, but there is no combined-mode helper.
-* Auto-restart the daemon inside `grab()` on `DaemonDead` (currently the caller must
-  `restart()`; `kwcapture.grab()` singleton does re-create).
-* Re-size the ring in place on resolution change instead of erroring out.
 * Fractional scaling: `native-resolution` is set; behaviour with scale≠1 untested.
 * If a non-KDE compositor is ever needed: `ext-image-copy-capture-v1`/`wlr-screencopy` with
   the XML in `/usr/share/wayland-protocols/` + `wayland-scanner` (KWin does not implement it yet).

@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+Captures now survive the things that break a long-running one: a monitor changing mode, a
+window being resized or maximised, and the helper process dying.
+
+- **`grab()` recovers by itself.** A daemon that was killed, crashed, or reaped for sitting
+  idle is restarted and the frame retaken, so the caller does not have to notice. Turn it
+  off with **`auto_restart=False`**, which restores the previous behaviour of raising
+  `DaemonDead`. Recovery is bounded by **`restart_limit`** (default 5 *consecutive*
+  restarts; the streak resets on the next good frame) so a daemon that cannot come back
+  raises instead of respawning forever.
+- **Resolution changes and window resizes are followed.** Frames simply come back at the new
+  size — no need to re-create the `Capture`. **`Capture.resized`** is True on the frame where
+  the size changed and **`Capture.last_geometry`** is the size of the frame just handed out;
+  `geometry()` already tracked the live value.
+- **`RingTooSmall`**, a new `CaptureError`, is what a frame bigger than the ring raises (a
+  larger monitor mode, or a window grown past the ring's headroom). The ring cannot be
+  grown in place — a client has it mapped at the old length, and writing a slot beyond that
+  mapping would SIGBUS the reader — so the helper reports `ENOSPC` and exits, and a new
+  daemon is started with a ring sized for the new geometry. With `auto_restart=True` that
+  whole sequence happens inside one `grab()` call.
+- **`slot_floor=(w, h)`** sets the resize headroom per ring slot (was a hardcoded 5120×2880
+  constant in the helper, now `--slot-floor WxH`). Raise it for a 6K/8K display, lower it to
+  shrink the footprint. The helper also reports the geometry it could not fit in its log.
+- A window capture now **follows its app across a close-and-reopen**: if the captured handle
+  disappears but the same name resolves again, the `Capture` moves to the new window instead
+  of failing. A window that is gone for good still raises `WindowGone` — restarting cannot
+  bring your window back — and a `TimeoutError` from a *live* daemon is never retried, so a
+  wedged KWin stays visible rather than being masked by respawn churn.
+- New observability on `Capture`: `auto_restarts` (cumulative), `last_restart_reason`,
+  `slot_bytes`, `ring_bytes`.
+- Tests: **156 checks** (was 116) — 119 functional (was 87) including a real resize test
+  that launches an xterm, resizes it with `wmctrl`, and proves frames follow the window and
+  that an overflowing ring heals, plus 37 ring-reader checks (was 29) covering the `ENOSPC`
+  classification with no compositor.
+
+
 ## 0.4.0
 
 Stale-frame detection for window capture, and two real leaks/crashes fixed.

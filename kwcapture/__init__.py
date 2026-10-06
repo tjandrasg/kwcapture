@@ -164,6 +164,21 @@ class NoActiveWindow(CaptureError):
     """active_window=True but KWin reports no focused window."""
 
 
+class RingTooSmall(CaptureError):
+    """A frame no longer fits the shared-memory ring: the target got bigger.
+
+    This is what happens when the captured *window* is resized/maximised, or the monitor
+    changes mode, past the room the ring was sized for.  The ring cannot be grown in
+    place -- a client has it mapped at the old length, and writing a slot beyond that
+    mapping would SIGBUS the reader -- so the helper reports ENOSPC and exits, and a new
+    daemon is started with a ring sized for the new geometry.
+
+    With the default ``auto_restart=True`` this is invisible: ``grab()`'s first frame at
+    the new size comes back from the new ring (and ``Capture.resized`` says so).  Catch it
+    yourself only if you set ``auto_restart=False``.
+    """
+
+
 # KWin screenshot errors reported on a frame -> (exception class, human reason)
 _FRAME_ERRORS = {
     KWC_ERR_INVALID_WINDOW: (WindowGone, "the window no longer exists (closed?)"),
@@ -192,6 +207,9 @@ def _frame_error(status: int, target: int = -1) -> tuple[type, str]:
         return CaptureError, "the compositor returned an empty frame"
     if status in _FRAME_ERRORS:
         return _FRAME_ERRORS[status]
+    if status == errno.ENOSPC:
+        # the target outgrew the ring (resolution change / window resized): recoverable
+        return RingTooSmall, os.strerror(errno.ENOSPC)
     if status < 4096:
         return CaptureError, os.strerror(int(status))
     return CaptureError, f"KWin screenshot error {status}"
@@ -597,7 +615,28 @@ class Capture:
     allow_build : bool       compile the helper on first use if it is not shipped
     install_desktop : bool   write the KDE desktop entry that authorises the helper
     verbose : bool           report build / authorisation steps on stderr
+    auto_restart : bool      recover inside grab() when the daemon dies, is reaped for
+                             being idle, or when a frame outgrows the ring (resolution
+                             change / window resized) -- see RingTooSmall.  Default True;
+                             False restores the pre-0.5 behaviour of raising DaemonDead.
+    restart_limit : int      give up (and raise) after this many *consecutive* automatic
+                             restarts; the count resets on every successful frame.
+    slot_floor : (w, h)      room to leave in every ring slot for a frame that grows
+                             later.  Default (5120, 2880) -- any 5K-or-smaller mode or
+                             window can be reached without a restart.  Raise it for a
+                             6K/8K display, or lower it to shrink the footprint.
     """
+
+    # Class-level defaults for the resilience state below, so a Capture built without
+    # running __init__ (tests/test_ring_reader.py builds one from a synthetic ring) still
+    # has them: the frame path must never be the thing that raises AttributeError.
+    auto_restart = True
+    restart_limit = 5
+    auto_restarts = 0        # cumulative for this Capture; never reset
+    last_restart_reason = ""
+    _closed = False
+    _resized = False
+    _last_frame_geom: Optional[tuple[int, int]] = None
 
     def __init__(
         self,
@@ -622,6 +661,9 @@ class Capture:
         daemon_stderr=None,
         stale_check: bool = False,
         autostart: bool = True,
+        auto_restart: bool = True,
+        restart_limit: int = 5,
+        slot_floor: Optional[tuple[int, int]] = None,
     ) -> None:
         self.verbose = verbose
         try:
@@ -683,6 +725,19 @@ class Capture:
         self.stale_check = bool(stale_check)
         self._stale = False
         self._stale_checked = 0.0
+        # Resilience: recover inside grab() from a dead/reaped daemon and from a target
+        # that outgrew the ring (see RingTooSmall), and notice when the frames change size.
+        self.auto_restart = bool(auto_restart)
+        self.restart_limit = int(restart_limit)
+        self.auto_restarts = 0        # cumulative, for observability
+        self._restart_streak = 0      # consecutive, for restart_limit
+        self.last_restart_reason = ""
+        self.slot_floor = tuple(slot_floor) if slot_floor else None
+        if self.slot_floor is not None and len(self.slot_floor) != 2:
+            raise CaptureError("slot_floor must be (width, height)")
+        self._closed = False
+        self._resized = False
+        self._last_frame_geom = None
         if autostart:
             self.start()
 
@@ -709,6 +764,8 @@ class Capture:
             argv += ["--no-hide-caller"]
         if self._fps:
             argv += ["--fps", str(self._fps)]
+        if getattr(self, "slot_floor", None):
+            argv += ["--slot-floor", f"{int(self.slot_floor[0])}x{int(self.slot_floor[1])}"]
         return argv
 
     # KService picks up a new desktop entry asynchronously, so after writing one we may
@@ -721,6 +778,7 @@ class Capture:
         If KWin refuses us because the authorising desktop entry is missing - or has not
         been noticed by KDE's service cache yet - we (re)write it and retry with backoff.
         """
+        self._closed = False   # an explicit start()/restart() revives a closed Capture
         attempts = len(self._AUTH_RETRY_DELAYS) + 1 if self.install_desktop else 1
         for attempt in range(attempts):
             try:
@@ -890,6 +948,12 @@ class Capture:
             self._fd = -1
 
     def restart(self) -> None:
+        """Tear the daemon down and bring it back up (re-sizing the ring as needed).
+
+        Called for you by ``grab()`` when ``auto_restart=True``; call it directly only if
+        you disabled that. An explicit ``restart()``/``start()`` also revives a Capture
+        that was ``close()``d.
+        """
         self.start()
 
     def close_daemon(self) -> None:
@@ -915,6 +979,7 @@ class Capture:
         self._proc = None
 
     def close(self) -> None:
+        self._closed = True   # grab() must not resurrect a Capture the user closed
         self.close_daemon()
         self._unmap()
         if self._log_file is not None:
@@ -954,8 +1019,35 @@ class Capture:
         )
 
     def geometry(self) -> tuple[int, int]:
+        """Size the daemon is capturing right now (follows a resolution change)."""
         h = self._require()
         return int(h.width), int(h.height)
+
+    @property
+    def last_geometry(self) -> Optional[tuple[int, int]]:
+        """Size of the last frame handed out by this Capture, or None before the first."""
+        return self._last_frame_geom
+
+    @property
+    def resized(self) -> bool:
+        """True if the frame just handed out differs in size from the one before it.
+
+        Covers both ways the geometry can move: the monitor changing mode, and the
+        captured window being resized or maximised. Cheap enough to poll per frame -- it
+        compares two ints already read for the frame. False on the very first frame, and
+        not sticky: it describes the grab that just happened.
+        """
+        return self._resized
+
+    @property
+    def slot_bytes(self) -> int:
+        """Bytes per ring slot for the current daemon generation (0 if not started)."""
+        return self._ring_slot_bytes
+
+    @property
+    def ring_bytes(self) -> int:
+        """Size of the shared-memory ring this Capture has mapped."""
+        return self._ring_len
 
     @property
     def screen_name(self) -> str:
@@ -1053,9 +1145,65 @@ class Capture:
         # "daemon error: Success" -- see BUG-4b in AGENTS.md.
         err = int(h.error)
         if err:
+            if err == errno.ENOSPC:
+                # The target outgrew the ring: the monitor changed mode, or the captured
+                # window was resized/maximised past the room we left it. The daemon cannot
+                # grow a mapping a client already holds, so it exits and we re-open bigger.
+                raise RingTooSmall(
+                    f"the captured target outgrew the ring "
+                    f"({self._ring_slot_bytes or '?'} bytes per slot): "
+                    + ("restarting the daemon with a ring sized for the new geometry"
+                       if self.auto_restart else
+                       "call restart() to re-open the ring at the new size, or "
+                       "create the Capture with auto_restart=True"))
             raise CaptureError(f"daemon error: {os.strerror(err)}")
         if h.magic == KWC_MAGIC_GONE or (self._proc and self._proc.poll() is not None):
             raise DaemonDead("kwcapture daemon is no longer running")
+
+    # ------------------------------------------------------- daemon recovery
+    def _recoverable(self, exc: BaseException) -> bool:
+        """Would starting a fresh daemon fix this?  This is what `grab()` retries on."""
+        if isinstance(exc, RingTooSmall):
+            return True     # a ring sized for the new geometry is exactly the fix
+        if isinstance(exc, DaemonDead):
+            return True     # killed, crashed, or reaped for being idle
+        if isinstance(exc, TimeoutError):
+            # No frame *and* the process is gone: the request died with the daemon. A live
+            # daemon that merely did not answer in time is a different problem, and
+            # silently restarting it would hide a KWin that is wedged.
+            return not self.alive
+        return False
+
+    def _reresolve_window(self, exc: BaseException) -> None:
+        """Follow the app across a close+reopen: our handle is gone, its name may not be."""
+        try:
+            find_window(self.window_id or self.window_spec, binary=self.binary)
+            return                     # the handle is still alive: keep capturing it
+        except CaptureError:
+            pass
+        try:
+            win = find_window(self.window_spec, binary=self.binary)
+        except CaptureError as e:
+            raise WindowGone(
+                f"the captured window {self.window_id or self.window_name!r} is gone, so "
+                f"there is nothing to restart the daemon for ({e})") from exc
+        if self.verbose:
+            print(f"kwcapture: {self.window_id} is gone; following "
+                  f"{win.name!r} at its new handle {win.id}", file=sys.stderr)
+        self.window_id, self.window_name = win.id, win.name
+
+    def _recover(self, exc: BaseException) -> None:
+        """Bring the daemon back; the caller retries the grab once."""
+        self.auto_restarts += 1        # cumulative: "has this Capture ever recovered?"
+        self._restart_streak += 1      # consecutive: what restart_limit guards
+        self.last_restart_reason = f"{type(exc).__name__}: {exc}"
+        if self.verbose:
+            print(f"kwcapture: {self.last_restart_reason}\n           restarting the "
+                  f"daemon ({self._restart_streak}/{self.restart_limit} consecutive "
+                  f"restarts, {self.auto_restarts} total)", file=sys.stderr)
+        if self.window_spec is not None and not self.active_window:
+            self._reresolve_window(exc)
+        self.restart()
 
     # ------------------------------------------------------- shared-memory reads
     def _frame_seq(self) -> int:
@@ -1129,6 +1277,9 @@ class Capture:
             arr = arr[..., 2::-1]     # BGRA -> RGB, zero copy (negative strides)
         if copy:
             arr = arr.copy()          # writable; the ring itself is mapped read-only
+        # Geometry of what we actually built, from values already validated above: no
+        # second read of shared memory. This is what Capture.resized compares.
+        self._last_frame_geom = (w, hgt)
         return arr
         # (Reusing one array per slot instead of building a view per frame was tried to
         # dodge the upstream fault and measured: it changed nothing -- see
@@ -1149,8 +1300,39 @@ class Capture:
         frame that was current when the Capture closed -- but belongs to no daemon after
         that.  With fresh=False the newest already-captured frame is returned immediately
         (no compositor round-trip).
+
+        Recovery: with `auto_restart=True` (the default) a daemon that died, was reaped
+        for sitting idle, or ran out of ring because the screen changed mode or the
+        captured window was resized, is restarted here and the frame is retaken -- you get
+        a frame and `Capture.resized` / `auto_restarts` tell you what happened. One retry
+        per call, so a daemon that cannot come back raises rather than looping.
         """
+        for attempt in (0, 1):
+            try:
+                return self._grab_once(timeout=timeout, rgb=rgb, copy=copy, fresh=fresh)
+            except (CaptureError, TimeoutError) as exc:
+                if (attempt or self._closed or not self.auto_restart
+                        or not self._recoverable(exc)):
+                    raise
+                if self._restart_streak >= self.restart_limit:
+                    raise CaptureError(
+                        f"{exc} -- and the daemon has already restarted "
+                        f"{self._restart_streak} times in a row without delivering a "
+                        f"frame, so I am giving up (auto_restart=False disables recovery; "
+                        f"restart_limit=N allows more)") from exc
+                self._recover(exc)
+        raise AssertionError("unreachable: the loop returns or raises")
+
+    def _grab_once(
+        self,
+        timeout: float = 2.0,
+        rgb: bool = False,
+        copy: bool = False,
+        fresh: bool = True,
+    ) -> np.ndarray:
+        """One grab against the current daemon; grab() wraps this with recovery."""
         h = self._require()
+        prev_geom = self._last_frame_geom
         gen = self._gen
         self._check_error()
         seq = self._frame_seq()
@@ -1187,6 +1369,9 @@ class Capture:
             newest = self._frame_seq()
             if newest - seq >= self._ring_slots:
                 arr = self._view(newest, rgb, copy)
+        # A size change, not "I got a frame": the first frame has nothing to compare to.
+        self._resized = prev_geom is not None and self._last_frame_geom != prev_geom
+        self._restart_streak = 0   # a frame arrived: the daemon is healthy again
         if self.stale_check:
             self._update_staleness()
         return arr

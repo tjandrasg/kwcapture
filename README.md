@@ -237,6 +237,65 @@ A window grab is cheap because the compositor only has to render and ship that w
 fine for watching a handful of windows in a loop.
 
 
+## Resilience: resolution changes, window resizes and a dead daemon
+
+Long-running captures outlive their setup. Unplugging a monitor, switching mode, or
+maximising the window you are watching all change the frame size, and the helper is a
+separate process that can be killed, crash, or quit after sitting idle. By default
+`grab()` **heals all of these by itself** — you keep getting frames:
+
+```python
+import kwcapture as K
+
+cap = K.Capture(window="Dolphin")     # auto_restart=True is the default
+
+while True:
+    frame = cap.grab()               # survives a restart, a mode change, a resize
+    if cap.resized:                  # the frame we just got differs in size from the last
+        print("now", cap.last_geometry)   # e.g. (2560, 1440) -> (1920, 1080)
+```
+
+* **Window resized / maximised** — frames simply come back at the new size; there is no
+  need to re-create the `Capture`. `resized` is True on the frame where it changed, and
+  `last_geometry` is the size of the frame you just got.
+* **Monitor mode change** — same thing for a screen capture: `geometry()` always reports
+  what the compositor is capturing *now*, and the ring is sized for it.
+* **A frame bigger than the ring** (a bigger monitor, a window grown past the headroom)
+  raises **`RingTooSmall`**. The ring cannot be grown in place — a client has it mapped at
+  the old length — so the helper reports it and exits, and a new one is started with a ring
+  sized for the new geometry. `grab()` does that for you; watch `auto_restarts` and
+  `last_restart_reason` if you care that it happened.
+* **Daemon killed, crashed, or reaped for being idle** — restarted transparently and the
+  frame retaken. An outstanding zero-copy view from *before* the restart stays readable
+  (frozen at its last frame) rather than turning into invalid memory.
+
+Knobs, all on `Capture`:
+
+| parameter | default | meaning |
+|---|---|---|
+| `auto_restart` | `True` | recover inside `grab()`; `False` restores the old "raise `DaemonDead`" behaviour |
+| `restart_limit` | `5` | give up after this many *consecutive* restarts (resets on the next good frame) |
+| `slot_floor` | `(5120, 2880)` | room left in each ring slot for a frame that grows later; raise it for 6K/8K displays |
+
+What is deliberately **not** auto-recovered, because restarting would hide a real bug:
+
+* **`WindowGone`** — the window you were capturing was closed. Restarting cannot bring your
+  window back. (If the *app* is reopened under the same name, the `Capture` follows it to
+  the new window handle.)
+* **`TimeoutError` while the daemon is alive** — KWin is being slow or is wedged. Spawning
+  another daemon would just hide that.
+
+```python
+cap = K.Capture(auto_restart=False)   # old behaviour: report it, do nothing about it
+try:
+    cap.grab()
+except K.RingTooSmall:
+    cap.restart()                     # re-open the ring at the current geometry
+except K.DaemonDead:
+    ...                               # you own the restart
+```
+
+
 ## Performance notes (2560×1440@165 Hz, Plasma 6.6, i9-13900K)
 
 * ~11 ms is a fixed cost inside KWin (a 320×180 grab still takes 11 ms); 1440p adds ~7 ms

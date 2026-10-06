@@ -26,6 +26,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdint.h>
@@ -486,8 +487,15 @@ static void drain(server_t *s, inflight_t *in)
     if (!in->active || !in->want)
         return; /* reply not parsed yet */
     if (in->want > s->slot_bytes) {
-        fprintf(stderr, "kwcapture: frame needs %zu bytes, slot has %zu -- restart with a bigger ring\n",
-                in->want, s->slot_bytes);
+        /* The target outgrew the ring: a resolution change or a resized/maximised window.
+         * We cannot grow the file in place -- a client has it mapped at the old length,
+         * and a slot offset beyond its mapping would SIGBUS it -- so report ENOSPC in the
+         * header and exit.  The client re-opens us at a size that fits (kwcapture.py:
+         * RingTooSmall -> auto_restart), which is the whole resize path. */
+        fprintf(stderr,
+                "kwcapture: frame %ux%u stride %u needs %zu bytes, slot has %zu "
+                "-- exiting so the ring can be re-opened bigger\n",
+                in->meta.width, in->meta.height, in->meta.stride, in->want, s->slot_bytes);
         __atomic_store_n(&s->h->error, ENOSPC, __ATOMIC_RELEASE);
         __atomic_store_n(&s->h->quit, 1, __ATOMIC_RELEASE);
         return;
@@ -521,7 +529,7 @@ static void drain(server_t *s, inflight_t *in)
 }
 
 static int mode_serve(const opts_t *o, const char *shm_path, uint32_t slots, int depth,
-                      double fps, double idle_exit_s)
+                      double fps, double idle_exit_s, size_t slot_floor_bytes)
 {
     server_t s = {0};
     s.o = o;
@@ -559,9 +567,12 @@ static int mode_serve(const opts_t *o, const char *shm_path, uint32_t slots, int
         die("initial grab failed", r);
 
     size_t need = (size_t)f.stride * f.height;
-    /* Round up so a hotplug / resolution change mid-session still fits; tmpfs pages are
-     * only charged for what we actually write, so being generous is cheap. */
-    const size_t floor_bytes = (size_t)5120 * 2880 * 4;
+    /* Round up so a hotplug / resolution change / window resize mid-session still fits;
+     * tmpfs pages are only charged for what we actually write, so being generous is
+     * cheap.  A frame that outgrows even this ends the daemon with ENOSPC (see drain()),
+     * which the client turns into a re-open at the new size -- the ring is never resized
+     * underneath a client that has it mapped. */
+    size_t floor_bytes = slot_floor_bytes;
     size_t slot_bytes = need * 2 > floor_bytes ? need * 2 : floor_bytes;
     uint32_t hdr_size = 4096;
     size_t total = hdr_size + slot_bytes * slots;
@@ -1367,6 +1378,9 @@ static void usage(const char *argv0)
             "  --depth N          requests in flight to KWin, default 2\n"
             "  --fps N            serve: capture continuously at N frames/s\n"
             "  --idle-exit SEC    serve: quit after SEC idle seconds (0 = never)\n"
+            "  --slot-floor WxH   serve: ring slot floor, so a later frame can grow into it\n"
+            "                     (default 5120x2880; a frame bigger than the slot ends the\n"
+            "                     daemon with ENOSPC and the client re-opens the ring)\n"
             "  --quiet            less chatter\n",
             argv0);
     exit(2);
@@ -1385,6 +1399,9 @@ int main(int argc, char **argv)
     int list_windows = 0, as_json = 0;
     uint32_t slots = 4;
     double fps = 0, idle_exit = 120;
+    /* Ring slot floor: how much room to leave for a frame that is bigger than the first
+     * one (resolution change, window resized/maximised).  See mode_serve(). */
+    int slot_floor_w = 5120, slot_floor_h = 2880;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -1428,6 +1445,11 @@ int main(int argc, char **argv)
             fps = atof(argv[++i]);
         else if (!strcmp(a, "--idle-exit") && i + 1 < argc)
             idle_exit = atof(argv[++i]);
+        else if (!strcmp(a, "--slot-floor") && i + 1 < argc) {
+            if (sscanf(argv[++i], "%dx%d", &slot_floor_w, &slot_floor_h) != 2 ||
+                slot_floor_w < 1 || slot_floor_h < 1)
+                usage(argv[0]);
+        }
         else if (!strcmp(a, "--bench") && i + 1 < argc)
             bench = atoi(argv[++i]);
         else if (!strcmp(a, "--cursor"))
@@ -1443,6 +1465,8 @@ int main(int argc, char **argv)
         else
             usage(argv[0]);
     }
+    if ((long long)slot_floor_w * slot_floor_h > (long long)INT_MAX / 4)
+        die("--slot-floor too large", EINVAL);
     if (slots < 1 || slots > KWC_MAX_SLOTS)
         die("--slots out of range", EINVAL);
     if (depth < 1 || depth > NIFL)
@@ -1480,7 +1504,8 @@ int main(int argc, char **argv)
         }
         if (bus)
             sd_bus_unref(bus); /* serve() opens its own connection */
-        return mode_serve(&o, shm_path, slots, depth, fps, idle_exit);
+        return mode_serve(&o, shm_path, slots, depth, fps, idle_exit,
+                          (size_t)slot_floor_w * (size_t)slot_floor_h * 4u);
     }
 
     if (!bus && sd_bus_open_user(&bus) < 0)
