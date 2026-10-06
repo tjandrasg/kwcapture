@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+
+# Compiled helper (built by `make` into the package, or by pip into the wheel)
+bin/
+kwcapture/bin/
+*.o
+*.so
+
+# Runtime artefacts
+*.shm
+*.shm.log
+*.shm.req
+kwcapture-*.shm*
+
+# Scratch
+prompt.txt
+*.bgra
+.DS_Store
+probe/globals

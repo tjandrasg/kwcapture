@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsystemd-dev libwayland-dev pkg-config
+
+      - name: Build the wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+
+      - name: Install it
+        run: |
+          python -m pip install --force-reinstall dist/*.whl
+          python -c "import kwcapture; print('version', kwcapture.__version__)"
+          kwcapture --version
+          kwcapture screens || echo "(no Wayland session in CI, as expected)"
+
+      - name: Check the bundled helper
+        run: |
+          python - <<'PY'
+          from kwcapture import _native
+          p = _native.prebuilt_path()
+          print("wheel ships the helper:", p, p.is_file())
+          assert p.is_file(), "the wheel should contain the compiled helper"
+          PY
