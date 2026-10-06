@@ -1,5 +1,20 @@
 # AGENTS.md — fast screen capture on Wayland (KDE Plasma 6 / KWin)
 
+> ## UPDATE THIS FILE AS YOU WORK — NOT AT THE END
+> Sessions here die from running out of context, **without warning**, and everything that is
+> only in your head is lost. Three sessions have now lost findings this way, and one of them
+> lost a fatal bug that then took a fresh investigation to rediscover.
+> **The rule: write first, investigate second.** The moment you see something odd, add a
+> line to *OPEN BUGS* (symptom + how to reproduce is enough; mark it `(unverified)`). Add to
+> *SESSION STATUS* after each milestone — commit, release, broken thing — not when you feel
+> done. Short and ugly is fine; you can improve it later, and a `git commit` of the docs is
+> cheap. If you have learned something in the last ~10 tool calls and this file does not
+> mention it, stop and fix that before continuing.
+>
+> **Also: never let `/tmp` hold the only copy.** Reproducers belong in `probe/` (see
+> `probe/stale_window.py`) or their content goes into this file. See *Forensics* below for
+> what can and cannot be recovered after the fact.
+
 Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`; releases `v0.1.0`,
 `v0.2.0` each with a prebuilt `linux_x86_64` wheel attached) and on PyPI as
 **`kwcapture`** (https://pypi.org/project/kwcapture/) — publish new versions with
@@ -187,6 +202,40 @@ Relevant on non-glibc/musl or odd SONAMEs. Unchanged since the initial release
   now *re-initialises* instead of raising, with a real `grab()` still working. The
   `'int' object is not callable` origin story above is still unconfirmed; the guard only
   makes that whole family uninvokable. **If the crash ever reappears, read this section.**
+
+### BUG-3 (fixed): fd + log-file leak on every start attempt / restart
+
+`_start_once()` reset `self._log_file = None` and then opened a fresh `<shm>.log`, dropping
+the handle from the previous attempt without closing it. `_start_once()` runs on **every**
+authorisation retry (the backoff loop can fire 5 times) and on every `restart()`, so a
+long-lived process leaked fds. Found by running the *previous session's* leftover
+`/tmp/repro.py` (daemon `SIGKILL` + `restart()`) under `python -X dev`, which reported
+`ResourceWarning: unclosed file <_io.TextIOWrapper ... shm.log>` at the reset line. Fixed by
+closing the old handle first; the ResourceWarning is gone.
+**`-X dev` is worth running on the suite** — it surfaces resource bugs that are otherwise
+silent. (It also surfaced BUG-2's neighbourhood.)
+
+## FORENSICS — recovering a lost finding after a session died
+
+Checked 2026-10-06 when a fatal bug from an earlier session had to be reconstructed:
+
+* **Agent transcripts are NOT on disk here** — no `~/.claude`, `~/.codex`, or similar; a
+  full-tree grep for "kwcapture" outside the repo found only pip wheel-cache metadata. So
+  the previous session's tool calls and tracebacks are **unrecoverable**. Assume it.
+* **`/var/crash/*.crash` (apport) DOES survive** and is gold: it recorded
+  `Signal: 7 (SIGBUS)`, `ProcCmdline: .venv/bin/python tests/test_kwcapture.py quick` and
+  the full `ProcMaps` showing the truncated `kwcapture-*.shm` mappings — hard evidence of
+  the stale-ring crash at 18:30. Read it with
+  `grep -aE "^(ProblemType|Signal|Date|ProcCmdline)" /var/crash/*python*.crash`.
+* **`/tmp` scripts can survive** — `/tmp/repro.py` (daemon kill + restart) was still there
+  and ran; it is what led to BUG-3. But `/tmp` is volatile: copy anything valuable into
+  `probe/` immediately.
+* **`__pycache__` is NOT useful** — it had already been regenerated, so no bytecode
+  snapshot of the earlier source survived. Site-packages copies in old `/tmp/wt*` venvs
+  were the same content as git (one was 0.1.0, useful only as a version snapshot).
+* **Git history is the best source for code**, useless for anything never committed: `git
+  log --all -S "<symbol>" -- <file>` showed the `sched_yield` block unchanged since the
+  initial release, which is how we know that bug was never in the committed tree.
 
 ### Smaller things noticed while reading the code (unverified / judgement calls)
 

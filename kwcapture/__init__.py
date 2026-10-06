@@ -680,6 +680,14 @@ class Capture:
                 os.unlink(stale)
             except OSError:
                 pass
+        # Close the log file from the previous attempt first: _start_once() runs on every
+        # retry and every restart(), so dropping the handle here leaked one fd per attempt
+        # (found with /tmp/repro.py under -X dev, which raised ResourceWarning).
+        if self._log_file is not None:
+            try:
+                self._log_file.close()
+            except OSError:
+                pass
         self._log_file = None
         stderr_target = self._daemon_stderr
         if stderr_target is None:
