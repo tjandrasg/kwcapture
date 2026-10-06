@@ -11,10 +11,12 @@ Which window has focus, and prebuilt wheels for PyPI.
   focused window. KWin has no focus query over D-Bus, so the helper asks for an
   active-window capture and reads `windowId` out of the reply — KWin sends that **before**
   writing any pixels, so the pixels are dropped: ~8 ms, no copy, no KWin script needed.
-- Fix: the release workflow no longer pins a stale cibuildwheel. Old cibuildwheel
-  releases pin dated manylinux images that have since been removed from quay.io, which
-  made the 0.1.0 and 0.2.0 wheel builds fail; cibuildwheel 4.3 also builds Python 3.14
-  wheels.
+- **Prebuilt wheels.** The release workflow had never actually produced any: it pinned a
+  cibuildwheel whose dated manylinux image has since been removed from quay.io, and used a
+  `{dest}` placeholder that cibuildwheel 4 no longer substitutes. Releases now carry a
+  `py3-none-manylinux_2_28_x86_64` wheel — the helper is a standalone executable rather
+  than a Python extension module, so one wheel serves every CPython >= 3.9 on x86-64 Linux
+  and no compiler is needed to install it.
 
 ## 0.2.0
 
