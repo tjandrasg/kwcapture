@@ -26,3 +26,7 @@ prompt.txt
 *.bgra
 .DS_Store
 probe/globals
+
+# Private chat transcripts / agent logs — must never be committed
+chat_his*.jsonl
+*.jsonl
