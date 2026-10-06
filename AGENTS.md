@@ -21,6 +21,11 @@ is the investigation log + gotchas.
 the first prebuilt manylinux wheel we have ever published.** Nothing is pending. The tree
 is clean and `main` is pushed. Start from *Ideas not done yet* if you want new work.
 
+**FIRST READ *OPEN BUGS* (right below SESSION STATUS).** BUG-1 (minimised windows return a
+stale frame with no error) was known to two earlier sessions and never written down —
+re-deriving it cost a whole investigation. If you add anything this session, add it there
+the moment you see it.
+
 * **PyPI**: `0.3.0` = sdist + `py3-none-manylinux2014/2_17/2_28_x86_64` wheel (so
   `pip install kwcapture` needs no compiler now); `0.1.0`/`0.2.0` are sdist-only.
 * **GitHub**: release `v0.3.0` (id 404767000) with the manylinux wheel + sdist (from CI)
