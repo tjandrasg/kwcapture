@@ -11,6 +11,7 @@ Expect no ResourceWarning and "done" as the last line. It is what exposed BUG-3
 
 import os
 import signal
+import time
 import sys
 
 # running this file puts probe/ on sys.path, not the repo root
