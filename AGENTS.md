@@ -124,9 +124,13 @@ every fresh clone and the rule travels with the repo.
 transcript (`chat_his.jsonl`, dropped in the repo root) into a commit and pushed it to the
 **public** repo. It was removed from the branch and the history was rewritten
 (`filter-branch` + reflog expiry + `gc --prune=now` + force-push), tags / GitHub release
-assets / PyPI sdists never contained it — **but GitHub kept serving the old commit objects**
-(`raw@5391a52` returned HTTP 200 with the full file after the purge), so it was only gone
-after GitHub Support removed it. **Force-pushing is NOT deletion on GitHub** — at the time of writing
+assets / PyPI sdists never contained it — **but GitHub keeps serving the old dangling commit
+objects**, both over HTTPS (`raw.githubusercontent.com/<repo>/<old-sha>/chat_his.jsonl`
+→ 200 with the full file) and over the **git protocol**
+(`git fetch --depth=1 origin <old-sha>` then `git cat-file`). Verified 2026-10-06.
+**Do not write the old short/full SHAs into this file or into any commit message**: GitHub
+resolves abbreviated SHAs, so publishing one hands every visitor a working download link.
+They are deliberately omitted here. **Force-pushing is NOT deletion on GitHub** — at the time of writing
 `https://raw.githubusercontent.com/.../5391a52/chat_his.jsonl` still returns the full file,
 and it will until GitHub Support purges the dangling objects (the user has been told to open
 that request). Assume a force-push does not un-publish anything.
