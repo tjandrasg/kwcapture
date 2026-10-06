@@ -100,6 +100,28 @@ def main():
         measure("kwcapture latest (no grab)", lambda: cap.latest(rgb=True),
                 "newest published frame")
 
+    # ---------------------------------------------------------- per-window mode
+    windows = K.list_windows()
+    if not windows:
+        print("\n(no windows open, skipping the per-window cases)")
+    else:
+        biggest = max(windows, key=lambda w: w.width * w.height)
+        smallest = min(windows, key=lambda w: w.width * w.height)
+        print(f"\n{len(windows)} windows; biggest: {biggest.name!r} [{biggest.app_id}] "
+              f"{biggest.width}x{biggest.height}")
+        with K.Capture(window=biggest) as wcap:
+            measure("kwcapture window raw BGRA", lambda: wcap.grab(),
+                    f"{wcap.geometry()[0]}x{wcap.geometry()[1]}")
+            measure("kwcapture window RGB", lambda: wcap.shot())
+            measure("kwcapture window JPEG", lambda: wcap.shot_jpeg(quality=85))
+        if smallest is not biggest:
+            print(f"smallest: {smallest.name!r} [{smallest.app_id}] "
+                  f"{smallest.width}x{smallest.height}")
+            with K.Capture(window=smallest) as wcap:
+                measure("kwcapture window raw BGRA", lambda: wcap.grab(),
+                        f"{wcap.geometry()[0]}x{wcap.geometry()[1]}")
+                measure("kwcapture window JPEG", lambda: wcap.shot_jpeg(quality=85))
+
     if K.cv2_module() is None:
         print("\nnote: install opencv-python-headless for the fastest resize/encode path")
 

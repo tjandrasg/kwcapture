@@ -3,7 +3,9 @@
     kwcapture doctor               is everything in place?  (also: kwcapture setup)
     kwcapture setup                build the helper + authorise it with KWin
     kwcapture screens              list outputs
-    kwcapture grab [options]       save a frame (png / jpg / raw bgra)
+    kwcapture windows              list capturable windows (handle, name, app, size)
+    kwcapture grab [options]       save a frame (png / jpg / raw bgra), whole screen or
+                                   one window (--window HANDLE|NAME, --active-window)
     kwcapture demo [options]       grab a few frames and print latency numbers
     kwcapture bench [options]      throughput measurement
 
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -23,10 +26,12 @@ from typing import Optional
 from . import (
     Capture,
     CaptureError,
+    Window,
     __version__,
     _desktop,
     _native,
     list_screens,
+    list_windows,
 )
 
 
@@ -103,6 +108,14 @@ def cmd_doctor(argv: argparse.Namespace) -> int:
         problems += 1
 
     try:
+        windows = list_windows(str(exe))
+        _ok(f"{len(windows)} capturable window(s): "
+            + ", ".join((w.name or w.app_id or "?")[:28] for w in windows[:6])
+            + (" …" if len(windows) > 6 else ""))
+    except (CaptureError, subprocess.SubprocessError, OSError) as e:
+        _warn(f"could not list windows: {e}")
+
+    try:
         with Capture(binary=str(exe), install_desktop=argv.fix) as cap:
             t0 = time.perf_counter()
             frame = cap.grab()
@@ -175,10 +188,47 @@ def cmd_screens(argv: argparse.Namespace) -> int:
     return 0
 
 
+def _window_flags(w: Window) -> str:
+    return ",".join(n for n, on in (("minimized", w.minimized), ("fullscreen", w.fullscreen),
+                                    ("maximized", w.maximized), ("above", w.keep_above),
+                                    ("below", w.keep_below),
+                                    ("skip-taskbar", w.skip_taskbar)) if on)
+
+
+def cmd_windows(argv: argparse.Namespace) -> int:
+    windows = list_windows()
+    if argv.filter:
+        needle = argv.filter.lower()
+        windows = [w for w in windows
+                   if needle in w.name.lower() or needle in w.app_id.lower()
+                   or needle in w.desktop_file.lower()]
+    if argv.json:
+        from dataclasses import asdict
+
+        print(json.dumps([asdict(w) for w in windows], ensure_ascii=False, indent=2))
+        return 0
+    print(f"{'WINDOW HANDLE (id)':<38}  {'NAME':<44}  {'APP_ID':<26}  "
+          f"{'SIZE':>11}  {'POSITION':>12}  FLAGS")
+    for w in windows:
+        size = f"{w.width}x{w.height}"
+        pos = f"{w.x:+d},{w.y:+d}"
+        print(f"{w.id:<38}  {(w.name or '')[:44]:<44}  {(w.app_id or '')[:26]:<26}  "
+              f"{size:>11}  {pos:>12}  {_window_flags(w)}")
+    if not windows:
+        print("(no capturable windows: KWin lists normal application windows only, "
+              "not panels, overlays or the desktop)")
+    return 0
+
+
 def _grab_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("--screen", default=None, help="output name, e.g. DP-1")
     p.add_argument("--area", default=None, metavar="X,Y,W,H", help="capture a region")
     p.add_argument("--workspace", action="store_true", help="whole virtual desktop")
+    p.add_argument("--window", default=None, metavar="HANDLE|NAME",
+                   help="capture one window: a handle from `kwcapture windows`, or a "
+                        "window name / app id (must match exactly one window)")
+    p.add_argument("--active-window", action="store_true",
+                   help="capture the window that currently has focus")
     p.add_argument("--cursor", action="store_true", help="include the mouse cursor")
     p.add_argument("--decoration", action="store_true", help="include decorations/shadows")
     p.add_argument("--width", type=int, default=None, help="downscale to this width")
@@ -193,12 +243,18 @@ def _make_capture(ns: argparse.Namespace) -> Capture:
         if len(parts) != 4:
             raise SystemExit("--area wants X,Y,W,H")
         area = tuple(parts)
-    return Capture(screen=ns.screen, area=area, workspace=ns.workspace, cursor=ns.cursor,
-                   decoration=ns.decoration)
+    return Capture(screen=ns.screen, area=area, workspace=ns.workspace,
+                   window=ns.window, active_window=ns.active_window,
+                   cursor=ns.cursor, decoration=ns.decoration)
 
 
 def cmd_grab(argv: argparse.Namespace) -> int:
     with _make_capture(argv) as cap:
+        target = cap.target
+        if target.startswith("window"):
+            print(f"capturing window {cap.window_id} ({cap.window_name})")
+        elif target == "active-window":
+            print("capturing the focused window")
         if (argv.out or "shot").lower().endswith(".bgra") or argv.raw:
             st = cap.stats()
             frame = cap.grab(copy=True)
@@ -272,6 +328,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p = sub.add_parser("screens", help="list outputs")
     p.set_defaults(func=cmd_screens)
+
+    p = sub.add_parser("windows", help="list capturable windows (handle + name)")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument("-f", "--filter", default=None,
+                   help="only windows whose name/app id contains this text")
+    p.set_defaults(func=cmd_windows)
 
     p = sub.add_parser("grab", help="save one frame")
     p.add_argument("-o", "--out", default=None, help="shot.png / shot.jpg / frame.bgra")

@@ -1,18 +1,49 @@
 # AGENTS.md — fast screen capture on Wayland (KDE Plasma 6 / KWin)
 
-Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`, release `v0.1.0` with a
-prebuilt `linux_x86_64` wheel attached) and on PyPI as **`kwcapture`**
-(https://pypi.org/project/kwcapture/) — publish new versions with
-`.venv/bin/python -m twine upload -r pypi dist/*` (credentials in `~/.pypirc`; never
-commit or print them). Author: Tjandra Satria Gunawan <tjandra.satria@sci.ui.ac.id>.
-`origin` is SSH (`git@github.com:tjandrasg/kwcapture.git`). There is no `gh` CLI here, so
-repo/release admin (creating releases, uploading assets, topics) is done with the GitHub
-REST API via `curl` using whatever credential is configured for github.com — never commit
-or print a token.
+Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`; releases `v0.1.0`,
+`v0.2.0` each with a prebuilt `linux_x86_64` wheel attached) and on PyPI as
+**`kwcapture`** (https://pypi.org/project/kwcapture/) — publish new versions with
+`.venv/bin/python -m twine upload -r pypi dist/<sdist and manylinux wheels>` (credentials
+in `~/.pypirc`; never commit or print them). Author: Tjandra Satria Gunawan
+<tjandra.satria@sci.ui.ac.id>. `origin` is SSH (`git@github.com:tjandrasg/kwcapture.git`).
+There is no `gh` CLI here, so repo/release admin (creating releases, uploading assets,
+topics) is done with the GitHub REST API via `curl` using whatever credential is
+configured for github.com (it is in `~/.git-credentials`) — never commit or print a token.
 
 Working dir: `~/way_scr_cap`. **Read this first if you are a fresh session.**
-Status: **done and working** — ~40 fps real Wayland capture, Python API + CLI + tests.
-See `README.md` for user-facing docs; this file is the investigation log + gotchas.
+Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayland capture,
+Python API + CLI + 60 functional checks. See `README.md` for user-facing docs; this file
+is the investigation log + gotchas.
+
+## SESSION STATUS — 2026-10-06 19:45 (read this if you just woke up)
+
+**v0.2.0 (per-window capture + window enumeration) is CODE COMPLETE and VERIFIED, but NOT
+RELEASED.** The previous session ran out of context right here.
+
+* Verified here: `make` clean build, `.venv/bin/python tests/test_kwcapture.py` →
+  **60/60 PASS, 0 failures, 0 skips** (~35 s wall clock, much faster than the 3 min noted
+  below — that estimate is stale). Live desktop, 5 real windows listed, `WindowGone`,
+  two-instance and daemon-restart cases all green.
+* **Uncommitted**: `git status` shows 10 modified files (AGENTS/CHANGELOG/README/bench.py/
+  `kwcapture/__init__.py` +401 / `__main__.py` / `native/kwcapture.c` +628 / shm header /
+  `pyproject.toml` / tests). Nothing is half-finished: no TODO/FIXME markers anywhere, the
+  version is already 0.2.0 in both `pyproject.toml` and `__init__.py`, CHANGELOG has the
+  0.2.0 section, README already advertises the v0.2.0 wheel URL.
+* **`dist/` already holds `kwcapture-0.2.0.tar.gz` + `kwcapture-0.2.0-py3-none-linux_x86_64.whl`,
+  but rebuild them** (`rm -rf build dist && .venv/bin/python -m build`) after any further
+  source edit — they were built before this session and will be stale otherwise.
+* **Still to do (in this order)**: (1) any new feature work; (2) commit; (3) `git tag v0.2.0`
+  + `git push origin main --follow-tags`; (4) rebuild artefacts; (5) twine the sdist to PyPI
+  — PyPI still shows **only 0.1.0**; (6) the tag push triggers `release.yml` which makes the
+  GitHub release — it currently lists **only v0.1.0** — then attach the local `linux_x86_64`
+  wheel + release notes via the REST API. Follow the *Release checklist* section at the bottom.
+* Housekeeping: repo-root `bin/kwcapture` is **stale v0.1.0 debris** (13:07, gitignored, and
+  *not* on `_native`'s search path — the real helper is `kwcapture/bin/kwcapture`). Delete it
+  if it ever confuses a desktop-entry authorisation check.
+
+**Next useful features** (see *Ideas not done yet*): mark the active window in
+`list_windows()` (KWin has no D-Bus active-window getter — see the idea for the two routes),
+`Window.pid`, and auto-restart of a dead daemon inside `grab()`.
 
 ## Goal
 Make a **fast** full-screen capture program on Wayland. Original experiments
@@ -20,19 +51,19 @@ Make a **fast** full-screen capture program on Wayland. Original experiments
 (~2 fps); `mss` is 1100 fps but captures **XWayland** (black for native Wayland windows)
 and dies when `$DISPLAY` is unset. Both unusable.
 
-## What we ship (pip-installable package, v0.1.0)
+## What we ship (pip-installable package, v0.2.0)
 `make setup` (or just `pip install .`) then `.venv/bin/python tests/test_kwcapture.py`.
 
 | file | what |
 |---|---|
-| `kwcapture/native/kwcapture.c` | native helper: one-shot / `--bench` / `--list` / `serve` (daemon + shm ring), sd-bus + wayland-client |
-| `kwcapture/native/include/kwcapture_shm.h` | shm ring protocol (`KWC_HDR_STRUCT_SIZE` = 1776, `_Static_assert`ed) |
-| `kwcapture/__init__.py` | Python API: `Capture`, `grab/latest/shot/shot_jpeg/stats/bench`, ctypes mirror of the header, `to_rgb`/`resize`/`png_bytes`/`jpeg_bytes` |
+| `kwcapture/native/kwcapture.c` | native helper: one-shot / `--bench` / `--list` / `--list-windows` / `serve` (daemon + shm ring); screen, area, workspace, `--window HANDLE`, `--active-window`; sd-bus + wayland-client |
+| `kwcapture/native/include/kwcapture_shm.h` | shm ring protocol, **v2** (`KWC_HDR_STRUCT_SIZE` = 1912, `_Static_assert`ed) |
+| `kwcapture/__init__.py` | Python API: `Capture`, `grab/latest/shot/shot_jpeg/stats/bench`, `Window`/`list_windows()`/`find_window()`, ctypes mirror of the header, `to_rgb`/`resize`/`png_bytes`/`jpeg_bytes` |
 | `kwcapture/_native.py` | helper discovery: `$KWCAPTURE_BIN` → `kwcapture/bin/kwcapture` (wheel) → `~/.cache/kwcapture/…` → compile from the shipped source; ELF-arch check |
 | `kwcapture/_desktop.py` | writes/refreshes/prunes the KWin authorisation desktop entry |
-| `kwcapture/__main__.py` | CLI: `doctor [--fix --build] / setup / install-desktop [--uninstall] / screens / grab / demo / bench` (console script `kwcapture`) |
+| `kwcapture/__main__.py` | CLI: `doctor [--fix --build] / setup / install-desktop [--uninstall] / screens / windows [--json -f] / grab [--window --active-window] / demo / bench` (console script `kwcapture`) |
 | `pyproject.toml` + `setup.py` | packaging; `setup.py` compiles the helper during the wheel build (`build_py` → non-pure, `bdist_wheel.get_tag` → `linux_<arch>`), failure is non-fatal (runtime compile) |
-| `tests/test_kwcapture.py` | 27 functional tests, also `pytest tests/` |
+| `tests/test_kwcapture.py` | 60 functional checks (screen/area/workspace/window/daemon/failure), also `pytest tests/`; `... windows` runs only the window section |
 | `bench.py` | comparison table vs `mss` and `PIL.ImageGrab` |
 | `Makefile` | `make` `install-desktop` `setup` `doctor` `test` `bench` `demo` `wheel` `sdist` `dev-install` `clean` |
 | `probe/` | experiments: `globals.c` (dump compositor globals), Gio prototypes, scale/post micro-benchmarks |
@@ -53,6 +84,7 @@ kwcapture RGB full res        37.9 fps  26.0 ms
 kwcapture RGB 1280 wide       38.0 fps  26.1 ms
 kwcapture JPEG 1280           35.6 fps  28.0 ms   (grab + downscale + encode)
 kwcapture latest()          551704   fps   0.0 ms   (view of already-published frame)
+kwcapture one window 692x440   185.4 fps  4.7 ms  (v0.2.0, Capture(window=...))
 ```
 Breakdown at 1440p: KWin grab ≈ 18-25 ms (≈11 ms floor even for a 320x180 area), pipe drain
 ≈5 ms (14 MB). Throughput ceiling ≈47 fps (KWin serialises screenshot jobs); `depth=2`
@@ -61,7 +93,7 @@ reaches it, depth 3/4 only add latency (grab_ms 37/58/80 ms). Post-processing: c
 1280 = 3.5 ms / 2560 = 4.5 ms, PNG 23 ms (avoid), PIL resize 17 ms (avoid → use cv2).
 Colour fidelity verified vs an independent Spectacle capture: MAD **0.0** (9.7 if R/B swapped).
 
-## THE TWO KEY FINDINGS
+## THE THREE KEY FINDINGS
 
 ### 1. KWin's D-Bus API `org.kde.KWin.ScreenShot2`
 service `org.kde.KWin.ScreenShot2`, path `/org/kde/KWin/ScreenShot2`, same interface, owned
@@ -96,6 +128,53 @@ Installed by `make install-desktop`:
 Alternative (NOT used): start the session with `KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1` in
 *kwin's* environment — disables the check for everyone in the session.
 
+### 3. Per-window capture and window enumeration (v0.2.0)
+`CaptureWindow(handle s)` / `CaptureActiveWindow` on the same ScreenShot2 interface;
+`handle` is **`QUuid` text** — `workspace()->findWindow(QUuid(handle))`, i.e. KWin's
+`Window::internalId()`. Braced (`{2c14…}`) or bare both parse. The reply carries
+`windowId` instead of `screen`. Which pixels you get (from
+`src/plugins/screenshot/screenshot.cpp::takeScreenShot(Window*)`):
+
+| options | geometry |
+|---|---|
+| neither `include-decoration` nor shadow | `clientGeometry()` (what we default to) |
+| decoration without shadow | `frameGeometry()` |
+| decoration + shadow | `visibleGeometry()` = window item's scene rect (incl. shadow); the shadow is transparent (alpha 0) |
+
+Measured on a 692x467 KCalc: client 692x440, `--decoration` 822x598. Occlusion does not
+crop the result (KWin renders that window's item, not the screen region), and a
+**minimised window still captures** — KWin keeps its buffer.
+
+**KWin has no window-list D-Bus call.** What works, and needs no authorisation (only the
+pixel grab does):
+
+* `org.kde.KWin` `/WindowsRunner` `org.kde.krunner1` **`Match("")`** → `a(sssida{sv})`.
+  An **empty query matches every window** (`name.startsWith("")` in
+  `windowsrunnerinterface.cpp`), each match id being `"<action>_<uuid>"`.
+  Do *not* use the `"window"` keyword: it is translated, so it breaks on non-English
+  locales. Empty query also returns each window twice (once per desktop) → dedupe.
+  `Run("<action>_<uuid>", "")` acts on a window (0=activate, 1=close, 2=minimise) — handy
+  in tests; `busctl call … Run ss "2_{uuid}" ""` (busctl wants the whole signature as one
+  token: passing `s … s …` gives "Too many parameters for signature").
+* `org.kde.KWin` `/KWin` `getWindowInfo(uuid s)` → `a{sv}`: caption, `resourceClass`,
+  `resourceName`, `desktopFile`, role, icon, x/y/width/height (**doubles**, not ints!),
+  minimized/fullscreen/keepAbove/keepBelow/noBorder/skipTaskbar/skipPager/skipSwitcher,
+  maximizeHorizontal/Vertical, `type`, `layer`, `desktops` (`as`; `activities` is also an
+  `as` — only collect the one you asked for), uuid.
+  `queryWindowInfo()` is *not* a list: it makes KWin ask the **user to pick a window**.
+
+Only **normal** windows show up (krunner filters `!isNormalWindow()`: no panels/docks,
+desktop, splash, override-redirect, unmanaged). `CaptureWindow` still accepts their
+handles if you obtain them elsewhere.
+
+**A closed window does not produce a D-Bus error**: KWin replies *successfully* with a
+0x0/stride-0 image (the scene item is gone → empty `visibleGeometry`). Treat
+`width==0 || stride*height==0` as a failure, otherwise you wait forever for pixels that
+never come and the ring wedges. All failures now publish the frame with a `status`
+(`KWC_ERR_*`, `KWC_ERR_EMPTY_FRAME`, `ETIMEDOUT`) so `frame_seq` keeps moving; the Python
+side turns them into `WindowGone` / `NoActiveWindow` / `CaptureError`. Same for a request
+that never gets a reply (20 s safety valve in the serve loop).
+
 ## Environment facts
 Ubuntu, Plasma **6.6**, kwin 6.6.6 (`kwin_wayland` + `kwin_wayland_wrapper`), Wayland session,
 single output `DP-1` 2560x1440@164.69Hz scale 1. `$XDG_RUNTIME_DIR=/run/user/1000` (tmpfs 13G).
@@ -122,11 +201,26 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   250 ms timeout, so on-demand grabs took 273 ms. Fix = a FIFO `<shm>.req` opened O_RDWR by
   the daemon (never EOF, never blocks) and O_WRONLY|O_NONBLOCK by the client; write 1 byte
   per request.
+* **sd-bus: you cannot leave a struct early.** `sd_bus_message_exit_container()` on a
+  partially read `(sssida{sv})` entry fails, which silently ends the loop after one
+  element. Read every field (`sd_bus_message_read(m, "sssid", …)`), then
+  `sd_bus_message_skip(m, "a{sv}")` for the property dict (it can carry an icon pixmap),
+  then exit. And when you read a signature off `busctl` output, count the letters:
+  `(sssida{sv})` = s,s,s,i,d,a{sv} — there is no `u` in there.
+* **A stale ring file SIGBUSes the client.** `serve` opens the shm with `O_TRUNC`, so if a
+  client maps the previous daemon's file (same path, `restart()`, or two `Capture`s on one
+  default path) the mapping goes past EOF the moment the new daemon truncates it. Fixes:
+  `unique_shm_path()` per Capture instance, `_start_once()` unlinks the old shm+FIFO first,
+  and the startup wait also requires `hdr.daemon_pid == proc.pid`.
 * Pipes handed to KWin must be **O_NONBLOCK on our read end** in the daemon (else one
   in-flight drain stalls the whole loop and can deadlock at depth>1); handle EOF-before-size
   (set `hdr->error=EIO`, mark done) so the ring cannot wedge.
 * Ring geometry: `KWC_HDR_STRUCT_SIZE` is asserted in **both** C (`_Static_assert`) and
-  Python (`assert ctypes.sizeof(_Hdr)`). Bump both if you edit the struct.
+  Python (`assert ctypes.sizeof(_Hdr)`). Bump both if you edit the struct (v1=1776,
+  v2=1912: +`slot[].status`, +`target`, +`window[64]`), and bump `KWC_VERSION` when the
+  *meaning* changes so a mismatched helper is refused instead of misread. Check C offsets
+  against ctypes with `offsetof` vs `ctypes.<field>.offset` (v2: slot=248, window=184,
+  slot.status=112).
 * Keep the ring slot ≥ 5K frames (`5120*2880*4`) so a resolution change doesn't overflow;
   the file is sparse (226 MB apparent → 15 MB resident at 1440p).
 * `np.frombuffer(mmap)` gives a read-only array; `setflags(write=copy)` in `_view()`.
@@ -137,8 +231,9 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   `wl_output.mode`. Connector name (`DP-1`) is the `wl_output.name` event → needs binding v4.
 * `pkill -f kwcapture` from a shell command **matches that same shell command** and kills
   itself; use `pkill -f 'bin/kwcaptur[e] serv[e]'` or a unique `--shm` path to match.
-* **The exec_shell tool caps out at 60 s** — `bench.py` (8 cases) and `tests.py` are close
-  to that; run them with fewer seconds (`bench.py 1`) or background them.
+* **The exec_shell tool's default timeout is 10 s** (it accepts longer values — pass
+  `timeout=` explicitly). The full `tests/test_kwcapture.py` run is ~3 min; use
+  `... quick` (~2 min) or `... windows` (~30 s), or background it and read the log.
 * `PIL.ImageGrab` can leave a `spectacle` process holding your stdout pipe open (looks like
   a hang); `bench.py` reaps the ones it started.
 
@@ -179,8 +274,37 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   re-pointed `v0.1.0`; publishing is opt-in (`workflow_dispatch` + `publish: true`) so it
   cannot push anything to PyPI by accident.
 
+## Release checklist (do this in order; v0.2.0 was published this way)
+
+1. Bump the version in **both** `pyproject.toml` and `kwcapture/__init__.py`, update
+   `CHANGELOG.md` + `README.md` (including the release-wheel URL at the top of README).
+2. `make && .venv/bin/python tests/test_kwcapture.py` — everything must pass on the real
+   desktop (CI only checks that it *builds and imports*).
+3. `git commit` the lot, then `git tag vX.Y.Z && git push origin main --follow-tags`.
+4. Build the artefacts here: `.venv/bin/python -m build` → `dist/*.tar.gz` +
+   `dist/*-py3-none-linux_x86_64.whl`. Sanity check the wheel in a throwaway venv **from
+   outside the checkout** (`/tmp`), including a real `Capture()` + `list_windows()`.
+5. PyPI (sdist only — PyPI rejects `linux_x86_64`): `rm -f dist/*linux_x86_64.whl.copy`
+   and `.venv/bin/python -m twine upload -r pypi dist/kwcapture-X.Y.Z.tar.gz`.
+   Verify with `curl -s https://pypi.org/pypi/kwcapture/json`.
+6. The tag push runs `release.yml`, which builds the sdist + manylinux wheels and creates
+   the GitHub release (via `gh` on the runner, `github.token`). Then upload the local
+   `linux_x86_64` wheel as an extra release asset with the REST API:
+   `curl -X POST -H "Authorization: Bearer $TOK" -H "Content-Type: application/octet-stream" \
+    --data-binary @dist/<wheel> https://uploads.github.com/repos/tjandrasg/kwcapture/releases/<id>/assets?name=<wheel>`
+   (token from `~/.git-credentials`, release id from `/repos/.../releases/tags/vX.Y.Z`).
+7. Add the release notes to the GitHub release body (`PATCH …/releases/<id>`), and confirm
+   `pip install kwcapture` in a clean venv reports the new version.
+
 ## Ideas not done yet
-* Per-window capture (`CaptureWindow` + window enumeration; KWin has `org.kde.KWin`/Windows?).
+* Mark which listed window is *active*: KWin exposes no active-window getter over D-Bus
+  (`CaptureActiveWindow` only captures it); options are the `kwin_supportInformation`
+  dump or a KWin script. Also: `getWindowInfo` gives no pid — a `Window.pid` would need
+  `/proc` matching by app id.
+* Expose non-normal windows (panels, desktop, overlays): krunner filters them out. A KWin
+  script or the qml console could hand out those handles; `Capture(window=…)` accepts them.
+* Window resize handling: the ring slot floor is 5K-sized, so a window growing is fine,
+  but a *maximised* window on a >5K display would still hit `ENOSPC` → helper exits.
 * Multi-monitor: works via one `Capture` per screen name, but there is no combined-mode helper.
 * Auto-restart the daemon inside `grab()` on `DaemonDead` (currently the caller must
   `restart()`; `kwcapture.grab()` singleton does re-create).

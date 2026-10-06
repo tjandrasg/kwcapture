@@ -6,6 +6,11 @@
     rgb = cap.shot()                         # (H, W, 3) RGB, optionally downscaled
     cap.close()
 
+    for w in kwcapture.list_windows():       # every capturable window: name + handle
+        print(w.id, w.name, w.app_id)
+    win = kwcapture.Capture(window="Kate")   # one window instead of a whole screen
+    win2 = kwcapture.Capture(active_window=True)
+
 How it works
 ------------
 KWin (the KDE compositor) exposes `org.kde.KWin.ScreenShot2` on D-Bus; it writes raw
@@ -26,14 +31,18 @@ from __future__ import annotations
 
 import ctypes
 import errno
+import itertools
+import json
 import mmap
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import time
 from ctypes import c_char, c_double, c_uint32, c_uint64, c_uint8
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Union
 
 import numpy as np
 
@@ -41,32 +50,70 @@ from . import _desktop, _native
 from ._desktop import install_desktop_file
 from ._native import NativeBuildError, ensure_binary, find_binary
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Capture",
     "grab",
     "shot",
     "list_screens",
+    "list_windows",
+    "find_window",
+    "Window",
     "to_rgb",
     "resize",
     "png_bytes",
     "jpeg_bytes",
     "cv2_module",
+    "default_shm_path",
+    "unique_shm_path",
+    "is_window_handle",
     "find_binary",
     "ensure_binary",
     "install_desktop_file",
     "NativeBuildError",
     "CaptureError",
     "DaemonDead",
+    "WindowNotFound",
+    "AmbiguousWindow",
+    "WindowGone",
+    "NoActiveWindow",
     "__version__",
 ]
 
 KWC_MAGIC = 0x4B574350  # "KWCP"
 KWC_MAGIC_GONE = 0x4B574347  # "KWCG"
-KWC_VERSION = 1
+KWC_VERSION = 2
 KWC_MAX_SLOTS = 8
-_KWC_STRUCT_SIZE = 1776  # must match sizeof(kwc_hdr_t)/KWC_HDR_STRUCT_SIZE
+_KWC_STRUCT_SIZE = 1912  # must match sizeof(kwc_hdr_t)/KWC_HDR_STRUCT_SIZE
+
+# what a daemon is capturing (kwcapture_shm.h KWC_TARGET_*)
+KWC_TARGET_ACTIVE_SCREEN = 0
+KWC_TARGET_SCREEN = 1
+KWC_TARGET_AREA = 2
+KWC_TARGET_WORKSPACE = 3
+KWC_TARGET_WINDOW = 4
+KWC_TARGET_ACTIVE_WINDOW = 5
+
+# per-frame failures (>= 4096 are KWin screenshot errors, below that an errno)
+KWC_OK = 0
+KWC_ERR_INVALID_WINDOW = 4096
+KWC_ERR_NO_ACTIVE_WINDOW = 4097
+KWC_ERR_CANCELLED = 4098
+KWC_ERR_NOT_AUTHORIZED = 4099
+KWC_ERR_INVALID_SCREEN = 4100
+KWC_ERR_INVALID_AREA = 4101
+KWC_ERR_EMPTY_FRAME = 4102
+
+
+_TARGET_NAMES = {
+    KWC_TARGET_ACTIVE_SCREEN: "active-screen",
+    KWC_TARGET_SCREEN: "screen",
+    KWC_TARGET_AREA: "area",
+    KWC_TARGET_WORKSPACE: "workspace",
+    KWC_TARGET_WINDOW: "window",
+    KWC_TARGET_ACTIVE_WINDOW: "active-window",
+}
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_BINARY = None  # resolved by find_binary()/ensure_binary(); kept for compatibility
@@ -89,6 +136,63 @@ class DaemonDead(CaptureError):
     pass
 
 
+class WindowNotFound(CaptureError):
+    """No window matched the requested handle or name."""
+
+
+class AmbiguousWindow(WindowNotFound):
+    """Several windows matched; the message lists them with their handles."""
+
+    def __init__(self, message: str, candidates: Optional[list["Window"]] = None) -> None:
+        super().__init__(message)
+        self.candidates = list(candidates or [])
+
+
+class WindowGone(CaptureError):
+    """The captured window vanished (closed or unmapped) since the Capture started.
+
+    The helper keeps running: list_windows() will no longer report the window, and a new
+    Capture for another window (or the same app's new window) works normally.
+    """
+
+
+class NoActiveWindow(CaptureError):
+    """active_window=True but KWin reports no focused window."""
+
+
+# KWin screenshot errors reported on a frame -> (exception class, human reason)
+_FRAME_ERRORS = {
+    KWC_ERR_INVALID_WINDOW: (WindowGone, "the window no longer exists (closed?)"),
+    KWC_ERR_NO_ACTIVE_WINDOW: (NoActiveWindow, "no window has focus"),
+    KWC_ERR_CANCELLED: (CaptureError, "KWin cancelled the grab"),
+    KWC_ERR_NOT_AUTHORIZED: (
+        CaptureError,
+        "KWin refused: the helper is not authorised (run `kwcapture install-desktop`)",
+    ),
+    KWC_ERR_INVALID_SCREEN: (CaptureError, "no such screen"),
+    KWC_ERR_INVALID_AREA: (CaptureError, "invalid area"),
+}
+
+
+def _frame_error(status: int, target: int = -1) -> tuple[type, str]:
+    """(exception class, human reason) for a per-frame status code from the daemon."""
+    if not status:
+        return CaptureError, "ok"
+    if status == KWC_ERR_EMPTY_FRAME:
+        # KWin replies OK with a 0x0 image when the target has no scene item to render;
+        # for a window that means it was closed or is on its way out (minimised windows
+        # do capture fine - KWin keeps their buffer).
+        if target in (KWC_TARGET_WINDOW, KWC_TARGET_ACTIVE_WINDOW):
+            return (WindowGone, "the window has nothing to capture "
+                                "(closed or being unmapped)")
+        return CaptureError, "the compositor returned an empty frame"
+    if status in _FRAME_ERRORS:
+        return _FRAME_ERRORS[status]
+    if status < 4096:
+        return CaptureError, os.strerror(int(status))
+    return CaptureError, f"KWin screenshot error {status}"
+
+
 class _Slot(ctypes.Structure):
     _fields_ = [
         ("width", c_uint32),
@@ -100,7 +204,8 @@ class _Slot(ctypes.Structure):
         ("total_ms", c_double),
         ("ts_ns", c_uint64),
         ("screen", c_char * 64),
-        ("pad", c_uint32 * 6),
+        ("status", c_uint32),
+        ("pad", c_uint32 * 7),
     ]
 
 
@@ -129,6 +234,9 @@ class _Hdr(ctypes.Structure):
         ("depth", c_uint32),
         ("pad3", c_uint32),
         ("fps", c_double),
+        ("target", c_uint32),
+        ("pad4", c_uint32),
+        ("window", c_char * 64),
         ("slot", _Slot * KWC_MAX_SLOTS),
         ("reserved", c_uint8 * 512),
     ]
@@ -141,10 +249,25 @@ assert ctypes.sizeof(_Hdr) == _KWC_STRUCT_SIZE, (
 
 
 def default_shm_path(tag: str = "") -> str:
-    """A private tmpfs path for the ring buffer."""
+    """The default ring-buffer path in tmpfs ($XDG_RUNTIME_DIR when set)."""
     base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
     suffix = f"-{tag}" if tag else ""
     return os.path.join(base, f"kwcapture-{os.getuid()}{suffix}.shm")
+
+
+_shm_seq = itertools.count(1)
+
+
+def unique_shm_path(tag: str = "") -> str:
+    """default_shm_path() plus this pid and instance number.
+
+    `Capture` uses this when you do not pass `shm=`: two Capture objects in one process
+    must not share a ring file (the second daemon would ftruncate() the file the first
+    one has mapped).
+    """
+    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    suffix = f"-{tag}" if tag else ""
+    return os.path.join(base, f"kwcapture-{os.getuid()}{suffix}-{os.getpid()}-{next(_shm_seq)}.shm")
 
 
 def list_screens(binary: Optional[str] = None) -> list[dict]:
@@ -166,6 +289,174 @@ def list_screens(binary: Optional[str] = None) -> list[dict]:
     return screens
 
 
+# --------------------------------------------------------------------- windows
+@dataclass
+class Window:
+    """One capturable window, as KWin sees it.
+
+    `id` is the KWin window handle (a QUuid string like
+    ``{2c14f294-93ea-48bf-bbea-f501d59f6fe5}``): pass it to ``Capture(window=...)``.
+    It is only valid until the window is closed -- re-list when in doubt.
+    """
+
+    id: str
+    name: str = ""            # window caption
+    app_id: str = ""          # wayland app_id / X11 WM_CLASS
+    resource_name: str = ""   # X11 WM_CLASS instance name
+    desktop_file: str = ""    # .desktop file of the app, if it set one
+    role: str = ""
+    icon: str = ""
+    x: int = 0
+    y: int = 0
+    width: int = 0
+    height: int = 0
+    minimized: bool = False
+    fullscreen: bool = False
+    keep_above: bool = False
+    keep_below: bool = False
+    no_border: bool = False
+    skip_taskbar: bool = False
+    skip_pager: bool = False
+    skip_switcher: bool = False
+    maximized: bool = False
+    window_type: int = 0
+    layer: int = 0
+    desktops: tuple[str, ...] = ()
+    extra: dict = field(default_factory=dict)
+
+    # ``id`` is what CaptureWindow() wants; ``handle``/``uuid`` read better in code
+    @property
+    def handle(self) -> str:
+        return self.id
+
+    @property
+    def uuid(self) -> str:
+        return self.id.strip("{}")
+
+    @property
+    def geometry(self) -> tuple[int, int]:
+        return (self.width, self.height)
+
+    @property
+    def position(self) -> tuple[int, int]:
+        return (self.x, self.y)
+
+    @property
+    def visible(self) -> bool:
+        return not self.minimized
+
+    def __str__(self) -> str:
+        flags = " ".join(
+            n for n, on in (("minimized", self.minimized), ("fullscreen", self.fullscreen),
+                            ("maximized", self.maximized)) if on
+        )
+        return (f"{self.name or '(untitled)'} [{self.app_id or '?'}] "
+                f"{self.width}x{self.height}+{self.x}+{self.y} "
+                f"{'(' + flags + ') ' if flags else ''}{self.id}")
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Window":
+        known = {f for f in cls.__dataclass_fields__ if f != "extra"}
+        return cls(
+            **{k: (tuple(v) if k == "desktops" else v) for k, v in d.items() if k in known},
+            extra={k: v for k, v in d.items() if k not in known},
+        )
+
+
+_HANDLE_RE = re.compile(r"^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+                        r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?$")
+
+
+def is_window_handle(spec: str) -> bool:
+    """Does this look like a KWin window handle (with or without the braces)?"""
+    return bool(_HANDLE_RE.match(spec.strip()))
+
+
+def list_windows(binary: Optional[str] = None) -> list[Window]:
+    """Every window KWin considers a normal application window.
+
+    KWin's screenshot interface cannot enumerate windows, so the helper asks KWin's
+    krunner interface (`/WindowsRunner`, an empty query matches all windows) for the
+    handles and `/KWin getWindowInfo(handle)` for the details of each.  Panels, the
+    desktop/wallpaper and other special windows are not in that list; if you do have a
+    handle for one, `Capture(window=...)` still captures it.
+    """
+    binary = str(_native.resolve(binary))
+    out = subprocess.run([binary, "--list-windows", "--json"], capture_output=True,
+                         text=True, timeout=30)
+    if out.returncode != 0:
+        raise CaptureError(out.stderr.strip() or "kwcapture --list-windows failed")
+    try:
+        data = json.loads(out.stdout or "[]")
+    except json.JSONDecodeError as e:  # pragma: no cover - would mean a broken helper
+        raise CaptureError(f"cannot parse the window list: {e}") from e
+    return [Window.from_dict(d) for d in data]
+
+
+def _match_score(w: Window, spec: str) -> int:
+    """How well a window matches a name: 3 exact caption ... 1 substring."""
+    low = spec.lower()
+    if w.name == spec:
+        return 3
+    if w.name.lower() == low:
+        return 2
+    if low in (w.app_id.lower(), w.desktop_file.lower(), w.resource_name.lower(),
+               w.role.lower()):
+        return 2
+    if low and low in w.name.lower():
+        return 1
+    if low and (low in w.app_id.lower() or low in w.desktop_file.lower()):
+        return 1
+    return 0
+
+
+def find_window(
+    spec: Union[str, Window, None],
+    windows: Optional[list[Window]] = None,
+    binary: Optional[str] = None,
+) -> Window:
+    """Resolve a handle, a caption, an app id or a substring to one :class:`Window`.
+
+    Raises WindowNotFound if nothing matches and AmbiguousWindow (with .candidates) if
+    several do.  Pass `windows` to search a pre-fetched list.
+    """
+    if isinstance(spec, Window):
+        return spec
+    if spec is None or not str(spec).strip():
+        raise WindowNotFound("no window requested")
+    spec = str(spec).strip()
+    if windows is None:
+        windows = list_windows(binary)
+    if is_window_handle(spec):
+        want = spec.strip("{}").lower()
+        for w in windows:
+            if w.uuid.lower() == want:
+                return w
+        raise WindowNotFound(
+            f"no window with handle {spec}; current windows: "
+            + ", ".join(f"{w.id} ({w.name})" for w in windows) or "none"
+        )
+    best, top = [], 0
+    for w in windows:
+        score = _match_score(w, spec)
+        if score > top:
+            best, top = [w], score
+        elif score == top and score:
+            best.append(w)
+    if not best:
+        raise WindowNotFound(
+            f"no window matches {spec!r}; capturable windows: "
+            + (", ".join(w.name or w.app_id for w in windows) or "none")
+        )
+    if len(best) > 1:
+        raise AmbiguousWindow(
+            f"{spec!r} matches {len(best)} windows, pick one by handle: "
+            + ", ".join(f"{w.id} ({w.name})" for w in best),
+            best,
+        )
+    return best[0]
+
+
 class Capture:
     """Grab frames from KWin through a resident helper process.
 
@@ -174,6 +465,9 @@ class Capture:
     screen : str, optional   output name (see list_screens()); default = active screen
     area : (x, y, w, h), optional   capture only this region (logical coords)
     workspace : bool         capture the entire virtual desktop
+    window : str | Window    capture one window: a handle, caption or app id from
+                             list_windows()/find_window() (e.g. window="Kate")
+    active_window : bool     capture the window that has focus
     cursor : bool            include the hardware cursor
     decoration : bool        include window decorations and shadows
     hide_caller_windows : bool   KWin hides our own windows by default (True keeps that)
@@ -192,6 +486,8 @@ class Capture:
         screen: Optional[str] = None,
         area: Optional[tuple[int, int, int, int]] = None,
         workspace: bool = False,
+        window: Union[str, Window, None] = None,
+        active_window: bool = False,
         cursor: bool = False,
         decoration: bool = False,
         hide_caller_windows: bool = True,
@@ -221,11 +517,24 @@ class Capture:
             except OSError as e:  # read-only $HOME etc: capture may still work
                 print(f"kwcapture: could not write the KDE authorisation file: {e}",
                       file=sys.stderr)
+        if active_window and window is not None:
+            raise CaptureError("window= and active_window=True are mutually exclusive")
+        if (window is not None or active_window) and (screen or area or workspace):
+            raise CaptureError(
+                "a window capture cannot also be a screen/area/workspace capture"
+            )
         self.screen = screen
         self.area = tuple(area) if area else None
         self.workspace = workspace
+        self.window_spec: Union[str, Window, None] = window
+        self.window_id = ""    # resolved KWin handle, empty until resolved/unresolved
+        self.window_name = ""  # caption of the resolved window
+        self.active_window = bool(active_window)
+        if window is not None:
+            win = find_window(window, binary=self.binary)
+            self.window_id, self.window_name = win.id, win.name
         self.cursor = cursor
-        self.shm_path = shm or default_shm_path()
+        self.shm_path = shm or unique_shm_path()
         self.req_path = self.shm_path + ".req"  # FIFO used to wake the daemon
         self._req_fd = -1
         self._proc: Optional[subprocess.Popen] = None
@@ -248,6 +557,10 @@ class Capture:
         argv = [self.binary, "serve", "--shm", self.shm_path,
                 "--slots", str(self._slots), "--depth", str(self._depth),
                 "--idle-exit", str(self.idle_exit)]
+        if self.active_window:
+            argv += ["--active-window"]
+        elif self.window_id:
+            argv += ["--window", self.window_id]
         if self.area:
             argv += ["--area", ",".join(str(int(v)) for v in self.area)]
         elif self.screen:
@@ -300,6 +613,15 @@ class Capture:
     def _start_once(self) -> None:
         """One daemon launch attempt; the helper's stderr goes to <shm>.log."""
         self.close_daemon()
+        # Drop a ring left behind by a previous daemon (e.g. after restart() when it was
+        # killed): the file already looks complete, so without this we would map the stale
+        # pages and then get SIGBUS'd when the new daemon truncates the file.  The
+        # daemon_pid check below is the belt to these braces.
+        for stale in (self.shm_path, self.req_path):
+            try:
+                os.unlink(stale)
+            except OSError:
+                pass
         self._log_file = None
         stderr_target = self._daemon_stderr
         if stderr_target is None:
@@ -335,9 +657,11 @@ class Capture:
         self._hdr = _Hdr.from_buffer(self._mm)
         hdr = self._hdr
         deadline = time.monotonic() + self.start_timeout
-        while hdr.magic != KWC_MAGIC or not hdr.ready:
+        while (hdr.magic != KWC_MAGIC or not hdr.ready
+               or int(hdr.daemon_pid) != proc.pid):
             if hdr.magic == KWC_MAGIC_GONE:
-                break
+                raise DaemonDead("kwcapture daemon shut down during startup: "
+                                 + (self._daemon_log_tail(3) or "no log output"))
             if proc.poll() is not None:
                 raise CaptureError("kwcapture daemon died during startup")
             if time.monotonic() > deadline:
@@ -459,6 +783,12 @@ class Capture:
         h = self._require()
         return h.screen.decode() if isinstance(h.screen, bytes) else str(h.screen)
 
+    @property
+    def target(self) -> str:
+        """'screen', 'area', 'window', ... - what this Capture is pointed at."""
+        h = self._require()
+        return _TARGET_NAMES.get(int(h.target), str(int(h.target)))
+
     def stats(self) -> dict:
         """Timings of the most recently published frame."""
         h = self._require()
@@ -476,6 +806,10 @@ class Capture:
             total_ms=float(sl.total_ms),
             age_ms=(time.monotonic_ns() - int(sl.ts_ns)) / 1e6,
             screen=sl.screen.decode() if isinstance(sl.screen, bytes) else sl.screen,
+            window=(h.window.decode() if isinstance(h.window, bytes) else str(h.window))
+            or None,
+            target=_TARGET_NAMES.get(int(h.target), int(h.target)),
+            status=_frame_error(int(sl.status), int(h.target))[1],
             pid=int(h.daemon_pid),
         )
 
@@ -498,6 +832,17 @@ class Capture:
         assert h is not None
         slots = int(h.slots)
         sl = h.slot[(seq - 1) % slots]
+        status = int(sl.status)
+        if status:
+            # the compositor refused this frame: the slot holds nothing usable (a window
+            # that got closed or minimised is the usual reason, see WindowGone)
+            exc, reason = _frame_error(status, int(h.target))
+            target = _TARGET_NAMES.get(int(h.target), "capture")
+            what = ""
+            if int(h.target) == KWC_TARGET_WINDOW:
+                handle = h.window.decode() if isinstance(h.window, bytes) else str(h.window)
+                what = f" {handle}"
+            raise exc(f"frame {seq} failed: {reason} (target={target}{what})")
         w, hgt, stride = int(sl.width), int(sl.height), int(sl.stride)
         if w == 0 or hgt == 0:
             raise CaptureError("frame has no geometry")
@@ -777,19 +1122,37 @@ def jpeg_bytes(arr: np.ndarray, quality: int = 85) -> bytes:
 
 
 # ------------------------------------------------------------------- singleton
-_default: Optional[Capture] = None
+# Capture() constructor keys that describe *what* to capture: the module-level one-
+# liners keep one daemon alive per distinct target instead of respawning one per grab.
+_TARGET_KEYS = ("screen", "area", "workspace", "window", "active_window", "cursor",
+                "decoration")
+_singletons: dict[tuple, "Capture"] = {}
+
+
+def _singleton(kw: dict) -> "Capture":
+    """The cached Capture for the target described by the target keys in `kw`."""
+    opts = {k: kw.pop(k) for k in _TARGET_KEYS if k in kw}
+    key = tuple(sorted((k, str(v)) for k, v in opts.items()))
+    cap = _singletons.get(key)
+    if cap is None or not cap.alive:
+        if cap is not None:
+            try:
+                cap.close()
+            except Exception:
+                pass
+        cap = _singletons[key] = Capture(**opts)
+    return cap
 
 
 def grab(rgb: bool = False, copy: bool = False, **kw) -> np.ndarray:
-    """One-liner using a lazily started shared Capture instance."""
-    global _default
-    if _default is None or not _default.alive:
-        _default = Capture(**{k: kw.pop(k) for k in ("screen", "area", "cursor") if k in kw})
-    return _default.grab(rgb=rgb, copy=copy, **kw)
+    """One-liner on a lazily started, shared Capture instance.
+
+    `grab()`, `grab(screen="DP-1")`, `grab(window="Kate")` and
+    `grab(active_window=True)` each get (and reuse) their own helper process.
+    """
+    return _singleton(kw).grab(rgb=rgb, copy=copy, **kw)
 
 
 def shot(width: Optional[int] = None, **kw) -> np.ndarray:
-    global _default
-    if _default is None or not _default.alive:
-        _default = Capture()
-    return _default.shot(width=width, **kw)
+    """RGB one-liner; see grab() for the target keys (window=…, screen=…)."""
+    return _singleton(kw).shot(width=width, **kw)

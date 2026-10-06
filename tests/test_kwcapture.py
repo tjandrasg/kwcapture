@@ -2,11 +2,17 @@
 """Functional tests for the kwcapture Python API.
 
     python tests/test_kwcapture.py           # everything
-    python tests/test_kwcapture.py quick   # skip the slow colour-reference check
-    pytest tests/                          # same tests, via pytest
+    python tests/test_kwcapture.py quick     # skip the slow colour-reference check
+    python tests/test_kwcapture.py windows   # only the per-window capture section
+    pytest tests/                            # same tests, via pytest
+
+The window tests launch (and close) their own `kcalc` windows so they can also test
+what happens when a captured window disappears; they skip if kcalc is not installed.
 """
 import os
+import shutil
 import signal
+import subprocess
 import sys
 import time
 
@@ -26,8 +32,237 @@ def check(name, cond, detail=""):
     return bool(cond)
 
 
+# ------------------------------------------------------------- window helpers
+def _krunner(action, handle):
+    """Ask KWin to do something to a window (0=activate, 1=close, 2=minimise).
+
+    Uses busctl; returns False when busctl is unavailable so callers can skip.
+    """
+    if not shutil.which("busctl"):
+        return None
+    r = subprocess.run(
+        ["busctl", "--user", "call", "org.kde.KWin", "/WindowsRunner",
+         "org.kde.krunner1", "Run", "ss", f"{action}_{handle}", ""],
+        capture_output=True, text=True)
+    return r.returncode == 0
+
+
+def _windows_of(app, timeout=10.0):
+    """Windows whose app id / desktop file mentions `app` (waits up to `timeout`s)."""
+    deadline = time.time() + timeout
+    found = []
+    while time.time() < deadline:
+        found = [w for w in K.list_windows()
+                 if app in (w.app_id or "").lower()
+                 or app in (w.desktop_file or "").lower()
+                 or app in (w.resource_name or "").lower()]
+        if found:
+            return found
+        time.sleep(0.2)
+    return found
+
+
+def _spawn(app):
+    exe = shutil.which(app)
+    if not exe:
+        return None
+    return subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _wait_new_window(app, known=(), timeout=12.0):
+    """Windows of `app` that were not in `known` (handles of a previous test run)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        fresh = [w for w in _windows_of(app, timeout=0.2) if w.id not in known]
+        if fresh:
+            return fresh
+        time.sleep(0.2)
+    return []
+
+
+def window_section():
+    """Enumeration, per-window capture, name resolution and vanished windows."""
+    print("\n== window enumeration ==")
+    try:
+        windows = K.list_windows()
+    except Exception as e:  # noqa: BLE001 - report and stop this section
+        check("list_windows() works", False, f"{type(e).__name__}: {e}")
+        return
+    check("list_windows returns a list of Window", isinstance(windows, list) and
+          all(isinstance(w, K.Window) for w in windows), f"{len(windows)} window(s)")
+    if not windows:
+        print("  [skip] no windows open, nothing to test")
+        return
+    check("window ids are KWin handles",
+          all(K.is_window_handle(w.id) for w in windows), windows[0].id)
+    check("windows carry a name or app id", all(w.name or w.app_id for w in windows))
+    check("windows have a geometry", all(w.width > 0 and w.height > 0 for w in windows))
+    w0 = windows[0]
+    check("find_window(handle) round-trips", K.find_window(w0.id).id == w0.id, w0.id)
+    check("handle without braces is accepted too",
+          K.find_window(w0.id.strip("{}")).id == w0.id)
+    check("Window objects know their geometry",
+          w0.geometry == (w0.width, w0.height) and isinstance(str(w0), str))
+    try:
+        K.find_window("zz no such window zz")
+        check("find_window() raises WindowNotFound", False, "no exception raised")
+    except K.WindowNotFound:
+        check("find_window() raises WindowNotFound", True)
+
+    print("\n== per-window capture ==")
+    if not shutil.which("kcalc"):
+        print("  [skip] kcalc not installed; the capture tests need a window of our own")
+        return
+    if not shutil.which("busctl"):
+        print("  [note] busctl missing: the minimise checks are skipped")
+    procs = []
+    try:
+        before = {w.id for w in K.list_windows()}
+        p = _spawn("kcalc")
+        if p is None:
+            print("  [skip] could not start kcalc")
+            return
+        procs.append(p)
+        mine = _wait_new_window("kcalc", before)
+        if not check("launched a window to capture", bool(mine),
+                     str([w.id for w in mine])):
+            return
+        w = mine[0]
+        with K.Capture(window=w, shm=K.default_shm_path("win")) as cap:
+            check("Capture(window=...) resolved the handle",
+                  cap.window_id == w.id and cap.target == "window",
+                  f"{cap.window_id} '{cap.window_name}'")
+            arr = cap.grab()
+            check("window frame is usable", arr.ndim == 3 and arr.shape[2] == 4,
+                  str(arr.shape))
+            check("window frame has real pixels", float(arr.mean()) > 1.0,
+                  f"mean={arr.mean():.1f}")
+            check("window size matches what KWin reported (client vs frame geometry)",
+                  abs(arr.shape[1] - w.width) <= 96 and abs(arr.shape[0] - w.height) <= 96,
+                  f"grabbed {arr.shape[1]}x{arr.shape[0]}, listed {w.width}x{w.height}")
+            st = cap.stats()
+            check("stats() reports the window target",
+                  st["target"] == "window" and st["window"] == w.id and st["status"] == "ok",
+                  f"{st['target']} {st['status']}")
+            small = cap.shot(width=64)
+            check("shot() works per window", small.ndim == 3 and small.shape[1] == 64,
+                  str(small.shape))
+            plain = cap.grab(copy=True)
+        with K.Capture(window=w.id, decoration=True,
+                       shm=K.default_shm_path("windeco")) as cap:
+            deco = cap.grab(copy=True)
+            check("decoration=True adds titlebar/shadow",
+                  deco.shape[0] >= plain.shape[0] and deco.shape[1] >= plain.shape[1],
+                  f"{plain.shape[1]}x{plain.shape[0]} -> {deco.shape[1]}x{deco.shape[0]}")
+
+        with K.Capture(active_window=True, shm=K.default_shm_path("awin")) as cap:
+            try:
+                f = cap.grab()
+                check("active_window=True captures the focused window",
+                      f.shape[0] > 0 and cap.target == "active-window", str(f.shape))
+            except K.NoActiveWindow as e:
+                check("active_window=True captures the focused window", False, str(e))
+
+        # a minimised window keeps its buffer in KWin, so it is still capturable
+        if _krunner(2, w.id):
+            time.sleep(0.7)
+            check("list_windows reports a minimised window", K.find_window(w.id).minimized)
+            try:
+                with K.Capture(window=w.id, shm=K.default_shm_path("winmin")) as cap:
+                    f = cap.grab(timeout=3.0)
+                check("minimised windows still capture", f.shape[0] > 0, str(f.shape))
+            except K.CaptureError as e:
+                check("minimised windows still capture", False, f"{type(e).__name__}: {e}")
+            _krunner(0, w.id)
+            time.sleep(0.7)
+        else:
+            print("  [skip] busctl missing: no minimise round-trip test")
+
+        # Two windows with the same caption are ambiguous.  (kcalc is a unique
+        # application, so this ranking is checked on a synthetic list rather than by
+        # starting a second copy.)
+        twin = K.Window(id="{11111111-1111-1111-1111-111111111111}", name="KCalc",
+                        app_id="org.kde.kcalc")
+        try:
+            K.find_window("KCalc", windows=[w, twin])
+            check("ambiguous names raise AmbiguousWindow", False, "picked one of two")
+        except K.AmbiguousWindow as e:
+            check("ambiguous names raise AmbiguousWindow", len(e.candidates) == 2,
+                  f"{len(e.candidates)} candidates")
+        check("a handle disambiguates",
+              K.find_window(twin.id, windows=[w, twin]).id == twin.id)
+        check("a unique substring match works",
+              K.find_window("calc", windows=[w, ]).id == w.id)
+        check("exact captions beat substring matches",
+              K.find_window("KCalc", windows=[
+                  K.Window(id="{22222222-2222-2222-2222-222222222222}", name="KCalc Two"),
+                  twin]).id == twin.id)
+    finally:
+        for pr in procs:
+            if pr.poll() is None:
+                pr.terminate()
+        deadline = time.time() + 10
+        while time.time() < deadline and _windows_of("kcalc", timeout=0.5):
+            time.sleep(0.2)
+
+
+def window_vanish_section():
+    """Killing a captured window must raise WindowGone, not wedge the daemon."""
+    print("\n== captured window disappears ==")
+    if not shutil.which("kcalc"):
+        print("  [skip] kcalc not installed")
+        return
+    before = {w.id for w in K.list_windows()}
+    p = _spawn("kcalc")
+    mine = _wait_new_window("kcalc", before)
+    if not check("launched a window to kill", bool(mine), str([w.id for w in mine])):
+        if p.poll() is None:
+            p.terminate()
+        return
+    try:
+        with K.Capture(window=mine[0].id, shm=K.default_shm_path("wingone")) as cap:
+            check("window captures before it dies", cap.grab().shape[0] > 0)
+            p.terminate()
+            gone = None
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                time.sleep(0.2)
+                try:
+                    cap.grab(timeout=2.0)
+                except K.WindowGone as e:
+                    gone = e
+                    break
+                except K.CaptureError as e:
+                    gone = e
+                    break
+            check("grab() raises WindowGone when the window closes", gone is not None,
+                  str(gone)[:110] if gone else "still returning frames")
+            check("the daemon survives its window dying", cap.alive)
+            check("stats() reports the failure", cap.stats()["status"] != "ok",
+                  cap.stats()["status"])
+            check("the closed window is no longer listed",
+                  mine[0].id not in [w.id for w in K.list_windows()])
+    finally:
+        if p.poll() is None:
+            p.kill()
+    check("other captures still work afterwards", K.grab(copy=True).shape[0] > 0)
+
+
+def _summary() -> int:
+    print()
+    if FAILED:
+        print(f"RESULT: {len(FAILED)} failed: {', '.join(FAILED)}")
+        return 1
+    print("RESULT: all tests passed")
+    return 0
+
+
 def main():
     quick = "quick" in sys.argv
+    if "windows" in sys.argv:
+        window_section()
+        window_vanish_section()
+        return _summary()
     print("== discovery ==")
     screens = K.list_screens()
     check("list_screens returns outputs", len(screens) >= 1, str(screens))
@@ -121,6 +356,9 @@ def main():
         g = cap.geometry()
         check("workspace capture produced a frame", g[0] >= s0["width"] and g[1] >= s0["height"],
               f"{g[0]}x{g[1]}")
+
+    window_section()
+    window_vanish_section()
 
     print("\n== two independent instances ==")
     a = K.Capture(shm=K.default_shm_path("t1"))

@@ -3,7 +3,8 @@
 **`PIL.ImageGrab` runs at ~2 fps on Wayland** (it shells out to `spectacle`) and **`mss`
 captures XWayland**, which is black for native Wayland windows. `kwcapture` talks to the
 KWin compositor directly: **~40 fps at 2560×1440**, real pixels, ~26 ms from "give me a
-frame" to a JPEG ready for a vision model.
+frame" to a JPEG ready for a vision model. Whole screen, a region, or **one window by
+name or id** — `list_windows()` gives you both.
 
 ```
 method                        fps      median latency
@@ -12,6 +13,7 @@ PIL.ImageGrab (spectacle)      2.7    357.1 ms
 kwcapture raw BGRA view       38.4     25.8 ms   real pixels, zero copy
 kwcapture RGB full res        37.9     26.0 ms
 kwcapture JPEG 1280 wide      35.6     28.0 ms   includes downscale + encode
+kwcapture one 692x440 window 185.4      4.7 ms   per-window capture, not clipped
 ```
 
 ```python
@@ -25,6 +27,20 @@ cap.stats()                             # {'grab_ms': 20.1, 'total_ms': 27.8, ..
 cap.close()
 ```
 
+**Per-window capture** — the window handle is KWin's own id, so no geometry juggling and
+no cropping by whatever is on top of it:
+
+```python
+for w in K.list_windows():                # name + handle of every capturable window
+    print(w.id, w.name, w.app_id, w.geometry)
+
+win = K.Capture(window="Kate")            # by name, caption or app id …
+kon = K.Capture(window="{e0b1aab4-4e10-…}")   # … or by the handle it came with
+act = K.Capture(active_window=True)       # whatever has focus
+win.grab()                                # 692x440 KCalc window: ~5 ms, ~185 fps
+win.shot_jpeg(quality=90)                 # just that window
+```
+
 ## Install
 
 ```bash
@@ -35,7 +51,7 @@ pip install "kwcapture[fast]"             # + OpenCV: ~8x faster resize/encode
 pip install "kwcapture @ git+https://github.com/tjandrasg/kwcapture.git"
 
 # or the prebuilt linux x86-64 wheel from the release page (no compiler needed):
-pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.1.0/kwcapture-0.1.0-py3-none-linux_x86_64.whl
+pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.2.0/kwcapture-0.2.0-py3-none-linux_x86_64.whl
 ```
 
 Needs **KDE Plasma with KWin on Wayland** and a C compiler plus `libsystemd`/`wayland-client`
@@ -79,10 +95,23 @@ kwcapture doctor [--fix] [--build]     # is everything OK? (--fix also authorise
 kwcapture setup                        # build the helper + authorise it
 kwcapture install-desktop [--uninstall]# manage the KWin authorisation file
 kwcapture screens                      # DP-1 2560x1440 @164.69Hz pos 0,0 scale 1
+kwcapture windows                      # every capturable window: handle, name, app, size
+kwcapture windows -f kcalc --json      # filter by name/app id; machine-readable
 kwcapture grab -o shot.png --width 1280
 kwcapture grab -o frame.bgra --raw     # pure BGRA bytes
+kwcapture grab --window Kate -o kate.png
+kwcapture grab --window '{e0b1aab4-4e10-…}' --decoration -o win.png
+kwcapture grab --active-window -o focused.png   # the window that has focus
 kwcapture demo --frames 60 --save f.png
 kwcapture bench --frames 200
+```
+
+`kwcapture windows` looks like this:
+
+```
+WINDOW HANDLE (id)                      NAME                          APP_ID              SIZE    POSITION  FLAGS
+{e0b1aab4-4e10-47fd-ae46-77a4ee6bc4d8}  build-pgo : llama-server      org.kde.konsole  2560x1394      +0,+0  maximized
+{2c14f294-93ea-48bf-bbea-f501d59f6fe5}  KCalc                         org.kde.kcalc      692x468  +1563,+738
 ```
 
 ## Python API
@@ -94,8 +123,10 @@ kwcapture bench --frames 200
 | `screen="DP-1"` | which output (default: active screen) |
 | `area=(x, y, w, h)` | capture a region instead of a whole output |
 | `workspace=True` | capture the entire virtual desktop |
+| `window="Kate"` | capture **one window**: a handle from `list_windows()`, or its caption / app id |
+| `active_window=True` | capture the window that has focus |
 | `cursor=True` | include the hardware cursor |
-| `decoration=True` | include window decorations and shadows |
+| `decoration=True` | include window decorations (and their shadow); off = client area only |
 | `slots=4` | ring depth — how many frames until a returned view is overwritten |
 | `depth=2` | requests in flight to KWin (2 is optimal; more adds latency, not fps) |
 | `fps=30` | continuous capture mode; read with `latest()` for zero-latency access |
@@ -105,10 +136,13 @@ kwcapture bench --frames 200
 | `verbose=True` | report build/authorisation steps |
 
 Methods: `grab(rgb=False, copy=False, fresh=True)`, `latest()`, `shot(width=…, resample=…)`,
-`shot_png()`, `shot_jpeg()`, `stats()`, `geometry()`, `screen_name`, `bench(frames)`,
-`restart()`, `close()` (also a context manager). Module helpers: `list_screens()`,
-`to_rgb()`, `resize()`, `png_bytes()`, `jpeg_bytes()`, `find_binary()`,
-`install_desktop_file()`.
+`shot_png()`, `shot_jpeg()`, `stats()`, `geometry()`, `screen_name`, `target`,
+`window_id`/`window_name`, `bench(frames)`, `restart()`, `close()` (also a context
+manager). Module helpers: `list_screens()`, `list_windows()`, `find_window()`,
+`is_window_handle()`, `to_rgb()`, `resize()`, `png_bytes()`, `jpeg_bytes()`,
+`default_shm_path()`, `unique_shm_path()`, `find_binary()`, `install_desktop_file()`.
+`grab()` / `shot()` also take the target keys (`window=`, `screen=`, …) and keep one
+helper process alive per distinct target.
 
 Notes:
 
@@ -117,8 +151,64 @@ Notes:
 * `latest()` returns the newest published frame **without** asking KWin for one.
 * `hide_caller_windows=True` by default: KWin hides the capturing process' own windows,
   so your overlay/terminal does not end up in the shot (`--no-hide-caller` to disable).
-* Each `Capture` gets its own ring in `$XDG_RUNTIME_DIR`, so several can run at once
-  (e.g. one per monitor). The helper also dies with its client (`PR_SET_PDEATHSIG`).
+* Each `Capture` gets its **own** ring file in `$XDG_RUNTIME_DIR` (see
+  `unique_shm_path()`), so any number of them can run at once — one per monitor, one per
+  window. The helper also dies with its client (`PR_SET_PDEATHSIG`).
+
+## Per-window capture
+
+```python
+import kwcapture as K
+
+for w in K.list_windows():                 # every window KWin considers capturable
+    print(f"{w.id}  {w.name}  {w.app_id}  {w.width}x{w.height}+{w.x}+{w.y}")
+
+win = K.Capture(window="Kate")             # caption, app id, desktop file or handle
+try:
+    frame = win.grab()                     # (H, W, 4) BGRA, same as a screen grab
+except K.WindowGone:                       # someone closed the window
+    win.close()
+    win = K.Capture(window="Kate")         # a new window with the same name
+
+focused = K.Capture(active_window=True)    # whatever has focus right now
+```
+
+`Window` fields: `id` (the KWin handle — pass it back as `window=`), `name`, `app_id`,
+`resource_name`, `desktop_file`, `role`, `icon`, `x`, `y`, `width`, `height`, `minimized`,
+`fullscreen`, `maximized`, `keep_above/keep_below`, `no_border`, `skip_taskbar/pager/switcher`,
+`window_type`, `layer`, `desktops`, plus `geometry`/`position`/`visible`.
+
+How the handles are found (and what they can and cannot do):
+
+* KWin's `org.kde.KWin.ScreenShot2` **`CaptureWindow(handle)`** takes a window's internal
+  id (a `QUuid`). There is no list method on that interface, so the helper asks KWin's
+  krunner interface (`/WindowsRunner`, empty query → every window) for the ids and
+  `org.kde.KWin` **`getWindowInfo(handle)`** for the details. Neither needs the
+  desktop-file authorisation; only the pixel grab does.
+* **Normal application windows only.** Panels/docks, the desktop/wallpaper and overlay
+  windows are not in `list_windows()` (that is KWin's own filter). If you get hold of one
+  of their handles anyway, `Capture(window=…)` captures it.
+* `decoration=False` (default) grabs the client area; `decoration=True` grabs the window
+  with its title bar and shadow — the shadow area is **transparent** (alpha 0), so
+  composite it or drop the alpha channel before saving a JPEG.
+* A window that is **covered by other windows is not clipped**: KWin renders that
+  window's own buffer, so you get the whole client area, and nothing of the windows on
+  top. A **minimised** window still captures (KWin keeps its buffer).
+* A handle is only valid while the window lives. If the window is closed, `grab()`/`latest()`
+  raise **`WindowGone`** — the helper stays alive, the other captures are unaffected, and
+  `list_windows()` no longer reports it.
+* Names are resolved by ranking: exact caption > exact caption/app id (any case) > unique
+  substring. Several equally-good matches raise **`AmbiguousWindow`** (with `.candidates`),
+  none raises **`WindowNotFound`** (the message lists what *is* available).
+
+| fps, 2560×1440 Plasma 6.6 | median |
+|---|---|
+| whole screen | 26 ms (≈40 fps) |
+| 692×440 window | **4.7 ms (≈185 fps)** |
+
+A window grab is cheap because the compositor only has to render and ship that window —
+fine for watching a handful of windows in a loop.
+
 
 ## Performance notes (2560×1440@165 Hz, Plasma 6.6, i9-13900K)
 
@@ -136,13 +226,14 @@ Notes:
 
 ```
 kwcapture/
-  __init__.py            Python API (Capture, grab/shot, shm ctypes mirror)
-  __main__.py            CLI: doctor / setup / install-desktop / screens / grab / demo / bench
+  __init__.py            Python API (Capture, Window, grab/shot, shm ctypes mirror)
+  __main__.py            CLI: doctor / setup / install-desktop / screens / windows /
+                         grab / demo / bench
   _native.py             find or compile the helper ($KWCAPTURE_BIN, wheel, cache, source)
   _desktop.py            the KWin authorisation desktop entry
-  native/kwcapture.c     the capture daemon (sd-bus + shm ring + wl_output listing)
+  native/kwcapture.c     the capture daemon (sd-bus + shm ring + output and window listing)
   native/include/kwcapture_shm.h   shared-memory protocol (asserted on both sides)
-tests/test_kwcapture.py  27 functional tests (also `pytest tests/`)
+tests/test_kwcapture.py  60 functional checks (also `pytest tests/`)
 bench.py                 comparison against mss and PIL.ImageGrab
 probe/                   the reverse-engineering experiments (Wayland global dumper, etc.)
 AGENTS.md                investigation log — how the KWin API and its auth really work
@@ -165,6 +256,10 @@ make wheel          # dist/*.whl
 | `no frame within 2.0s` | helper died: `Capture.restart()`, or `Capture(daemon_stderr=sys.stderr)` to see its log; `kwcapture doctor` |
 | `failed to compile the kwcapture helper` | install `build-essential libsystemd-dev libwayland-dev`, or build it yourself and set `KWCAPTURE_BIN` |
 | `frame needs N bytes, slot has M` | resolution went above ~5K: restart the helper |
+| `no window matches 'x'` | `kwcapture windows` for the handles; the error lists what is there. Matching is exact caption/app id, or a unique substring |
+| `AmbiguousWindow` | several windows share that name/caption — pass the handle from `kwcapture windows` |
+| `WindowGone: the window has nothing to capture` | the window was closed (or is being unmapped). The helper is fine: `list_windows()` again and make a new `Capture` |
+| `unsupported kwcapture ABI 1` | an old helper binary (`$KWCAPTURE_BIN`, or a stale `kwcapture/bin`): rebuild with `kwcapture setup` |
 | works in a terminal but not from cron/SSH | you need `WAYLAND_DISPLAY` **and** `DBUS_SESSION_BUS_ADDRESS` of the graphical session |
 | colours wrong somewhere | `grab()` is BGRA; `shot()`/`to_rgb()` are RGB |
 

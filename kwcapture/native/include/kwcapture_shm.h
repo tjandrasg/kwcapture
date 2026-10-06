@@ -16,8 +16,30 @@
 
 #define KWC_MAGIC 0x4B574350u /* "KWCP" */
 #define KWC_MAGIC_GONE 0x4B574347u /* "KWCG" - daemon shut down */
-#define KWC_VERSION 1u
+#define KWC_VERSION 2u /* v2: per-frame status + window target */
 #define KWC_MAX_SLOTS 8u
+
+/* What the daemon was asked to capture. */
+#define KWC_TARGET_ACTIVE_SCREEN 0u
+#define KWC_TARGET_SCREEN 1u
+#define KWC_TARGET_AREA 2u
+#define KWC_TARGET_WORKSPACE 3u
+#define KWC_TARGET_WINDOW 4u
+#define KWC_TARGET_ACTIVE_WINDOW 5u
+
+/* Per-frame status.  A grab can fail *after* the client asked for it - the classic case
+ * is a window capture whose window got closed.  The frame is still published (with no
+ * pixels and status != 0) so the ring keeps flowing instead of wedging; the client
+ * translates the code into an exception.  Values >= 4096 are KWin screenshot errors,
+ * anything else is an errno. */
+#define KWC_OK 0u
+#define KWC_ERR_INVALID_WINDOW 4096u   /* window is gone (closed) */
+#define KWC_ERR_NO_ACTIVE_WINDOW 4097u /* nothing focused */
+#define KWC_ERR_CANCELLED 4098u
+#define KWC_ERR_NOT_AUTHORIZED 4099u
+#define KWC_ERR_INVALID_SCREEN 4100u
+#define KWC_ERR_INVALID_AREA 4101u
+#define KWC_ERR_EMPTY_FRAME 4102u /* KWin answered OK with a 0x0 image: nothing to show */
 
 typedef struct {
     uint32_t width, height, stride, format; /* format: QImage::Format (6 = ARGB32 premul = BGRA) */
@@ -26,8 +48,9 @@ typedef struct {
     double total_ms; /* call -> last pixel received */
     uint64_t ts_ns;  /* CLOCK_MONOTONIC at publish */
     char screen[64];
-    uint32_t pad[6];
-} kwc_slot_t; /* 128 bytes */
+    uint32_t status; /* KWC_OK, KWC_ERR_* or an errno; geometry is zeroed if not OK */
+    uint32_t pad[7];
+} kwc_slot_t;
 
 typedef struct {
     uint32_t magic;
@@ -59,6 +82,11 @@ typedef struct {
     uint32_t pad3;
     double fps;
 
+    /* --- what we are capturing (window support, v2) ---------------------- */
+    uint32_t target; /* KWC_TARGET_* */
+    uint32_t pad4;
+    char window[64]; /* window handle (QUuid string) for window captures, else empty */
+
     kwc_slot_t slot[KWC_MAX_SLOTS];
 
     uint8_t reserved[512];
@@ -66,7 +94,7 @@ typedef struct {
 
 /* If you change the layout above, update this number AND the mirror in
  * kwcapture.py (_KWC_STRUCT_SIZE).  Both sides assert on it. */
-#define KWC_HDR_STRUCT_SIZE 1776u
+#define KWC_HDR_STRUCT_SIZE 1912u
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert(sizeof(kwc_hdr_t) == KWC_HDR_STRUCT_SIZE,
                "kwc_hdr_t layout changed: update KWC_HDR_STRUCT_SIZE and kwcapture.py");
