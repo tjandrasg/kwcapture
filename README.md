@@ -28,12 +28,18 @@ cap.close()
 ## Install
 
 ```bash
-pip install kwcapture                     # from PyPI
-# or straight from GitHub:
+# prebuilt wheel for linux x86-64 (no compiler needed):
+pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.1.0/kwcapture-0.1.0-py3-none-linux_x86_64.whl
+
+# from GitHub (builds the helper for your machine):
 pip install "kwcapture @ git+https://github.com/tjandrasg/kwcapture.git"
-# or from a checkout:
+
+# from a checkout:
 pip install .
 ```
+
+Not on PyPI yet (`kwcapture` is still a free name there) — `pip install kwcapture` will
+work once it is published; until then use one of the three commands above.
 
 Needs **KDE Plasma with KWin on Wayland** and a C compiler plus `libsystemd`/`wayland-client`
 headers (the wheel builds a small native helper; on Debian/Ubuntu:

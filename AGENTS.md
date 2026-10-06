@@ -1,5 +1,12 @@
 # AGENTS.md — fast screen capture on Wayland (KDE Plasma 6 / KWin)
 
+Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`, release `v0.1.0` with a
+prebuilt `linux_x86_64` wheel attached). Not on PyPI yet — the name is unclaimed.
+`origin` is SSH (`git@github.com:tjandrasg/kwcapture.git`). There is no `gh` CLI here, so
+repo/release admin (creating releases, uploading assets, topics) is done with the GitHub
+REST API via `curl` using whatever credential is configured for github.com — never commit
+or print a token.
+
 Working dir: `~/way_scr_cap`. **Read this first if you are a fresh session.**
 Status: **done and working** — ~40 fps real Wayland capture, Python API + CLI + tests.
 See `README.md` for user-facing docs; this file is the investigation log + gotchas.
