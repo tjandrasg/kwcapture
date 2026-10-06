@@ -15,23 +15,49 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 60 functional checks. See `README.md` for user-facing docs; this file
 is the investigation log + gotchas.
 
-## SESSION STATUS — 2026-10-06 21:00 (read this if you just woke up)
+## SESSION STATUS — 2026-10-06 21:50 (read this if you just woke up)
 
-**v0.2.0 and v0.3.0 are both pushed and on PyPI (sdist). What is left is the GitHub
-release assets and the manylinux wheels — see *TODO* below and check whether the tag's
-`release.yml` run went green before doing anything else.**
+**v0.3.0 is FULLY SHIPPED: code, tag, GitHub release (3 assets + notes), PyPI sdist *and*
+the first prebuilt manylinux wheel we have ever published.** Nothing is pending. The tree
+is clean and `main` is pushed. Start from *Ideas not done yet* if you want new work.
 
-* **On PyPI**: `kwcapture` 0.1.0, 0.2.0 and **0.3.0** — all **sdist only** so far.
-* **Tags**: `v0.2.0` = `61d06df`, `v0.3.0` = `2c0118a` (both pushed to origin/main).
-* **v0.2.0 has no GitHub release** — its `release.yml` run failed on the stale
-  cibuildwheel pin (below). Its local wheel `dist/kwcapture-0.2.0-py3-none-linux_x86_64.whl`
-  still exists if you want to attach it by hand; otherwise skip it and let 0.3.0 be the
-  first release with real assets.
+* **PyPI**: `0.3.0` = sdist + `py3-none-manylinux2014/2_17/2_28_x86_64` wheel (so
+  `pip install kwcapture` needs no compiler now); `0.1.0`/`0.2.0` are sdist-only.
+* **GitHub**: release `v0.3.0` (id 404767000) with the manylinux wheel + sdist (from CI)
+  and `kwcapture-0.3.0-py3-none-linux_x86_64.whl` (built here, attached via the REST API),
+  plus release notes. **`v0.2.0` has no GitHub release** — its run died on the broken
+  workflow; the fix landed after the tag, so `v0.3.0` was re-pointed twice while iterating
+  (`git tag -f` + `git push -f origin v0.3.0`). The v0.2.0 sdist on PyPI came from
+  `61d06df`; the v0.3.0 GitHub sdist from the final tag commit `fbeff87`.
+* **THE THREE REASONS `release.yml` HAD NEVER SHIPPED A WHEEL — all fixed, all verified
+  green in run 37472650403:**
+  1. `pypa/cibuildwheel@v2.21.3` pinned `quay.io/pypa/manylinux_2_28_x86_64:2024.10.07-1`,
+     **a tag that no longer exists** → `Error response from daemon: No such image`.
+     Fixed: `@v4.3.0` (cibuildwheel is at 4.3.0; quay's newest tags are 2026.x).
+  2. `CIBW_REPAIR_WHEEL_COMMAND` used **`{dest}`**; cibuildwheel 4 only substitutes
+     **`{dest_dir}`**, so auditwheel created a directory literally called `{dest}`, wrote
+     the wheel into it, and the run failed with "the repair step completed successfully but
+     did not produce a wheel". (auditwheel also reports our wheel is eligible for
+     `manylinux_2_17`.)
+  3. The wheel is **`py3-none-<platform>`** — the helper is a *standalone executable*, not a
+     Python extension module — so all six `CIBW_BUILD` interpreters produced **identically
+     named** wheels that overwrote each other, and the smoke test's
+     `dist/*cp312*manylinux*.whl` glob matched nothing. Fixed: build once (`cp312`), glob
+     `dist/*-py3-none-manylinux*.whl`. **Do not "fix" this by adding interpreters back.**
+* **CI workflow**: `workflow_dispatch` on `main` is now safe for testing the wheel build
+  (the GitHub-release step is gated on `startsWith(github.ref, 'refs/tags/v')`); its output
+  is only the `dist` artifact. A single-build run takes **~4 min**; the six-interpreter one
+  took ~18 min.
+* **PyPI publishing is still manual** (`twine -r pypi`, credentials in `~/.pypirc`): the
+  workflow's `publish` job needs `workflow_dispatch` + trusted publishing/`PYPI_API_TOKEN`,
+  which is not configured. Setting that up would remove the last manual step.
+* Verified `0.2.0`/`0.3.0` local wheels in throwaway venvs from `/tmp`: 159/179 ms startup,
+  39.5 fps full-screen, per-window grab, `Window.active` correct, CLI works. 68/68 checks
+  pass on the desktop.
 * **v0.3.0 = focus tracking**, verified: full suite **68/68 PASS, 0 failures, 0 skips**
   (~35 s — the "~3 min" note below is stale). New: helper mode `--active-window-id`,
   `Window.active`, `active_window()`, `active_window_id()`, `list_windows(mark_active=…)`,
-  `kwcapture windows -a/--no-active`. Version already 0.3.0 in `pyproject.toml` +
-  `__init__.py`; CHANGELOG + README updated (README's wheel URL now points at v0.3.0).
+  `kwcapture windows -a/--no-active`.
 * **CI discovery that explains why no release ever had wheels**: `release.yml` pinned
   `pypa/cibuildwheel@v2.21.3`, which pulls
   `quay.io/pypa/manylinux_2_28_x86_64:2024.10.07-1` — **that tag is gone from quay.io**
@@ -46,24 +72,14 @@ release assets and the manylinux wheels — see *TODO* below and check whether t
   built locally and sanity-tested in a throwaway venv from `/tmp` (179 ms startup, 5 windows
   listed, `Window.active` correct, `active_window()`/`active_window_id()` correct, focused
   window grabbed 698x548); v0.3.0 sdist twined to PyPI; `v0.3.0` tagged and pushed.
-* **TODO for v0.3.0** (only these):
-  1. Check the tag's run: `curl -s -H "Authorization: Bearer $TOK"
-     https://api.github.com/repos/tjandrasg/kwcapture/actions/runs?per_page=3` (TOK from
-     `~/.git-credentials`). A full cibuildwheel run for 6 interpreters takes **15-25 min**;
-     **the job log 404s with `BlobNotFound` until the job finishes**, so poll the *status*,
-     not the log. Remember `exec_shell_command` has a **hard 60 s cap** — sleep ≤ 50 s.
-  2. If green: the workflow has already created the GitHub release with the sdist + 6
-     manylinux wheels. Then (a) attach the local `dist/*-py3-none-linux_x86_64.whl` via the
-     uploads.github.com API (*Release checklist*), (b) **upload the CI manylinux wheels to
-     PyPI too** — unlike `linux_x86_64` they are accepted, and then `pip install kwcapture`
-     needs no compiler at all: download the release assets and
-     `.venv/bin/python -m twine upload -r pypi dist/kwcapture-0.3.0-*manylinux*.whl`.
-     Verify with `curl -s https://pypi.org/pypi/kwcapture/json`.
-     **If you do this, update README** (the "needs a C compiler" paragraph) — it currently
-     says a compiler is needed, which stops being true for manylinux wheel users.
-  3. Add release notes to the release body (`PATCH .../releases/<id>`).
-  4. If the run failed again: fetch the job log (plain text, see the curl note below), fix,
-     delete/re-point the tag (`git tag -f v0.3.0 && git push -f origin v0.3.0`).
+* **How to poll a CI run** (learned the hard way): the *job* log is available as **plain
+  text** at `.../actions/jobs/<job_id>/logs` but only **after the job finishes** — while it
+  runs it returns `BlobNotFound` XML. So poll `.../actions/runs/<id>/jobs` for step
+  statuses. `/actions/runs/<id>/logs` is a **zip**. `exec_shell_command` caps at 60 s, so
+  `sleep 50` per poll.
+* **Attaching a release asset**: `POST https://uploads.github.com/repos/tjandrasg/kwcapture/releases/<id>/assets?name=<file>`
+  with `Content-Type: application/octet-stream` + `--data-binary @file` → 201; notes via
+  `PATCH /repos/.../releases/<id>` with `{"body": …}`.
 * Housekeeping: repo-root `bin/kwcapture` is **stale v0.1.0 debris** (gitignored, *not* on
   `_native`'s search path — the real helper is `kwcapture/bin/kwcapture`).
 
@@ -320,8 +336,10 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   `CIBW_BEFORE_ALL_LINUX` as `dnf … || yum …`; EL8's pkg-config package is
   `pkgconf-pkg-config`, EL7's is `pkgconfig`.
 * **PyPI rejects `linux_x86_64` wheels** (`400 … unsupported platform tag`) — only
-  manylinux/musllinux. Hence PyPI currently carries the sdist; the `linux_x86_64` wheel is
-  only on the GitHub release, and manylinux wheels must come from cibuildwheel.
+  manylinux/musllinux. So the `linux_x86_64` wheel built here goes on the GitHub release
+  only, and the PyPI wheel must come from cibuildwheel. **Since v0.3.0 the CI-built
+  manylinux wheel is uploaded to PyPI too** (download it off the release with `curl -sL` and
+  `twine upload -r pypi` it — that works and avoids needing PyPI credentials on the runner).
   auditwheel must be told `--exclude libsystemd.so.0 --exclude libwayland-client.so.0`
   (we intentionally do not vendor the compositor libs).
 * Force-pushing a rewritten history needs `git push --force` — `--force-with-lease` said

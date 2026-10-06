@@ -53,14 +53,17 @@ pip install "kwcapture[fast]"             # + OpenCV: ~8x faster resize/encode
 # straight from GitHub (builds the helper for your machine):
 pip install "kwcapture @ git+https://github.com/tjandrasg/kwcapture.git"
 
-# or the prebuilt linux x86-64 wheel from the release page (no compiler needed):
-pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.3.0/kwcapture-0.3.0-py3-none-linux_x86_64.whl
+# or the prebuilt wheel straight from the release page:
+pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.3.0/kwcapture-0.3.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
 ```
 
-Needs **KDE Plasma with KWin on Wayland** and a C compiler plus `libsystemd`/`wayland-client`
-headers (the wheel builds a small native helper; on Debian/Ubuntu:
+Needs **KDE Plasma with KWin on Wayland**. The PyPI wheel ships the small native helper
+prebuilt for x86-64 Linux (glibc ≥ 2.17), so **no compiler is required**; if your distro or
+architecture has no wheel, pip compiles it on install, which needs a C compiler and
+`libsystemd`/`wayland-client` headers (on Debian/Ubuntu:
 `sudo apt install build-essential libsystemd-dev libwayland-dev`). Only `numpy` is a
-runtime dependency.
+runtime dependency; the helper links `libsystemd` and `libwayland-client`, which any KDE
+desktop already has.
 
 Then, in the graphical session:
 
