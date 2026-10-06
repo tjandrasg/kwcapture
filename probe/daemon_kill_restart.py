@@ -1,4 +1,21 @@
-import os, signal, time
+"""SIGKILL the daemon under a live Capture, then restart() and grab again.
+
+Recovered from the previous session's /tmp/repro.py -- /tmp often does not survive, so it
+lives here now. Run it under -X dev:
+
+    .venv/bin/python -X dev probe/daemon_kill_restart.py
+
+Expect no ResourceWarning and "done" as the last line. It is what exposed BUG-3
+(the leaked <shm>.log handle on every restart) -- see OPEN BUGS in AGENTS.md.
+"""
+
+import os
+import signal
+import sys
+
+# running this file puts probe/ on sys.path, not the repo root
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import kwcapture as K
 cap = K.Capture()
 print("started", cap.geometry(), flush=True)
