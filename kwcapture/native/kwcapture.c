@@ -744,11 +744,14 @@ static int mode_serve(const opts_t *o, const char *shm_path, uint32_t slots, int
  * and refresh rate come from the current wl_output.mode event.
  */
 #define MAXOUT 16
-static struct {
+typedef struct out_info {
+    uint32_t id; /* the wl_output global name: the compositor's own numeric output id */
     char name[64];
+    char make[64], model[64];
     int32_t x, y, px_w, px_h, refresh_hz1000, scale;
     int have_mode, have_geom;
-} g_outs[MAXOUT];
+} out_t;
+static out_t g_outs[MAXOUT];
 static int g_nouts = 0;
 static struct wl_display *g_dpy = NULL;
 
@@ -760,12 +763,12 @@ static void out_geometry(void *data, struct wl_output *o, int32_t x, int32_t y, 
     (void)pw_mm; /* physical size in millimetres, not pixels */
     (void)ph_mm;
     (void)subpixel;
-    (void)make;
-    (void)model;
     (void)transform;
     int idx = (int)(intptr_t)data;
     if (idx < 0 || idx >= MAXOUT)
         return;
+    snprintf(g_outs[idx].make, sizeof(g_outs[idx].make), "%s", make ? make : "");
+    snprintf(g_outs[idx].model, sizeof(g_outs[idx].model), "%s", model ? model : "");
     g_outs[idx].x = x;
     g_outs[idx].y = y;
     g_outs[idx].have_geom = 1;
@@ -826,6 +829,8 @@ static void reg_global(void *data, struct wl_registry *reg, uint32_t id, const c
     if (strcmp(iface, "wl_output") || g_nouts >= MAXOUT)
         return;
     int idx = g_nouts++;
+    g_outs[idx].id = id; /* KWin has no per-output handle on the screenshot interface; this
+                          * global name is the id the compositor itself uses */
     void *o = wl_registry_bind(reg, id, &wl_output_interface, ver > 4 ? 4 : ver);
     wl_output_add_listener(o, &g_out_listener, (void *)(intptr_t)idx);
 }
@@ -854,6 +859,151 @@ static int mode_list(void)
                g_outs[i].scale > 0 ? g_outs[i].scale : 1);
     }
     wl_display_disconnect(g_dpy);
+    return 0;
+}
+
+/* Enumerate outputs in a stable order: top-left first, then left-to-right, then by name.
+ * This is the order Monitor.index enumerates, so it must not drift between calls. */
+static int out_cmp(const void *pa, const void *pb)
+{
+    int i = *(const int *)pa, j = *(const int *)pb;
+    if (g_outs[i].y != g_outs[j].y)
+        return g_outs[i].y < g_outs[j].y ? -1 : 1;
+    if (g_outs[i].x != g_outs[j].x)
+        return g_outs[i].x < g_outs[j].x ? -1 : 1;
+    return strcmp(g_outs[i].name, g_outs[j].name);
+}
+
+/* Connect, pick up every announced output, and return them in `order` (caller supplies
+ * an int[MAXOUT]).  Note only *enabled* outputs are ever announced: a connected but
+ * disabled monitor has nothing to capture, and is not listed. */
+static int collect_outputs(int *order)
+{
+    g_dpy = wl_display_connect(NULL);
+    if (!g_dpy)
+        die("cannot connect to the Wayland compositor", EIO);
+    struct wl_registry *reg = wl_display_get_registry(g_dpy);
+    wl_registry_add_listener(reg, &g_reg_listener, NULL);
+    wl_display_roundtrip(g_dpy);
+    wl_display_roundtrip(g_dpy);
+    int n = 0;
+    for (int i = 0; i < g_nouts; i++)
+        if (g_outs[i].have_geom)
+            order[n++] = i;
+    qsort(order, n, sizeof(order[0]), out_cmp);
+    return n;
+}
+
+static void json_str(FILE *f, const char *s)
+{
+    fputc('"', f);
+    for (const char *p = s ? s : ""; *p; p++) {
+        if (*p == '"' || *p == '\\')
+            fprintf(f, "\\%c", *p);
+        else if ((unsigned char)*p < 0x20)
+            fprintf(f, "\\u%04x", (unsigned char)*p);
+        else
+            fputc(*p, f);
+    }
+    fputc('"', f);
+}
+
+/* list_monitors(): what list_windows() gives you for windows, for outputs. */
+static int mode_monitors(int as_json)
+{
+    int order[MAXOUT];
+    int n = collect_outputs(order);
+    if (as_json) {
+        printf("[");
+        for (int k = 0; k < n; k++) {
+            const out_t *m = &g_outs[order[k]];
+            if (k)
+                putchar(',');
+            printf("{\"index\":%d,\"id\":%u,\"name\":", k, m->id);
+            json_str(stdout, m->name);
+            printf(",\"make\":");
+            json_str(stdout, m->make);
+            printf(",\"model\":");
+            json_str(stdout, m->model);
+            printf(",\"x\":%d,\"y\":%d,\"width\":%d,\"height\":%d", m->x, m->y, m->px_w,
+                   m->px_h);
+            printf(",\"refresh_hz\":%.3f,\"scale\":%d}", m->refresh_hz1000 / 1000.0,
+                   m->scale > 0 ? m->scale : 1);
+        }
+        printf("]\n");
+        return 0;
+    }
+    printf("%-5s  %-6s  %-12s  %-22s  %-11s  %-5s  %s\n", "INDEX", "ID", "NAME",
+           "MAKE / MODEL", "SIZE (px)", "SCALE", "POSITION / REFRESH");
+    for (int k = 0; k < n; k++) {
+        const out_t *m = &g_outs[order[k]];
+        char mm[160];
+        snprintf(mm, sizeof(mm), "%s %s", m->make, m->model);
+        printf("%-5d  %-6u  %-12s  %-22.22s  %4dx%-6d  x%-4d  %d,%d @ %.2f Hz\n", k, m->id,
+               m->name, mm, m->px_w, m->px_h, m->scale > 0 ? m->scale : 1, m->x, m->y,
+               m->refresh_hz1000 / 1000.0);
+    }
+    if (!n)
+        printf("(no enabled outputs: a connected but disabled monitor cannot be captured; "
+               "see `kscreen-doctor -o`)\n");
+    return 0;
+}
+
+/* Fractional scale, measured instead of guessed.
+ *
+ * wl_output.scale is an *integer* hint (fractional clients are meant to use
+ * wp_fractional_scale_manager_v1, which only ever tells a *surface*), so it cannot report
+ * 1.25 or 1.5.  But two grabs of the same logical area -- one with native-resolution
+ * (device pixels), one without (the composited, scaled size) -- give both numbers for
+ * exactly the same rectangle, and their ratio is that output's effective scale.  Costs a
+ * 128x128 region each way, not a full screen, and KWin's ~11 ms fixed cost dominates.
+ *
+ * Prints: native_w native_h logical_w logical_h scale_x scale_y
+ */
+static int mode_probe_scale(sd_bus *bus, const char *out_name)
+{
+    int order[MAXOUT];
+    int n = collect_outputs(order);
+    const out_t *want = NULL;
+    for (int k = 0; k < n; k++)
+        if (!strcmp(g_outs[order[k]].name, out_name))
+            want = &g_outs[order[k]];
+    if (!want) {
+        fprintf(stderr, "kwcapture: no such output '%s'\n", out_name);
+        return 1;
+    }
+    /* an interior spot: probing right at the output edge can be clipped by a neighbour */
+    const int32_t side = 128;
+    opts_t a = {0};
+    a.use_area = 1;
+    a.native_resolution = 1;
+    a.hide_caller_windows = 1;
+    a.area[0] = want->x + side / 2;
+    a.area[1] = want->y + side / 2;
+    a.area[2] = side;
+    a.area[3] = side;
+
+    uint8_t *buf = NULL;
+    size_t cap = 0;
+    frame_out_t nat = {0}, log = {0};
+    double gms, rms;
+    if (grab_sync(bus, &a, &buf, &cap, &nat, &gms, &rms) < 0) {
+        fprintf(stderr, "kwcapture: scale probe (native) failed on '%s'\n", out_name);
+        return 1;
+    }
+    a.native_resolution = 0;
+    if (grab_sync(bus, &a, &buf, &cap, &log, &gms, &rms) < 0) {
+        fprintf(stderr, "kwcapture: scale probe (scaled) failed on '%s'\n", out_name);
+        free(buf);
+        return 1;
+    }
+    free(buf);
+    if (log.width == 0 || log.height == 0) {
+        fprintf(stderr, "kwcapture: scale probe got a zero logical size on '%s'\n", out_name);
+        return 1;
+    }
+    printf("%u %u %u %u %.4f %.4f\n", nat.width, nat.height, log.width, log.height,
+           (double)nat.width / (double)log.width, (double)nat.height / (double)log.height);
     return 0;
 }
 
@@ -1355,6 +1505,7 @@ static void usage(const char *argv0)
             "modes:\n"
             "  (default)          grab one frame\n"
             "  --list             list outputs: NAME WxH refresh x y scale\n"
+            "  --list-monitors    list enabled outputs (index, id, name, position, scale)\n"
             "  --list-windows     list capturable windows (handle, name, app, geometry)\n"
             "  --active-window-id print the handle of the focused window (no pixels)\n"
             "                     exit 2 = nothing has focus\n"
@@ -1363,6 +1514,8 @@ static void usage(const char *argv0)
             "\n"
             "options:\n"
             "  --screen NAME      output to capture (e.g. DP-1); default: active screen\n"
+            "  --probe-scale NAME  measure an output's effective scale: prints\n"
+            "                     native_w native_h logical_w logical_h scale_x scale_y\n"
             "  --area X,Y,W,H     capture a region (logical coordinates)\n"
             "  --workspace        capture the whole virtual desktop\n"
             "  --window HANDLE    capture one window: a handle from --list-windows, or an\n"
@@ -1396,7 +1549,8 @@ int main(int argc, char **argv)
     const char *shm_path = NULL;
     const char *window_spec = NULL;
     int bench = 0, quiet = 0, serve = 0, depth = 2;
-    int list_windows = 0, as_json = 0;
+    int list_windows = 0, list_monitors = 0, as_json = 0;
+    const char *probe_scale = NULL;
     uint32_t slots = 4;
     double fps = 0, idle_exit = 120;
     /* Ring slot floor: how much room to leave for a frame that is bigger than the first
@@ -1416,6 +1570,10 @@ int main(int argc, char **argv)
             return rc;
         } else if (!strcmp(a, "--list-windows") || !strcmp(a, "windows"))
             list_windows = 1;
+        else if (!strcmp(a, "--list-monitors") || !strcmp(a, "monitors"))
+            list_monitors = 1;
+        else if (!strcmp(a, "--probe-scale") && i + 1 < argc)
+            probe_scale = argv[++i];
         else if (!strcmp(a, "--json"))
             as_json = 1;
         else if (!strcmp(a, "serve"))
@@ -1476,10 +1634,18 @@ int main(int argc, char **argv)
     if ((window_spec || o.active_window) && (o.use_area || o.use_workspace || o.screen))
         die("a window capture cannot also be a screen/area/workspace capture", EINVAL);
 
+    if (list_monitors)
+        return mode_monitors(as_json); /* straight from the registry: no session bus */
+
     sd_bus *bus = NULL;
-    if (list_windows || window_spec) {
+    if (list_windows || window_spec || probe_scale) {
         if (sd_bus_open_user(&bus) < 0)
             die("cannot reach the session bus", EIO);
+    }
+    if (probe_scale) {
+        int rc = mode_probe_scale(bus, probe_scale);
+        sd_bus_unref(bus);
+        return rc;
     }
     if (list_windows) {
         int rc = mode_list_windows(bus, as_json);

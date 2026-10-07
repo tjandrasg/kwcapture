@@ -2,8 +2,39 @@
 
 ## Unreleased
 
-Captures now survive the things that break a long-running one: a monitor changing mode, a
-window being resized or maximised, and the helper process dying.
+Monitors are now first-class (list them, capture one by name or id), fractional scaling is
+measured rather than guessed, and captures survive the things that break a long-running
+one: a monitor changing mode, a window being resized or maximised, and the helper process
+dying.
+
+- **`list_monitors()`** returns a `Monitor` per output — `index`, `id`, `name`, `make`,
+  `model`, `position`, `geometry`, `refresh_hz`, `scale` — in a stable top-left-first order,
+  mirroring `list_windows()`. **`Capture(monitor=...)`** captures one by connector name
+  (`"DP-1"`, substrings ok), by the compositor's own numeric id, by its `list_monitors()`
+  index, or by a `Monitor`. `find_monitor()` raises `MonitorNotFound` (listing what exists)
+  or `AmbiguousMonitor` (with `.candidates`) instead of guessing, and resolution happens
+  eagerly — a typo is an error now, not a compositor failure later. CLI: `kwcapture
+  monitors [--json|--measure-scale]` and `grab --monitor NAME|ID`.
+- **`area=` is relative to the monitor** when `monitor=` is given, so the same rectangle
+  means the same corner on a mixed-DPI desk. Without `monitor=`, `area=` stays in global
+  scene coordinates as before.
+- **Fractional scaling.** Frames are captured at device resolution (unchanged), but
+  `wl_output` can only advertise an *integer* scale, so a 125 % display says `1` there.
+  **`measure_output_scale()`** / **`Monitor.effective_scale`** measure the real scale from
+  KWin (the same small area grabbed once in device pixels and once composited, ratio =
+  scale), with `Monitor.fractional`, `Monitor.logical_geometry` and
+  `Monitor.to_physical()` / `to_logical()` for conversion, plus `Capture.scale` (what KWin
+  applied to this frame) and `Capture.pixel_scale` (measured, cached).
+- **`Capture(area=..., area_in="physical")`** takes the region in device pixels instead of
+  logical scene coordinates — at 150 % an `area=(0,0,100,100)` used to hand back a
+  `150x150` image, since `area` is scene coordinates; now you can ask for 100 device pixels
+  and get them.
+- **`active_monitor()`** reports which output a plain `Capture()` would grab, by way of the
+  focused window's position.
+- **Scope note: KDE Plasma only.** The name is the promise — `org.kde.KWin.ScreenShot2` is
+  the only compositor interface this project targets. Non-KDE compositors
+  (`wlr-screencopy`, `ext-image-copy-capture-v1`) are explicitly out of scope; on them
+  kwcapture fails with a clear "cannot reach the compositor" error rather than pretending.
 
 - **`grab()` recovers by itself.** A daemon that was killed, crashed, or reaped for sitting
   idle is restarted and the frame retaken, so the caller does not have to notice. Turn it
@@ -31,9 +62,10 @@ window being resized or maximised, and the helper process dying.
   wedged KWin stays visible rather than being masked by respawn churn.
 - New observability on `Capture`: `auto_restarts` (cumulative), `last_restart_reason`,
   `slot_bytes`, `ring_bytes`.
-- Tests: **156 checks** (was 116) — 119 functional (was 87) including a real resize test
-  that launches an xterm, resizes it with `wmctrl`, and proves frames follow the window and
-  that an overflowing ring heals, plus 37 ring-reader checks (was 29) covering the `ENOSPC`
+- Tests: **192 checks** (was 116) — 155 functional (was 87) including a monitor section
+  that captures *every* output on the desktop by name and by id, and a resize test that
+  launches an xterm, resizes it with `wmctrl`, and proves frames follow the window and that
+  an overflowing ring heals; plus 37 ring-reader checks (was 29) covering the `ENOSPC`
   classification with no compositor.
 
 

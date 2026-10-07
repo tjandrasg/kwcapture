@@ -3,8 +3,14 @@
 **`PIL.ImageGrab` runs at ~2 fps on Wayland** (it shells out to `spectacle`) and **`mss`
 captures XWayland**, which is black for native Wayland windows. `kwcapture` talks to the
 KWin compositor directly: **~40 fps at 2560×1440**, real pixels, ~26 ms from "give me a
-frame" to a JPEG ready for a vision model. Whole screen, a region, or **one window by
-name or id** — `list_windows()` gives you both.
+frame" to a JPEG ready for a vision model. Whole screen, a region, **one window by
+name or id**, or **one monitor by name or id** — `list_windows()` and `list_monitors()`
+give you both.
+
+> **Scope: KDE Plasma only.** The `kw` in the name is the design. kwcapture speaks
+> `org.kde.KWin.ScreenShot2` and nothing else; compositors that only offer
+> `wlr-screencopy` / `ext-image-copy-capture-v1` are out of scope, and it will say so
+> rather than half-work on them.
 
 ```
 method                        fps      median latency
@@ -235,6 +241,101 @@ How the handles are found (and what they can and cannot do):
 
 A window grab is cheap because the compositor only has to render and ship that window —
 fine for watching a handful of windows in a loop.
+
+
+## Monitors: list them, capture one by name or id
+
+```bash
+kwcapture monitors                    # index, id, name, make/model, size, scale, position
+kwcapture monitors --json             # machine-readable
+kwcapture monitors --measure-scale    # also probe the real scale (125% / 150% displays)
+kwcapture grab --monitor HDMI-A-1 -o tv.png
+kwcapture grab --monitor 0 -o left.png
+```
+
+```python
+import kwcapture as K
+
+for m in K.list_monitors():
+    print(m.index, m.id, m.name, m.position, m.geometry, m.refresh_hz, m.scale)
+# 0 65 DP-1     (0, 0)    (2560, 1440) 164.69 1
+# 1 79 HDMI-A-1 (2560, 0) (3840, 2160)  60.0  1
+```
+
+Three ways to name the same screen — `list_monitors()` returns them as `Monitor` objects,
+and `Capture(monitor=...)` takes any of them (or a `Monitor`):
+
+| you pass | what it is |
+|---|---|
+| `"DP-1"` | the connector name — what KWin addresses screens by. Substrings work (`"hdmi"`) |
+| `65` | the **compositor's own id** for the output (its `wl_output` global name) |
+| `0` | the `list_monitors()` **index**, top-left monitor first |
+
+```python
+K.Capture(monitor="HDMI-A-1")     # by name
+K.Capture(monitor=79)             # by compositor id
+K.Capture(monitor=1)              # by index
+K.Capture(monitor=K.find_monitor("lg tv"))    # by make/model, via the finder
+```
+
+An id is stable for the session and unique; a name is stable across sessions and readable;
+an index shifts if you plug a monitor in on the left. `find_monitor()` raises
+`MonitorNotFound` listing what exists, or `AmbiguousMonitor` (with `.candidates`) when a
+substring matches several — it never picks one silently. Because the name is resolved
+*eagerly*, a typo raises immediately instead of failing deep inside the compositor.
+
+With `monitor=` set, **`area=` is relative to that monitor**, which is usually what you
+want on a mixed-DPI desk:
+
+```python
+K.Capture(monitor="HDMI-A-1", area=(0, 0, 800, 600))   # top-left 800x600 of the TV
+K.Capture(area=(0, 0, 800, 600))                       # unchanged: global scene coords
+```
+
+Only **enabled** outputs are listed — a connected-but-disabled monitor has no image to
+capture (`kscreen-doctor -o` shows those and switches them on).
+
+## Fractional scaling (125 %, 150 %, ...)
+
+Frames are always captured at **device resolution**, so a scaled desktop gives you every
+pixel rather than a blurred re-scale — that is the useful default, and it is what
+`native-resolution` means. What fractional scaling changes is that *sizes you see in the
+UI are no longer sizes in the image*: a 2560-wide desktop at 150 % hands you a 3840-wide
+array.
+
+`wl_output` can only advertise an **integer** scale, so a display set to 125 % reports `1`
+there. kwcapture measures the real one instead: it grabs one small area twice — once in
+device pixels, once at the composited size — and the ratio is the scale actually in use.
+
+```python
+m = K.list_monitors(measure_scale=True)[0]
+m.scale             # 1     <- what wl_output advertises (integer hint)
+m.effective_scale   # 1.25  <- what the display is actually running
+m.fractional        # True
+m.logical_geometry  # device size / scale
+m.to_physical(100, 60)    # logical -> device pixels
+m.to_logical(150, 90)     # device pixels -> logical
+
+cap = K.Capture(monitor=m)
+cap.scale        # the scale KWin applied to these frames (cheap, from the frame)
+cap.pixel_scale  # this output's measured scale (cached after the first probe)
+```
+
+If you want a region in **device pixels** rather than scene coordinates, say so — otherwise
+`area=` is in logical scene coordinates and at 150 % a `100x100` area comes back as a
+`150x150` image:
+
+```python
+K.Capture(monitor="DP-1", area=(0, 0, 640, 360), area_in="physical")
+```
+
+For cropping, the simplest exact route is to grab the whole monitor and slice the numpy
+array — no rounding, no coordinate maths:
+
+```python
+frame = K.Capture(monitor="DP-1").grab()
+crop = frame[100:460, 640:1280]      # device pixels, exactly
+```
 
 
 ## Resilience: resolution changes, window resizes and a dead daemon

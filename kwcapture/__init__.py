@@ -59,11 +59,16 @@ __all__ = [
     "grab",
     "shot",
     "list_screens",
+    "list_monitors",
+    "find_monitor",
+    "active_monitor",
+    "measure_output_scale",
     "list_windows",
     "find_window",
     "active_window",
     "active_window_id",
     "Window",
+    "Monitor",
     "to_rgb",
     "resize",
     "png_bytes",
@@ -82,6 +87,9 @@ __all__ = [
     "AmbiguousWindow",
     "WindowGone",
     "NoActiveWindow",
+    "MonitorNotFound",
+    "AmbiguousMonitor",
+    "RingTooSmall",
     "__version__",
 ]
 
@@ -148,6 +156,18 @@ class AmbiguousWindow(WindowNotFound):
     """Several windows matched; the message lists them with their handles."""
 
     def __init__(self, message: str, candidates: Optional[list["Window"]] = None) -> None:
+        super().__init__(message)
+        self.candidates = list(candidates or [])
+
+
+class MonitorNotFound(CaptureError):
+    """No output matched the requested name, compositor id or index."""
+
+
+class AmbiguousMonitor(MonitorNotFound):
+    """Several outputs matched; the message lists them, and ``.candidates`` has them."""
+
+    def __init__(self, message: str, candidates: Optional[list["Monitor"]] = None) -> None:
         super().__init__(message)
         self.candidates = list(candidates or [])
 
@@ -367,6 +387,229 @@ def list_screens(binary: Optional[str] = None) -> list[dict]:
                  x=int(parts[3]), y=int(parts[4]), scale=int(parts[5]))
         )
     return screens
+
+
+# ------------------------------------------------------------------- monitors
+@dataclass
+class Monitor:
+    """One output the compositor can capture, as ``list_monitors()`` sees it.
+
+    Three ways to name the same screen, all accepted by ``Capture(monitor=...)``:
+
+    * ``name``  -- the connector, ``"DP-1"``.  What KWin addresses screens by.
+    * ``id``    -- the compositor's own numeric id for the output (its ``wl_output``
+      global name).  Stable for the session, unique, and what a raw Wayland client sees.
+    * ``index`` -- position in ``list_monitors()`` order (top-left monitor first).
+      Convenient, but it *does* shift if you plug a monitor in on the left.
+
+    ``scale`` is the integer hint ``wl_output`` advertises, which cannot express 1.25 or
+    1.5 -- use ``effective_scale`` (measured from KWin) for the real number.  ``width`` /
+    ``height`` are device pixels; ``position`` is in logical scene coordinates, which is
+    what ``Capture(area=...)`` also takes.
+    """
+
+    id: int
+    name: str = ""
+    index: int = 0
+    make: str = ""
+    model: str = ""
+    x: int = 0
+    y: int = 0
+    width: int = 0
+    height: int = 0
+    refresh_hz: float = 0.0
+    scale: int = 1
+    effective_scale: Optional[float] = None   # filled in by list_monitors(measure_scale=True)
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def geometry(self) -> tuple[int, int]:
+        """Size in device pixels (the current mode)."""
+        return (self.width, self.height)
+
+    @property
+    def position(self) -> tuple[int, int]:
+        """Position in logical scene coordinates (what ``area=`` uses)."""
+        return (self.x, self.y)
+
+    @property
+    def fractional(self) -> bool:
+        """True when the scale is not a whole number (1.25, 1.5, ...) -- if it was measured."""
+        s = self.effective_scale
+        return s is not None and abs(s - round(s)) > 0.01
+
+    @property
+    def logical_geometry(self) -> tuple[int, int]:
+        """Size in logical pixels: device pixels divided by the measured scale."""
+        s = self.effective_scale or self.scale or 1
+        return (round(self.width / s), round(self.height / s))
+
+    def to_logical(self, x: int, y: int) -> tuple[float, float]:
+        """Device pixels -> logical scene coordinates (useful at 125%/150% scaling)."""
+        s = self.effective_scale or self.scale or 1
+        return (x / s, y / s)
+
+    def to_physical(self, x: int, y: int) -> tuple[float, float]:
+        """Logical scene coordinates -> device pixels."""
+        s = self.effective_scale or self.scale or 1
+        return (x * s, y * s)
+
+    def __str__(self) -> str:
+        scale = self.effective_scale or self.scale or 1
+        frac = "" if abs(scale - round(scale)) <= 0.01 else f" (fractional)"
+        return (f"{self.name} [{self.make} {self.model}]".rstrip()
+                + f" {self.width}x{self.height}+{self.x}+{self.y}"
+                + f" @ {self.refresh_hz:.2f} Hz x{scale:g}{frac}"
+                + f" index={self.index} id={self.id}")
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Monitor":
+        known = {f for f in cls.__dataclass_fields__ if f != "extra"}
+        kw = {k: v for k, v in d.items() if k in known}
+        rest = {k: v for k, v in d.items() if k not in known}
+        return cls(extra=rest, **kw)
+
+
+def list_monitors(binary: Optional[str] = None,
+                  measure_scale: bool = False) -> list[Monitor]:
+    """Every output the compositor offers for capture, top-left first.
+
+    Returns :class:`Monitor` objects with ``name``, ``id``, ``index``, ``position``,
+    ``geometry``, ``refresh_hz`` and ``scale``.  Like ``list_windows()`` this asks the
+    compositor, so nothing has to be running beforehand.
+
+    Only outputs that are *on* are listed: a connected-but-disabled monitor has no image
+    to capture (``kscreen-doctor -o`` shows those, and turns them on).
+
+    ``measure_scale=True`` also probes each output's real scale -- the number a fractional
+    display is using, which ``wl_output`` cannot report.  Costs two small grabs per
+    monitor (~25 ms), so it is opt-in.
+    """
+    binary = str(_native.resolve(binary))
+    out = subprocess.run([binary, "--list-monitors", "--json"],
+                         capture_output=True, text=True, timeout=15)
+    if out.returncode != 0:
+        raise CaptureError(out.stderr.strip() or "kwcapture --list-monitors failed")
+    try:
+        data = json.loads(out.stdout or "[]")
+    except json.JSONDecodeError as e:
+        raise CaptureError(f"could not parse the monitor list: {e}") from e
+    monitors = [Monitor.from_dict(d) for d in data]
+    if measure_scale:
+        for m in monitors:
+            try:
+                m.effective_scale = measure_output_scale(m.name, binary=binary)
+            except CaptureError:
+                pass    # a monitor that refuses the probe keeps its integer scale
+    return monitors
+
+
+def measure_output_scale(name: str, binary: Optional[str] = None) -> float:
+    """Device pixels per logical pixel on one output, measured from KWin.
+
+    ``wl_output.scale`` is an integer hint, so a display set to 125% says 1 there (KWin
+    tells fractional clients through a per-surface protocol we do not want to depend on).
+    Instead the helper grabs one small area twice -- once in device pixels, once at the
+    composited size -- and the ratio of the two is the scale actually in use.
+    """
+    binary = str(_native.resolve(binary))
+    out = subprocess.run([binary, "--probe-scale", str(name)],
+                         capture_output=True, text=True, timeout=30)
+    if out.returncode != 0:
+        raise CaptureError(out.stderr.strip() or f"kwcapture --probe-scale {name} failed")
+    parts = out.stdout.split()
+    if len(parts) < 6:
+        raise CaptureError(f"unexpected scale probe output: {out.stdout.strip()!r}")
+    scale = (float(parts[4]) + float(parts[5])) / 2.0
+    if not 0.05 <= scale <= 16.0:
+        raise CaptureError(f"implausible scale {scale} measured for {name}")
+    return scale
+
+
+def active_monitor(binary: Optional[str] = None) -> Monitor:
+    """The output a plain ``Capture()`` would grab: the one holding the focused window.
+
+    KWin has no "active screen" call, so this asks KWin which window has focus and takes
+    the output whose logical rectangle contains that window's centre.  Falls back to the
+    top-left output when nothing is focused (or no window is placed inside one).
+    """
+    monitors = list_monitors(binary)
+    if not monitors:
+        raise CaptureError("the compositor announces no enabled outputs")
+    if len(monitors) == 1:
+        return monitors[0]
+    try:
+        focus = active_window(binary=binary)
+    except CaptureError:
+        focus = None          # nothing focused, or focus is on a panel/desktop
+    if focus is not None:
+        cx, cy = focus.x + focus.width // 2, focus.y + focus.height // 2
+        for m in monitors:
+            # logical bounds: the mode size divided by the scale the output is drawn at
+            s = m.effective_scale or m.scale or 1
+            if (m.x <= cx < m.x + m.width / s and m.y <= cy < m.y + m.height / s):
+                return m
+    return monitors[0]
+
+
+def find_monitor(
+    spec: Union[str, int, Monitor, None],
+    monitors: Optional[list[Monitor]] = None,
+    binary: Optional[str] = None,
+) -> Monitor:
+    """Resolve a connector name, a compositor id, an enumeration index or a substring.
+
+    ``"DP-1"`` (exact, then case-insensitive, then substring, as ``find_window`` does),
+    ``65`` (the compositor id) or ``"65"``, and a plain integer that is not an id is taken
+    as the ``list_monitors()`` index.  Raises MonitorNotFound / AmbiguousWindow.
+
+    Numeric specs resolve **id first, then index** -- with two monitors `0` is an index,
+    because no compositor id is 0; `65` is the id of DP-1 here.
+    """
+    if isinstance(spec, Monitor):
+        return spec
+    if spec is None or not str(spec).strip():
+        raise MonitorNotFound("no monitor requested")
+    text = str(spec).strip()
+    if monitors is None:
+        monitors = list_monitors(binary)
+    if text.lstrip("+").isdigit():
+        num = int(text)
+        for m in monitors:                 # the compositor's own id wins
+            if m.id == num:
+                return m
+        for m in monitors:                 # otherwise an enumeration index
+            if m.index == num:
+                return m
+        raise MonitorNotFound(
+            f"no monitor with id or index {num}; available: "
+            + ", ".join(f"{m.name} (id {m.id}, index {m.index})" for m in monitors))
+    low = text.lower()
+    best, top = [], 0
+    for m in monitors:
+        if m.name == text:
+            score = 3                       # exact connector name
+        elif m.name.lower() == low:
+            score = 2                       # case-insensitive connector name
+        elif low in m.name.lower():
+            score = 1                       # "hdmi" -> HDMI-A-1
+        elif low in m.make.lower() or low in m.model.lower():
+            score = 1                       # "lg" -> the monitor whose make/model matches
+        else:
+            score = 0
+        if score > top:
+            best, top = [m], score
+        elif score == top and score:
+            best.append(m)
+    if not best:
+        raise MonitorNotFound(
+            f"no monitor matches {spec!r}; available: "
+            + ", ".join(m.name for m in monitors))
+    if len(best) > 1:
+        raise AmbiguousMonitor(
+            f"{spec!r} matches several monitors: " + ", ".join(m.name for m in best),
+            candidates=best)
+    return best[0]
 
 
 # --------------------------------------------------------------------- windows
@@ -637,6 +880,9 @@ class Capture:
     _closed = False
     _resized = False
     _last_frame_geom: Optional[tuple[int, int]] = None
+    monitor: Optional["Monitor"] = None
+    area_in = "logical"
+    _pixel_scale: Optional[float] = None
 
     def __init__(
         self,
@@ -664,6 +910,8 @@ class Capture:
         auto_restart: bool = True,
         restart_limit: int = 5,
         slot_floor: Optional[tuple[int, int]] = None,
+        monitor: Union[str, int, "Monitor", None] = None,
+        area_in: str = "logical",
     ) -> None:
         self.verbose = verbose
         try:
@@ -678,6 +926,29 @@ class Capture:
             except OSError as e:  # read-only $HOME etc: capture may still work
                 print(f"kwcapture: could not write the KDE authorisation file: {e}",
                       file=sys.stderr)
+        # monitor= accepts a connector name ("DP-1"), the compositor's id (65), an
+        # enumeration index (0) or a Monitor from list_monitors(). Resolving it here means
+        # a typo raises MonitorNotFound now, listing what exists, instead of the daemon
+        # failing later with KWin's "no such screen".
+        self.monitor: Optional[Monitor] = None
+        if monitor is not None:
+            if screen:
+                raise CaptureError(
+                    "pass either monitor= or screen=, not both -- monitor= takes a name "
+                    "too, and also an id or an index")
+            mon = find_monitor(monitor, binary=self.binary)
+            self.monitor = mon
+            screen = mon.name
+        self.area_in = str(area_in)
+        if self.area_in not in ("logical", "physical"):
+            raise CaptureError("area_in must be 'logical' (default) or 'physical'")
+        self._pixel_scale: Optional[float] = None
+        if area is not None and self.area_in == "physical" and self.monitor is None:
+            raise CaptureError(
+                "area_in='physical' needs monitor=: device pixels only map to logical "
+                "coordinates within one output, since scene coordinates are global")
+        if area is not None and self.area_in == "physical":
+            self._pixel_scale = measure_output_scale(self.monitor.name, binary=self.binary)
         if active_window and window is not None:
             raise CaptureError("window= and active_window=True are mutually exclusive")
         if (window is not None or active_window) and (screen or area or workspace):
@@ -685,7 +956,9 @@ class Capture:
                 "a window capture cannot also be a screen/area/workspace capture"
             )
         self.screen = screen
-        self.area = tuple(area) if area else None
+        # area is relative to `monitor` when one was given (and converted from device
+        # pixels first if area_in="physical"); in global scene coordinates when not.
+        self.area = self._resolve_area(area)
         self.workspace = workspace
         self.window_spec: Union[str, Window, None] = window
         self.window_id = ""    # resolved KWin handle, empty until resolved/unresolved
@@ -742,6 +1015,25 @@ class Capture:
             self.start()
 
     # -------------------------------------------------------------- lifecycle
+    def _resolve_area(self, area) -> Optional[tuple[int, int, int, int]]:
+        """Turn the caller's area into the scene-rectangle the helper wants."""
+        if not area:
+            return None
+        vals = tuple(area)
+        if len(vals) != 4:
+            raise CaptureError("area must be (x, y, w, h)")
+        x, y, w, h = (float(v) for v in vals)
+        if self.area_in == "physical":
+            s = self._pixel_scale or 1.0
+            x, y, w, h = x / s, y / s, w / s, h / s
+        if self.monitor is not None:
+            x += self.monitor.x
+            y += self.monitor.y
+        out = (int(round(x)), int(round(y)), int(round(w)), int(round(h)))
+        if out[2] < 1 or out[3] < 1:
+            raise CaptureError(f"area is empty after scaling: {out}")
+        return out
+
     def _argv(self) -> list[str]:
         argv = [self.binary, "serve", "--shm", self.shm_path,
                 "--slots", str(self._slots), "--depth", str(self._depth),
@@ -1040,6 +1332,26 @@ class Capture:
         return self._resized
 
     @property
+    def scale(self) -> float:
+        """Scale KWin reported for the frames it is sending (1.0 = device pixels)."""
+        h = self._require()
+        return float(h.scale)
+
+    @property
+    def pixel_scale(self) -> float:
+        """Measured device-pixels-per-logical-pixel for this Capture's output.
+
+        Measured once (two small grabs) and cached. KWin's reported `scale` above is what
+        it applied to this frame; this is the output's actual scale, including 1.25/1.5.
+        """
+        if self._pixel_scale is None:
+            name = self.screen or (self.monitor.name if self.monitor else "")
+            if not name:
+                name = active_monitor().name
+            self._pixel_scale = measure_output_scale(name, binary=self.binary)
+        return self._pixel_scale
+
+    @property
     def slot_bytes(self) -> int:
         """Bytes per ring slot for the current daemon generation (0 if not started)."""
         return self._ring_slot_bytes
@@ -1203,6 +1515,17 @@ class Capture:
                   f"restarts, {self.auto_restarts} total)", file=sys.stderr)
         if self.window_spec is not None and not self.active_window:
             self._reresolve_window(exc)
+        elif self.monitor is not None:
+            # a monitor that has been unplugged cannot be captured again; say so plainly
+            # rather than letting the daemon fail on a stale name
+            wanted = self.monitor.name
+            try:
+                self.monitor = find_monitor(wanted, binary=self.binary)
+                self.screen = self.monitor.name
+            except MonitorNotFound as e:
+                raise CaptureError(
+                    f"monitor {wanted} is no longer available, so the capture cannot be "
+                    f"restarted: {e}") from exc
         self.restart()
 
     # ------------------------------------------------------- shared-memory reads

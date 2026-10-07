@@ -30,6 +30,7 @@ from . import (
     __version__,
     _desktop,
     _native,
+    list_monitors,
     list_screens,
     list_windows,
 )
@@ -181,7 +182,7 @@ def cmd_install_desktop(argv: argparse.Namespace) -> int:
 
 
 # ------------------------------------------------------------------ capture
-def cmd_screens(argv: argparse.Namespace) -> int:
+def cmd_screens(argv: argparse.Namespace) -> int:  # kept: the old, terse output
     for s in list_screens():
         print(f"{s['name']:<10} {s['width']}x{s['height']} @{s['refresh']:.2f}Hz "
               f"pos {s['x']},{s['y']} scale {s['scale']}")
@@ -223,7 +224,36 @@ def cmd_windows(argv: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_monitors(argv: argparse.Namespace) -> int:
+    monitors = list_monitors(measure_scale=getattr(argv, "measure_scale", False))
+    if argv.filter:
+        needle = argv.filter.lower()
+        monitors = [m for m in monitors
+                    if needle in m.name.lower() or needle in m.make.lower()
+                    or needle in m.model.lower()]
+    if argv.json:
+        from dataclasses import asdict
+
+        print(json.dumps([asdict(m) for m in monitors], ensure_ascii=False, indent=2))
+        return 0
+    print(f"{'INDEX':<5}  {'ID':<6}  {'NAME':<12}  {'MAKE / MODEL':<24}  {'SIZE (px)':>11}  "
+          f"{'SCALE':>6}  {'POSITION':>10}  REFRESH")
+    for m in monitors:
+        scale = m.effective_scale or m.scale or 1
+        print(f"{m.index:<5}  {m.id:<6}  {m.name:<12}  {f'{m.make} {m.model}':<24.24}  "
+              f"{f'{m.width}x{m.height}':>11}  {f'x{scale:g}':>6}  "
+              f"{f'{m.x},{m.y}':>10}  {m.refresh_hz:.2f} Hz")
+    if not monitors:
+        print("(no enabled outputs: a connected but disabled monitor cannot be captured; "
+              "see `kscreen-doctor -o`)")
+    return 0
+
+
 def _grab_options(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--monitor", default=None, metavar="NAME|ID",
+                   help="capture one monitor by connector name (DP-1), by the "
+                        "compositor's id, or by its `kwcapture monitors` index; with it, "
+                        "--area is relative to that monitor")
     p.add_argument("--screen", default=None, help="output name, e.g. DP-1")
     p.add_argument("--area", default=None, metavar="X,Y,W,H", help="capture a region")
     p.add_argument("--workspace", action="store_true", help="whole virtual desktop")
@@ -246,9 +276,10 @@ def _make_capture(ns: argparse.Namespace) -> Capture:
         if len(parts) != 4:
             raise SystemExit("--area wants X,Y,W,H")
         area = tuple(parts)
-    return Capture(screen=ns.screen, area=area, workspace=ns.workspace,
-                   window=ns.window, active_window=ns.active_window,
-                   cursor=ns.cursor, decoration=ns.decoration)
+    return Capture(monitor=getattr(ns, "monitor", None), screen=ns.screen, area=area,
+                   workspace=ns.workspace, window=ns.window,
+                   active_window=ns.active_window, cursor=ns.cursor,
+                   decoration=ns.decoration)
 
 
 def cmd_grab(argv: argparse.Namespace) -> int:
@@ -331,6 +362,15 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p = sub.add_parser("screens", help="list outputs")
     p.set_defaults(func=cmd_screens)
+
+    p = sub.add_parser("monitors", help="list outputs (index, id, name, position, scale)")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument("-f", "--filter", default=None,
+                   help="only monitors whose name/make/model contains this text")
+    p.add_argument("--measure-scale", action="store_true",
+                   help="also probe each output's real scale (needed for 125%%/150%%; "
+                        "costs ~25 ms per monitor)")
+    p.set_defaults(func=cmd_monitors)
 
     p = sub.add_parser("windows", help="list capturable windows (handle + name)")
     p.add_argument("--json", action="store_true", help="machine-readable output")

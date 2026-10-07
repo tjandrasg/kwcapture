@@ -486,6 +486,166 @@ def _summary() -> int:
     return 0
 
 
+def monitor_section():
+    """v0.5: monitor enumeration + capture by name or id, on every output that exists."""
+    print("\n== monitors: enumeration ==")
+    try:
+        monitors = K.list_monitors()
+    except K.CaptureError as e:
+        print(f"  [skip] no monitors reported ({e})")
+        return
+    check("list_monitors() returns the outputs", len(monitors) >= 1,
+          ", ".join(m.name for m in monitors))
+    check("every monitor has a name, an int id and a size",
+          all(m.name and isinstance(m.id, int) and m.width > 0 and m.height > 0
+              for m in monitors),
+          str([(m.index, m.id, m.name, m.geometry) for m in monitors]))
+    check("index is the position in the returned order",
+          [m.index for m in monitors] == list(range(len(monitors))))
+    check("enumeration is stable and top-left first (sorted by y, then x)",
+          [(m.y, m.x) for m in monitors] == sorted((m.y, m.x) for m in monitors))
+    check("position/geometry are tuples",
+          all(isinstance(m.position, tuple) and isinstance(m.geometry, tuple)
+              for m in monitors),
+          str([(m.position, m.geometry) for m in monitors]))
+    check("ids are unique", len({m.id for m in monitors}) == len(monitors))
+
+    print("\n== monitors: finding ==")
+    m0 = monitors[0]
+    check("find by name", K.find_monitor(m0.name, monitors=monitors) is m0, m0.name)
+    check("find by compositor id",
+          K.find_monitor(m0.id, monitors=monitors).name == m0.name, f"id={m0.id}")
+    check("find by enumeration index",
+          K.find_monitor(m0.index, monitors=monitors).name == m0.name,
+          f"index={m0.index}")
+    check("find a Monitor object through unchanged",
+          K.find_monitor(m0, monitors=monitors) is m0)
+    if len(m0.name) > 2:
+        frag = m0.name[:2]
+        try:
+            got = K.find_monitor(frag, monitors=monitors)
+            check("find by substring", got.name == m0.name, f"{frag!r} -> {got.name}")
+        except K.AmbiguousMonitor as e:
+            # the fragment matches more than one output: refusing to guess is correct
+            check("find by substring", len(e.candidates) > 1,
+                  f"{frag!r} is ambiguous ({len(e.candidates)} outputs)")
+        except K.MonitorNotFound as e:
+            check("find by substring", False, str(e)[:70])
+    try:
+        K.find_monitor("definitely-not-an-output-99", monitors=monitors)
+        check("unknown monitor raises MonitorNotFound", False, "no exception")
+    except K.MonitorNotFound as e:
+        check("unknown monitor raises MonitorNotFound", "available" in str(e), str(e)[:70])
+    try:
+        K.find_monitor(10 ** 9, monitors=monitors)
+        check("unknown id/index raises MonitorNotFound", False, "no exception")
+    except K.MonitorNotFound as e:
+        check("unknown id/index raises MonitorNotFound", True, str(e)[:70])
+    if len(monitors) > 1:
+        # "-1" is a substring of DP-1 and HDMI-A-1 alike: must not pick one silently
+        shared = next((s for s in ("-1", "-")
+                       if sum(1 for m in monitors if s in m.name) > 1), None)
+        if shared:
+            try:
+                K.find_monitor(shared, monitors=monitors)
+                check(f"a substring matching several monitors is ambiguous ({shared!r})",
+                      False, "picked one silently")
+            except K.AmbiguousMonitor as e:
+                check(f"a substring matching several monitors is ambiguous ({shared!r})",
+                      len(e.candidates) > 1, f"{len(e.candidates)} candidates")
+
+    print("\n== monitors: capture by name and by id, on every output ==")
+    for m in monitors:
+        for spec in dict(name=m.name, id=m.id).values():
+            try:
+                with K.Capture(monitor=spec,
+                               shm=K.default_shm_path(f"m{m.index}")) as cap:
+                    f = cap.grab(copy=True, timeout=10)
+                    check(f"Capture(monitor={spec!r}) captures {m.name}",
+                          f.shape[:2] == (m.height, m.width),
+                          f"{f.shape[1]}x{f.shape[0]} vs {m.width}x{m.height}")
+                    check(f"  {m.name}: reports its scale and Monitor", cap.scale > 0
+                          and cap.monitor is not None and cap.monitor.name == m.name,
+                          f"scale={cap.scale}")
+            except Exception as e:  # noqa: BLE001
+                check(f"Capture(monitor={spec!r}) captures {m.name}", False,
+                      f"{type(e).__name__}: {e}")
+
+    print("\n== monitors: area is relative to the monitor ==")
+    m = monitors[-1]
+    try:
+        with K.Capture(monitor=m, area=(0, 0, 320, 200),
+                       shm=K.default_shm_path("marea")) as cap:
+            f = cap.grab(copy=True, timeout=10)
+            check("monitor-relative area gives that size", f.shape == (200, 320, 4),
+                  str(f.shape))
+            check("and reports the area geometry, not the monitor's",
+                  cap.geometry() == (320, 200), str(cap.geometry()))
+    except Exception as e:  # noqa: BLE001
+        check("monitor-relative area gives that size", False, f"{type(e).__name__}: {e}")
+
+    print("\n== monitors: scaling ==")
+    try:
+        s = K.measure_output_scale(m.name)
+        check("measure_output_scale gives a sane scale", 0.05 <= s <= 16.0, f"x{s:g}")
+        check("it agrees with wl_output when the scale is a whole number",
+              abs(s - (m.scale or 1)) < 0.01 or m.scale == 0,
+              f"measured x{s:g} vs wl_output x{m.scale}")
+    except Exception as e:  # noqa: BLE001
+        check("measure_output_scale gives a sane scale", False, f"{type(e).__name__}: {e}")
+    measured = K.list_monitors(measure_scale=True)
+    check("list_monitors(measure_scale=True) fills effective_scale",
+          all(x.effective_scale for x in measured),
+          str([x.effective_scale for x in measured]))
+    check("logical_geometry == geometry / scale for every output",
+          all(x.logical_geometry[0] >= 1 and abs(x.logical_geometry[0] * x.effective_scale
+                                                  - x.width) <= 2 for x in measured),
+          str([(x.name, x.geometry, x.logical_geometry) for x in measured]))
+    one = measured[0]
+    back = one.to_logical(*one.to_physical(100, 60))
+    check("to_physical / to_logical round-trip", abs(back[0] - 100) < 1.5
+          and abs(back[1] - 60) < 1.5, str(back))
+    try:
+        am = K.active_monitor()
+        check("active_monitor() names one of the outputs",
+              any(am.name == x.name for x in monitors), am.name)
+    except Exception as e:  # noqa: BLE001
+        check("active_monitor() names one of the outputs", False, f"{type(e).__name__}: {e}")
+
+    print("\n== monitors: bad arguments are caught before the daemon is started ==")
+    for name, kwargs, exc in (
+        ("unknown monitor", dict(monitor="VGA-77"), K.MonitorNotFound),
+        ("monitor= with screen=", dict(monitor=monitors[0].name, screen=monitors[0].name),
+         K.CaptureError),
+        ("bad area_in", dict(monitor=monitors[0].name, area=(0, 0, 8, 8), area_in="world"),
+         K.CaptureError),
+        ("physical area without a monitor", dict(area=(0, 0, 8, 8), area_in="physical"),
+         K.CaptureError),
+        ("area that is not 4 numbers", dict(area=(0, 0, 8)), K.CaptureError),
+    ):
+        try:
+            cap = K.Capture(shm=K.default_shm_path("mbad"), **kwargs)
+            cap.close()
+            check(name + " raises", False, "no exception")
+        except exc:
+            check(name + " raises", True)
+        except Exception as e:  # noqa: BLE001
+            check(name + " raises", False, f"{type(e).__name__}: {e}")
+    # area_in='physical' is accepted and measured when a monitor names the frame of
+    # reference; the device rect comes back at (very nearly) that size
+    try:
+        with K.Capture(monitor=m, area=(0, 0, 256, 144), area_in="physical",
+                       shm=K.default_shm_path("mphys")) as cap:
+            f = cap.grab(copy=True, timeout=10)
+            ps = cap.pixel_scale
+            check("area_in='physical' gives a device-pixel sized frame",
+                  abs(f.shape[1] - 256) <= 3 and abs(f.shape[0] - 144) <= 3,
+                  f"{f.shape[1]}x{f.shape[0]} at x{ps:g}")
+    except Exception as e:  # noqa: BLE001
+        check("area_in='physical' gives a device-pixel sized frame", False,
+              f"{type(e).__name__}: {e}")
+
+
 def _open_fds():
     try:
         return len(os.listdir("/proc/self/fd"))
@@ -740,7 +900,14 @@ def main():
     print("\n== basic capture ==")
     with K.Capture() as cap:
         w, h = cap.geometry()
-        check("geometry matches first output", (w, h) == (s0["width"], s0["height"]), f"{w}x{h}")
+        # NOT "the first output": a plain Capture() follows the compositor's active
+        # screen, and on a desk with two outputs that is whichever one holds the focus.
+        # What must always hold is that the geometry agrees with the output it reports.
+        reported = next((s for s in screens if s["name"] == cap.screen_name), None)
+        check("geometry matches the output this Capture reports",
+              reported is not None and (w, h) == (reported["width"], reported["height"]),
+              f"{cap.screen_name} {w}x{h}; outputs: "
+              + ", ".join(f"{s['name']} {s['width']}x{s['height']}" for s in screens))
         arr = cap.grab()
         check("grab shape", arr.shape == (h, w, 4), str(arr.shape))
         check("grab dtype", arr.dtype == np.uint8)
@@ -793,11 +960,32 @@ def main():
                     if ref_img.mode != "RGB":
                         ref_img = ref_img.convert("RGB")
                     ref = np.asarray(ref_img, dtype=np.int16)
-                    ours = np.asarray(cap.shot(), dtype=np.int16)
-                    if ref.shape != ours.shape:
-                        h2 = min(ref.shape[0], ours.shape[0])
-                        w2 = min(ref.shape[1], ours.shape[1])
-                        ref, ours = ref[:h2, :w2], ours[:h2, :w2]
+                    # Compare like with like. Pillow grabs the X11 root; `cap` follows
+                    # KWin's active output. With two monitors up those can be different
+                    # screens, and cropping one onto the other produced a MAD that looked
+                    # the same whether the channels were right or swapped -- i.e. proof of
+                    # nothing. So: take whichever output actually matches the reference.
+                    ours = None
+                    targets = ([dict(screen=mon) for mon in
+                                [cap.screen_name] + [s["name"] for s in screens
+                                                     if s["name"] != cap.screen_name]]
+                               + [dict(workspace=True)])   # the whole virtual desktop:
+                                                           # what an X root grab covers
+                    for kwargs in targets:
+                        try:
+                            with K.Capture(shm=K.default_shm_path("colour"),
+                                           **kwargs) as ref_cap:
+                                cand = np.asarray(ref_cap.shot(), dtype=np.int16)
+                        except K.CaptureError:
+                            continue
+                        if cand.shape == ref.shape:
+                            ours = cand
+                            break
+                    if ours is None:
+                        raise ValueError(
+                            f"the reference covers {ref.shape[1]}x{ref.shape[0]}, which is "
+                            f"none of the outputs here "
+                            + str([(s["name"], s["width"], s["height"]) for s in screens]))
                     if float(ref.mean()) < 1.0:  # reference came back black, try again
                         raise ValueError("reference capture is black")
                     mad = float(np.abs(ref - ours).mean())
@@ -823,6 +1011,7 @@ def main():
         check("workspace capture produced a frame", g[0] >= s0["width"] and g[1] >= s0["height"],
               f"{g[0]}x{g[1]}")
 
+    monitor_section()
     window_section()
     window_vanish_section()
 

@@ -31,10 +31,50 @@ configured for github.com (it is in `~/.git-credentials`) — never commit or pr
 
 Working dir: `~/way_scr_cap`. **Read this first if you are a fresh session.**
 Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayland capture,
-Python API + CLI + 119 functional + 37 ring-reader checks. See `README.md` for user-facing
+Python API + CLI + 155 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
 
-## FRESH STATUS — 2026-10-07 ~07:10 — resilience features implemented, NOT yet released
+## FRESH STATUS — 2026-10-07 ~08:30 — monitors + fractional scaling, NOT yet released
+
+`list_monitors()` / `Capture(monitor=name|id|index)` / measured fractional scale, on top of
+the resilience work below. Still **v0.4.0 in `pyproject.toml`** — `CHANGELOG.md` says
+`Unreleased`; the next release is 0.5.0.
+
+* **Monitor ids.** KWin's screenshot interface has no per-output handle, so `Monitor.id` is
+  the **`wl_output` global name** (65 here for DP-1, 79 for HDMI-A-1) — the id the
+  compositor itself uses. Plus `name` (connector) and `index` (position in
+  `list_monitors()` order, top-left first via `out_cmp()` in the helper). `find_monitor()`
+  resolves numeric specs **id first, then index**, and refuses ambiguous names.
+* **Fractional scale is measured, not read.** `wl_output.scale` is an integer hint, so a
+  125% display reports 1 there; the per-surface `wp_fractional_scale_manager_v1` would need
+  a surface. Instead `--probe-scale NAME` grabs the same 128x128 logical area twice —
+  `native-resolution` on and off — and the ratio is the real scale (`mode_probe_scale`).
+  Works whatever mechanism KDE uses; verified 1.0 here (this box has no fractional mode).
+* **Gotchas found building this:**
+  - **`kscreen-doctor` and KWin can disagree**: kscreen reported HDMI-A-1 `disabled` while
+    KWin announced it on the registry *and* happily captured 3840x2160 from it. Never use
+    kscreen's enabled flag as a proxy for "capturable"; `list_monitors()` reports what the
+    compositor will actually serve.
+  - **`Capture()` with no arguments follows KWin's *active screen*, which follows focus.**
+    The old test `geometry matches first output` was therefore wrong the moment a second
+    output appeared — it failed while my xterm probe had focus on the TV, and passed again
+    minutes later with nothing changed. It now asserts geometry agrees with
+    `Capture.screen_name`, which is the invariant that actually holds.
+  - **`PIL.ImageGrab.grab()` returns the whole X11 root** (6400x2160 = both outputs), not
+    the primary output. The colour-reference check must compare against a
+    `Capture(workspace=True)` frame on a multi-monitor desk — cropping a per-output frame
+    onto it made the MAD nearly identical whether the channels were right or swapped,
+    i.e. it silently stopped testing anything. With the workspace comparison it is exact
+    again: MAD=0.0, MAD-if-swapped=15.0.
+  - A test that moves a window onto another output **changes global compositor state**
+    (which screen is active). Move it back, or write the test so it does not depend on it.
+  - `area=` is scene coordinates, so with `monitor=` set we offset it by the monitor's
+    logical position; `area_in="physical"` divides by the *measured* scale first and
+    therefore requires `monitor=` (a device point has no meaning across outputs with
+    different scales).
+
+## FRESH STATUS — 2026-10-07 ~07:10 (superseded by the section above; resilience still
+ accurate)
 
 `grab()` now survives a dead daemon, a monitor mode change and a window resize. Committed
 on `main` against **v0.4.0 — not released yet** (`CHANGELOG.md` calls it `Unreleased`; the
@@ -670,8 +710,10 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 * ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
   (`Window.active`, `active_window_id()`, `--active-window-id`).
 * `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.
-* Expose non-normal windows (panels, desktop, overlays): krunner filters them out. A KWin
-  script or the qml console could hand out those handles; `Capture(window=…)` accepts them.
+* **TODO (kept deliberately, low priority):** expose non-normal windows — panels, desktop,
+  overlays. krunner filters them out, so `list_windows()` cannot see them; a KWin script or
+  the qml console could hand out those handles, and `Capture(window=…)` already accepts
+  them. Not important; revisit if anyone ever needs it.
 * ~~Window resize handling~~ **done** — frames follow the resized window automatically (the
   per-frame geometry in the slot descriptor was already correct; what was missing was the
   recovery when it outgrows the ring). See `Capture.resized`, `last_geometry`.
@@ -682,7 +724,18 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   the file under it would SIGBUS whoever read past the old end. Instead `ENOSPC` →
   `RingTooSmall` → the daemon is restarted and the ring is *rebuilt* at the new size. Same
   outcome for the caller, no window where a mapping and a file disagree.
-* Multi-monitor: works via one `Capture` per screen name, but there is no combined-mode helper.
+* ~~Multi-monitor~~ **done** — `list_monitors()` + `Capture(monitor=name|id|index)`,
+  monitor-relative `area=`, `active_monitor()`, CLI `monitors` / `grab --monitor`. A
+  combined helper for *all* outputs at once is still not there: `workspace=True` gives the
+  whole virtual desktop in one frame.
+* ~~Fractional scaling~~ **done** — `Monitor.effective_scale` / `measure_output_scale()`
+  measure it from KWin (integer `wl_output.scale` cannot express 1.25/1.5), with
+  `to_physical`/`to_logical`, `Capture.pixel_scale` and `area_in="physical"`. Frames are
+  device-resolution as before. **Not exercised on a real fractional display** — this box
+  runs 1x; verified via the ratio mechanism, 1.0 exactly, and the math is unit-tested.
 * Fractional scaling: `native-resolution` is set; behaviour with scale≠1 untested.
-* If a non-KDE compositor is ever needed: `ext-image-copy-capture-v1`/`wlr-screencopy` with
-  the XML in `/usr/share/wayland-protocols/` + `wayland-scanner` (KWin does not implement it yet).
+* ~~If a non-KDE compositor is ever needed~~ **out of scope, deliberately.** The name is
+  the promise: this project targets KDE Plasma, and `org.kde.KWin.ScreenShot2` is the only
+  capture interface it will speak. `ext-image-copy-capture-v1`/`wlr-screencopy` are not on
+  the roadmap — on a non-KDE compositor kwcapture should fail loudly, not grow a second
+  backend.
