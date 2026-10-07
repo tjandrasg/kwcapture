@@ -34,6 +34,31 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 159 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
 
+## FRESH STATUS — 2026-10-07 ~12:45 — **v0.5.0 IS OUT** (PyPI + GitHub release, verified)
+
+* **PyPI `kwcapture 0.5.0` is live**: sdist + the CI `manylinux_2_28` wheel, taken from the
+  GitHub release so the bytes match. Verified with the per-version endpoint
+  (`/pypi/kwcapture/0.5.0/json`) and with a real `pip install --no-cache-dir kwcapture` in a
+  throwaway venv in `/tmp` — it captures: 2560x1440x4 grab, `scale 0.75`, 2 monitors, 6
+  windows, `import` from site-packages.
+* **GitHub release `v0.5.0`** (id 405416187): CI assets + this machine's
+  `py3-none-linux_x86_64` wheel attached via the REST API, and the release **body written**
+  (three-scale table, the `area_in="physical"` fix, resilience list) — not the CI stub.
+* Test counts shipped: **159 functional + 37 ring-reader = 196**, all green on a desk with
+  one output at 75 % and one at 125 % (README, CHANGELOG and this file now say 159/37 — the
+  previous session had guessed 155/192).
+* Release sequence used, for next time: bump → `make` + full suite → commit → `git tag
+  vX.Y.Z && git push origin main --tags` → `python -m build` locally → **wait for
+  `release.yml`** → download the two CI artefacts → `twine check` → `twine upload -r pypi` →
+  attach the local wheel + PATCH the body → verify PyPI + clean-venv install → docs.
+  One note: `pip install` of the local wheel inside a 55 s `exec_shell_command` can die
+  mid-download with nothing but `ModuleNotFoundError` at the end — install first, then test
+  in a second call.
+* **Where the docs live from here on:** `AGENTS.md` in this repo is **kwcapture only**. The
+  nunif project (and the kwcapture integration into its `iw3` desktop GUI) is documented in
+  `private/AGENTS.md` — it is a different codebase, and `private/` is ignored, so nothing of
+  it can leak into this repo's history.
+
 ## FRESH STATUS — 2026-10-07 ~10:40 — THREE scales, and `area_in="physical"` was wrong by 0.6x
 
 The desk is still DP-1 at 75 % and HDMI-A-1 at 125 %. Everything below was measured on it
