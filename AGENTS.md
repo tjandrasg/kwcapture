@@ -31,8 +31,72 @@ configured for github.com (it is in `~/.git-credentials`) — never commit or pr
 
 Working dir: `~/way_scr_cap`. **Read this first if you are a fresh session.**
 Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayland capture,
-Python API + CLI + 155 functional + 37 ring-reader checks. See `README.md` for user-facing
+Python API + CLI + 159 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
+
+## FRESH STATUS — 2026-10-07 ~10:40 — THREE scales, and `area_in="physical"` was wrong by 0.6x
+
+The desk is still DP-1 at 75 % and HDMI-A-1 at 125 %. Everything below was measured on it
+with `probe/fractional_scaling.py` (new; sections 1-5, run it with `--xwayland`).
+
+* **There are THREE scales.** (1) `wl_output.scale`: **1 and 2** — an integer hint, useless.
+  (2) the **display scale** — `Monitor.effective_scale`, and the `scale` field of a
+  *whole-output* frame: **0.75 / 1.25**. `device px = logical x this`. Whole-output frames
+  are device px, 1:1, never resampled. (3) the **scene factor** — `Monitor.area_scale` /
+  `Capture.area_scale`, and the `scale` field of an *area* reply: **1.25 on both outputs**,
+  one number for the whole desktop. It is also what XWayland surfaces are scaled by (a
+  320 px X11 window is 256 logical here) and what the workspace frame is rendered at
+  (8108 px = 6486 logical x 1.25).
+* **Which factor does `area=` use? The display scale — measured, not guessed.** Take a
+  high-detail 400x250 *device* rectangle out of a native whole-output frame of DP-1, then
+  grab that region with the logical coordinates computed three ways: /0.75, /1.25, /1.0.
+  MAD against the native crop: **4.1 / 46.7 / 48.8**. So the rectangle maps through the
+  display scale. Consequence nobody guessed: **a region grab on a 75 % output is an
+  upsample** — 250 image px for 150 px of panel — while on an output sitting at the scene
+  scale it is 1:1 native. There is no KWin option to change this (`native-resolution` on =
+  scene factor, off = 1x logical; both measured).
+* **BUG FIXED: `area_in="physical"` divided by the scene factor.** It returned the pixel
+  *count* you asked for but only `pixel_scale/area_scale` (**0.6x**) of the region you
+  named — a zoom, not a crop. `_resolve_area()` now divides by the **display** scale, so the
+  rectangle really is the device region it names; the frame is still rendered at the scene
+  factor so it comes back `w x area_scale/pixel_scale` px (`geometry()` says what you got,
+  `resize()` takes it back to the device size). The test now checks the size **and** the
+  content against a native frame, on every output — one output at the scene scale only
+  exercises half the logic, so this needs both.
+* **Window sizes are logical; frames are device** (measured with xterm): 320 X11 px -> **256
+  logical** (`Window.geometry`) -> **192 device** (the frame) at scene 1.25 / display 0.75.
+  Any assertion comparing a frame to `Window.width` must multiply by `Capture.pixel_scale`,
+  or calibrate the ratio from a first frame (`_resize_then_wait(..., kx, ky)` now does).
+* **Test-harness gotchas found doing this:** the shell rewrites `xterm`'s title, so never
+  find a test xterm by title — match on pid (`wmctrl -lp`) or on "the X11 window that was
+  not there before"; and a GUI started from `exec_shell_command` must be `setsid`'d with
+  stdio redirected, or the tool kills it when the command ends (it took a false FAIL to
+  learn this).
+
+## FRESH STATUS — 2026-10-07 ~09:20 — FRACTIONAL SCALING VERIFIED LIVE (real 75% + 125%)
+
+The user enabled 75% on DP-1 and 125% on HDMI-A-1, and the experiment found three things.
+
+* **It works, and the compositor proves it independently.** `list_monitors(measure_scale=True)`
+  now reports `effective_scale` **0.75 / 1.25** — exactly what was set — and the strongest
+  check is one that does not trust us at all: output positions are logical and neighbours
+  abut, so `HDMI-A-1.x == 3414` must equal DP-1's logical right edge `2560/0.75 == 3413.3`.
+  `Capture.scale` (per-frame metadata) agrees. `wl_output.scale` gave **1 and 2** (it is a
+  ceil hint — useless for fractional, exactly as suspected).
+* **There are TWO scales, and conflating them was my bug.** The **display scale** (0.75 /
+  1.25) is only reported by a *whole-output* grab. The **area/scene factor** is what KWin
+  multiplies `CaptureArea` by — measured **1.25 on BOTH outputs**, and the area reply's own
+  `scale` field carries *that*, not the display scale. So `--probe-scale` now does three
+  grabs (two 128px areas for the factor, one whole-output for the scale) and exposes both:
+  `Monitor.effective_scale` vs `Monitor.area_scale` / `Capture.area_scale`. Consequence for
+  users: `area=(w,h)` returns **w*area_scale** pixels, so `area_in="physical"` must divide
+  by the *area* factor — never by the display scale (0.75 would have been wrong by ~1.67x).
+* **Real double-free I introduced and fixed**: `grab_sync()` grows `*buf` and frees the old
+  one, so `free(buf)` followed by another `grab_sync(&buf,...)` is a double free
+  (`free(): double free detected in tcache 2`). After freeing a `grab_sync` buffer always
+  set `buf = NULL; cap = 0;`.
+* Also: the monitor tests had baked in "an area frame is the size I asked for", true only
+  at scale 1. They are now scale-aware via `Capture.area_scale`.
 
 ## FRESH STATUS — 2026-10-07 ~08:30 — monitors + fractional scaling, NOT yet released
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-07
 
 Monitors are now first-class (list them, capture one by name or id), fractional scaling is
 measured rather than guessed, and captures survive the things that break a long-running
@@ -18,17 +18,29 @@ dying.
 - **`area=` is relative to the monitor** when `monitor=` is given, so the same rectangle
   means the same corner on a mixed-DPI desk. Without `monitor=`, `area=` stays in global
   scene coordinates as before.
-- **Fractional scaling.** Frames are captured at device resolution (unchanged), but
-  `wl_output` can only advertise an *integer* scale, so a 125 % display says `1` there.
-  **`measure_output_scale()`** / **`Monitor.effective_scale`** measure the real scale from
-  KWin (the same small area grabbed once in device pixels and once composited, ratio =
-  scale), with `Monitor.fractional`, `Monitor.logical_geometry` and
-  `Monitor.to_physical()` / `to_logical()` for conversion, plus `Capture.scale` (what KWin
-  applied to this frame) and `Capture.pixel_scale` (measured, cached).
-- **`Capture(area=..., area_in="physical")`** takes the region in device pixels instead of
-  logical scene coordinates — at 150 % an `area=(0,0,100,100)` used to hand back a
-  `150x150` image, since `area` is scene coordinates; now you can ask for 100 device pixels
-  and get them.
+- **Fractional scaling, measured and verified on real 75 % / 125 % displays.** Whole-output
+  frames are captured at device resolution (unchanged), but `wl_output` can only advertise
+  an *integer* scale, so a 125 % display says `1` there. **`measure_output_scale()`** /
+  **`Monitor.effective_scale`** measure the real scale from KWin (the same small area
+  grabbed once in device pixels and once composited, ratio = scale), with
+  `Monitor.fractional`, `Monitor.logical_geometry` and `Monitor.to_physical()` /
+  `to_logical()` for conversion, plus `Capture.scale` (what KWin applied to this frame) and
+  `Capture.pixel_scale` (measured, cached).
+- **Two different scales, and they are not interchangeable.** The **display scale** (0.75 /
+  1.25 measured) is what relates logical pixels to the pixels of a panel, and only a
+  *whole-output* grab reports it. Region captures are answered at the **scene factor**
+  (`Monitor.area_scale` / `Capture.area_scale`) — one number for the whole desktop, 1.25 on
+  both outputs of the test desk, whose display scales were 0.75 and 1.25. So `area=(w, h)`
+  returns a `w*area_scale` image, and where the two differ that image is a **resample** of
+  the `w*pixel_scale` device pixels the region really covers (on a 75 % output a region
+  grab is an upsample). `probe/fractional_scaling.py` measures
+  all of it, and maps a region through every candidate factor to show which one KWin uses.
+- **`Capture(area=..., area_in="physical")`** takes the rectangle in **device pixels of the
+  `monitor=` given** — the region you name is the region you get, converted through the
+  output's display scale. The image is still rendered at the scene factor, so it is
+  `w * area_scale/pixel_scale` px wide (`Capture.geometry()` reports the size you actually
+  got; `resize()` takes it back to the device size). Without `monitor=` it is an error, as
+  device pixels have no meaning across outputs of different scales.
 - **`active_monitor()`** reports which output a plain `Capture()` would grab, by way of the
   focused window's position.
 - **Scope note: KDE Plasma only.** The name is the promise — `org.kde.KWin.ScreenShot2` is
@@ -62,11 +74,13 @@ dying.
   wedged KWin stays visible rather than being masked by respawn churn.
 - New observability on `Capture`: `auto_restarts` (cumulative), `last_restart_reason`,
   `slot_bytes`, `ring_bytes`.
-- Tests: **192 checks** (was 116) — 155 functional (was 87) including a monitor section
-  that captures *every* output on the desktop by name and by id, and a resize test that
+- Tests: **196 checks** (was 116) — 159 functional (was 87) including a monitor section
+  that captures *every* output on the desktop by name and by id, region grabs checked
+  **against a native frame** so a wrong scale mapping cannot pass, and a resize test that
   launches an xterm, resizes it with `wmctrl`, and proves frames follow the window and that
   an overflowing ring heals; plus 37 ring-reader checks (was 29) covering the `ENOSPC`
-  classification with no compositor.
+  classification with no compositor. The whole suite now runs on a mixed-DPI desk (one
+  output at 75 %, one at 125 %) and is scale-aware: it passes at 1x and at fractional.
 
 
 ## 0.4.0

@@ -52,7 +52,7 @@ from . import _desktop, _native
 from ._desktop import install_desktop_file
 from ._native import NativeBuildError, ensure_binary, find_binary
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "Capture",
@@ -419,7 +419,8 @@ class Monitor:
     height: int = 0
     refresh_hz: float = 0.0
     scale: int = 1
-    effective_scale: Optional[float] = None   # filled in by list_monitors(measure_scale=True)
+    effective_scale: Optional[float] = None   # display scale, from list_monitors(measure_scale=True)
+    area_scale: Optional[float] = None        # factor KWin applies to region captures
     extra: dict = field(default_factory=dict)
 
     @property
@@ -498,19 +499,27 @@ def list_monitors(binary: Optional[str] = None,
     if measure_scale:
         for m in monitors:
             try:
-                m.effective_scale = measure_output_scale(m.name, binary=binary)
+                m.area_scale, m.effective_scale = _scale_probe(m.name, binary=binary)
             except CaptureError:
                 pass    # a monitor that refuses the probe keeps its integer scale
     return monitors
 
 
-def measure_output_scale(name: str, binary: Optional[str] = None) -> float:
-    """Device pixels per logical pixel on one output, measured from KWin.
+def _scale_probe(name: str, binary: Optional[str] = None) -> tuple[float, float]:
+    """``(area_factor, display_scale)`` for one output, both measured from KWin.
 
-    ``wl_output.scale`` is an integer hint, so a display set to 125% says 1 there (KWin
-    tells fractional clients through a per-surface protocol we do not want to depend on).
-    Instead the helper grabs one small area twice -- once in device pixels, once at the
-    composited size -- and the ratio of the two is the scale actually in use.
+    These are two different numbers and the difference bit us once, so it is spelled out:
+
+    * ``display_scale`` -- what the display is actually running at (0.75, 1.25, ...). Taken
+      from the scale KWin reports for a native-resolution grab of the whole output, which
+      is per-output and correct. ``wl_output.scale`` cannot carry this: it is an integer
+      hint (ceil), so 0.75 and 1.25 both come back as 1 or 2.
+    * ``area_factor`` -- the scale region captures come back at: px in the image per
+      logical area px. Measured on a 75% + 125% desk: a 128-logical area came back 160 px
+      wide on **both** outputs, so this is a single scene-wide factor, not the target
+      output's scale. It is *not* what a device-pixel rectangle is divided by -- that is
+      ``display_scale``, since the rectangle maps through the panel it sits on (verified by
+      content: mapping a region through the scene factor misses by MAD 47 vs 4).
     """
     binary = str(_native.resolve(binary))
     out = subprocess.run([binary, "--probe-scale", str(name)],
@@ -520,10 +529,26 @@ def measure_output_scale(name: str, binary: Optional[str] = None) -> float:
     parts = out.stdout.split()
     if len(parts) < 6:
         raise CaptureError(f"unexpected scale probe output: {out.stdout.strip()!r}")
-    scale = (float(parts[4]) + float(parts[5])) / 2.0
-    if not 0.05 <= scale <= 16.0:
-        raise CaptureError(f"implausible scale {scale} measured for {name}")
-    return scale
+    factor = (float(parts[4]) + float(parts[5])) / 2.0
+    if not 0.05 <= factor <= 16.0:
+        raise CaptureError(f"implausible area factor {factor} measured for {name}")
+    # parts[7] is the scale KWin reports for a whole-output grab of THIS output. parts[6]
+    # is the area grab's scale, which is the scene factor -- do not use it as the display
+    # scale: on a 75%+125% desk both outputs reported 1.25 there.
+    display = float(parts[7]) if len(parts) > 7 and float(parts[7]) > 0 else factor
+    if not 0.05 <= display <= 16.0:
+        raise CaptureError(f"implausible display scale {display} measured for {name}")
+    return factor, display
+
+
+def measure_output_scale(name: str, binary: Optional[str] = None) -> float:
+    """The scale one display is running at (0.75, 1.25, 1.0 ...), measured from KWin.
+
+    ``wl_output.scale`` is only an integer hint, so a 125% display reports 1 or 2 there;
+    this asks KWin instead. Note this is the *display* scale -- the factor applied to
+    region captures is a separate, scene-wide number; see :func:`_scale_probe`.
+    """
+    return _scale_probe(name, binary)[1]
 
 
 def active_monitor(binary: Optional[str] = None) -> Monitor:
@@ -843,6 +868,10 @@ class Capture:
     ----------
     screen : str, optional   output name (see list_screens()); default = active screen
     area : (x, y, w, h), optional   capture only this region (logical coords)
+    area_in : str            "logical" (default) or "physical": whether `area` is in
+                             logical scene coordinates, or in **device pixels of the
+                             `monitor=` given** (it needs monitor=).  Either way the frame
+                             itself is rendered at the scene factor -- see area_scale.
     workspace : bool         capture the entire virtual desktop
     window : str | Window    capture one window: a handle, caption or app id from
                              list_windows()/find_window() (e.g. window="Kate")
@@ -883,6 +912,7 @@ class Capture:
     monitor: Optional["Monitor"] = None
     area_in = "logical"
     _pixel_scale: Optional[float] = None
+    _area_factor: Optional[float] = None
 
     def __init__(
         self,
@@ -943,12 +973,17 @@ class Capture:
         if self.area_in not in ("logical", "physical"):
             raise CaptureError("area_in must be 'logical' (default) or 'physical'")
         self._pixel_scale: Optional[float] = None
+        self._area_factor: Optional[float] = None
         if area is not None and self.area_in == "physical" and self.monitor is None:
             raise CaptureError(
                 "area_in='physical' needs monitor=: device pixels only map to logical "
                 "coordinates within one output, since scene coordinates are global")
         if area is not None and self.area_in == "physical":
-            self._pixel_scale = measure_output_scale(self.monitor.name, binary=self.binary)
+            # one probe gives both numbers: the scene factor region captures come back at,
+            # and this output's display scale, which is what a device rectangle converts
+            # through (measured live at 1.25 / 0.75 on a 75% + 125% desk -- see AGENTS.md)
+            self._area_factor, self._pixel_scale = _scale_probe(self.monitor.name,
+                                                                binary=self.binary)
         if active_window and window is not None:
             raise CaptureError("window= and active_window=True are mutually exclusive")
         if (window is not None or active_window) and (screen or area or workspace):
@@ -1024,6 +1059,13 @@ class Capture:
             raise CaptureError("area must be (x, y, w, h)")
         x, y, w, h = (float(v) for v in vals)
         if self.area_in == "physical":
+            # A device rectangle means *the pixels this output actually shows*, so it
+            # converts through the output's display scale -- not through the scene factor
+            # the reply comes back at.  Those differ (0.75 vs 1.25 measured live): using
+            # the scene factor here returned a region 0.6x the one that was asked for.
+            # The frame is still rendered at the scene factor, so it comes back
+            # round(w * area_scale / pixel_scale) px wide: geometry() says what you got and
+            # resize() takes it back to the device size you asked for.
             s = self._pixel_scale or 1.0
             x, y, w, h = x / s, y / s, w / s, h / s
         if self.monitor is not None:
@@ -1333,13 +1375,19 @@ class Capture:
 
     @property
     def scale(self) -> float:
-        """Scale KWin reported for the frames it is sending (1.0 = device pixels)."""
+        """Scale KWin reported for the frames it is sending (1.0 = device pixels).
+
+        For a **whole-output** frame this is that output's display scale (verified live:
+        0.75 and 1.25 on a 75% + 125% desk).  For a **region** frame it is the *scene*
+        factor instead -- KWin answers CaptureArea at one global scale whatever the output
+        it covers runs at -- so compare it with `area_scale`, not with `pixel_scale`.
+        """
         h = self._require()
         return float(h.scale)
 
     @property
     def pixel_scale(self) -> float:
-        """Measured device-pixels-per-logical-pixel for this Capture's output.
+        """The measured display scale of this Capture's output (0.75, 1.25, 1.0 ...).
 
         Measured once (two small grabs) and cached. KWin's reported `scale` above is what
         it applied to this frame; this is the output's actual scale, including 1.25/1.5.
@@ -1350,6 +1398,26 @@ class Capture:
                 name = active_monitor().name
             self._pixel_scale = measure_output_scale(name, binary=self.binary)
         return self._pixel_scale
+
+    @property
+    def area_scale(self) -> float:
+        """Scale region captures come back at: px in the frame per logical area px.
+
+        This is what `area=` is multiplied by to get the size of the image, and it is a
+        **scene-wide** number, not a per-output one: on a desk running 75% and 125% it was
+        1.25 on *both* outputs while the panels themselves were at 0.75 and 1.25. So an
+        ``area=(w, h)`` grab returns ``w*area_scale`` pixels -- and wherever
+        ``area_scale != pixel_scale`` those pixels are a **resample** of
+        ``w*pixel_scale`` real device pixels (checked against a native whole-output frame:
+        MAD 4.1 mapped through the display scale, 47 and 49 mapped through the scene factor
+        or used raw). A whole-output `Capture` never resamples: it is always device px.
+        """
+        if self._area_factor is None:
+            name = self.screen or (self.monitor.name if self.monitor else "")
+            if not name:
+                name = active_monitor().name
+            self._area_factor, self._pixel_scale = _scale_probe(name, binary=self.binary)
+        return self._area_factor
 
     @property
     def slot_bytes(self) -> int:

@@ -74,7 +74,7 @@ pip install "kwcapture[fast]"             # + OpenCV: ~8x faster resize/encode
 pip install "kwcapture @ git+https://github.com/tjandrasg/kwcapture.git"
 
 # or the prebuilt wheel straight from the release page:
-pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.4.0/kwcapture-0.4.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.5.0/kwcapture-0.5.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
 ```
 
 Needs **KDE Plasma with KWin on Wayland**. The PyPI wheel ships the small native helper
@@ -295,38 +295,62 @@ K.Capture(area=(0, 0, 800, 600))                       # unchanged: global scene
 Only **enabled** outputs are listed — a connected-but-disabled monitor has no image to
 capture (`kscreen-doctor -o` shows those and switches them on).
 
-## Fractional scaling (125 %, 150 %, ...)
+## Fractional scaling (75 %, 125 %, 150 %, ...)
 
-Frames are always captured at **device resolution**, so a scaled desktop gives you every
-pixel rather than a blurred re-scale — that is the useful default, and it is what
-`native-resolution` means. What fractional scaling changes is that *sizes you see in the
-UI are no longer sizes in the image*: a 2560-wide desktop at 150 % hands you a 3840-wide
-array.
+A **whole-output** frame is always device resolution — every pixel the panel shows, never a
+rescale. What scaling changes is that the numbers you see in the UI are no longer numbers
+in the image, and there is more than one scale involved. On a desk measured live (DP-1 at
+75 %, HDMI-A-1 at 125 %):
 
-`wl_output` can only advertise an **integer** scale, so a display set to 125 % reports `1`
-there. kwcapture measures the real one instead: it grabs one small area twice — once in
-device pixels, once at the composited size — and the ratio is the scale actually in use.
+| what | where you see it | this desk |
+| --- | --- | --- |
+| integer hint | `Monitor.scale` (`wl_output`) | 1 and 2 — cannot express fractions |
+| **display scale** | `Monitor.effective_scale`, `Capture.scale` of a whole-output frame | 0.75 and 1.25 |
+| **scene factor** | `Monitor.area_scale`, `Capture.area_scale`, `Capture.scale` of a *region* frame | 1.25 on both |
+
+`device pixels = logical pixels x display scale` — that is the relation that governs output
+geometry, window geometry and whole-output frames. kwcapture **measures** it (grabbing one
+small area in device pixels and once composited, and reading a whole-output frame), because
+`wl_output` can only advertise an integer.
 
 ```python
 m = K.list_monitors(measure_scale=True)[0]
 m.scale             # 1     <- what wl_output advertises (integer hint)
-m.effective_scale   # 1.25  <- what the display is actually running
+m.effective_scale   # 0.75  <- what the display is actually running
+m.area_scale        # 1.25  <- the scene-wide factor region captures come back at
 m.fractional        # True
-m.logical_geometry  # device size / scale
+m.logical_geometry  # device size / display scale
 m.to_physical(100, 60)    # logical -> device pixels
 m.to_logical(150, 90)     # device pixels -> logical
 
 cap = K.Capture(monitor=m)
-cap.scale        # the scale KWin applied to these frames (cheap, from the frame)
-cap.pixel_scale  # this output's measured scale (cached after the first probe)
+cap.scale        # scale KWin applied to these frames (cheap, straight from the frame)
+cap.pixel_scale  # this output's measured display scale (cached after the first probe)
 ```
 
-If you want a region in **device pixels** rather than scene coordinates, say so — otherwise
-`area=` is in logical scene coordinates and at 150 % a `100x100` area comes back as a
-`150x150` image:
+**Region captures are the exception.** `area=` is in logical scene coordinates, and KWin
+answers a region at the *scene* factor — one number for the whole desktop, not the scale of
+the output the region is on. So `area=(0, 0, w, h)` hands you a `w*area_scale x h*area_scale`
+image, and where `area_scale != pixel_scale` those pixels are a **resample** of the
+`w*pixel_scale` device pixels the region really covers (on a 75 % output, a region grab is
+an upsample; on an output at the scene scale it is 1:1). If that bothers you — and for
+pixel-exact work it should — grab the monitor and slice the array instead, below.
+
+`area_in="physical"` means *the rectangle is in device pixels of that output* (it needs
+`monitor=`, since device pixels only mean something within one output). It is converted
+through the display scale, so you get exactly the region you named — while the image itself
+stays at the scene factor, i.e. `w * area_scale/pixel_scale` px wide:
 
 ```python
 K.Capture(monitor="DP-1", area=(0, 0, 640, 360), area_in="physical")
+```
+
+For cropping, the simplest exact route is to grab the whole monitor and slice the numpy
+array — no rounding, no coordinate maths:
+
+```python
+frame = K.Capture(monitor="DP-1").grab()
+crop = frame[100:460, 640:1280]      # device pixels, exactly
 ```
 
 For cropping, the simplest exact route is to grab the whole monitor and slice the numpy
@@ -420,7 +444,7 @@ kwcapture/
   _desktop.py            the KWin authorisation desktop entry
   native/kwcapture.c     the capture daemon (sd-bus + shm ring + output and window listing)
   native/include/kwcapture_shm.h   shared-memory protocol (asserted on both sides)
-tests/test_kwcapture.py  60 functional checks (also `pytest tests/`)
+tests/test_kwcapture.py  159 functional checks (also `pytest tests/`)
 bench.py                 comparison against mss and PIL.ImageGrab
 probe/                   the reverse-engineering experiments (Wayland global dumper, etc.)
 AGENTS.md                investigation log — how the KWin API and its auth really work

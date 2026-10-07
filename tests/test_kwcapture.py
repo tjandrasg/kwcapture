@@ -173,9 +173,15 @@ def window_section():
                   str(arr.shape))
             check("window frame has real pixels", float(arr.mean()) > 1.0,
                   f"mean={arr.mean():.1f}")
+            # KWin lists windows in *logical* px and the frame is device px, so the two
+            # agree only after the output's scale (verified live: a window listed
+            # 472x466 on a 75% output is grabbed as 354x329).
+            ps = cap.pixel_scale
             check("window size matches what KWin reported (client vs frame geometry)",
-                  abs(arr.shape[1] - w.width) <= 96 and abs(arr.shape[0] - w.height) <= 96,
-                  f"grabbed {arr.shape[1]}x{arr.shape[0]}, listed {w.width}x{w.height}")
+                  abs(arr.shape[1] - w.width * ps) <= 96
+                  and abs(arr.shape[0] - w.height * ps) <= 96,
+                  f"grabbed {arr.shape[1]}x{arr.shape[0]}, listed {w.width}x{w.height} "
+                  f"x{ps:g}")
             st = cap.stats()
             check("stats() reports the window target",
                   st["target"] == "window" and st["window"] == w.id and st["status"] == "ok",
@@ -577,10 +583,14 @@ def monitor_section():
         with K.Capture(monitor=m, area=(0, 0, 320, 200),
                        shm=K.default_shm_path("marea")) as cap:
             f = cap.grab(copy=True, timeout=10)
-            check("monitor-relative area gives that size", f.shape == (200, 320, 4),
-                  str(f.shape))
-            check("and reports the area geometry, not the monitor's",
-                  cap.geometry() == (320, 200), str(cap.geometry()))
+            # `area` is logical; the image comes back in device pixels, so under fractional
+            # scaling the frame is area * area_scale, not area.
+            a = cap.area_scale
+            ew, eh = round(320 * a), round(200 * a)
+            check("monitor-relative area captures that region", f.shape == (eh, ew, 4),
+                  f"{f.shape[1]}x{f.shape[0]} expected {ew}x{eh} (area x{a:g})")
+            check("and reports the region's geometry, not the monitor's",
+                  cap.geometry() == (ew, eh), f"{cap.geometry()} vs ({ew},{eh})")
     except Exception as e:  # noqa: BLE001
         check("monitor-relative area gives that size", False, f"{type(e).__name__}: {e}")
 
@@ -588,9 +598,15 @@ def monitor_section():
     try:
         s = K.measure_output_scale(m.name)
         check("measure_output_scale gives a sane scale", 0.05 <= s <= 16.0, f"x{s:g}")
+        # wl_output carries only an integer hint (ceil), so it can be compared to only when
+        # the real scale is a whole number
         check("it agrees with wl_output when the scale is a whole number",
-              abs(s - (m.scale or 1)) < 0.01 or m.scale == 0,
+              abs(s - round(s)) > 0.01 or abs(s - (m.scale or 1)) < 0.01,
               f"measured x{s:g} vs wl_output x{m.scale}")
+        with K.Capture(monitor=m.name, shm=K.default_shm_path("mscale")) as cap:
+            cap.grab(copy=True, timeout=10)
+            check(f"{m.name}: measured scale == the scale KWin applies to frames",
+                  abs(s - cap.scale) < 0.01, f"measured x{s:g} vs frame x{cap.scale:g}")
     except Exception as e:  # noqa: BLE001
         check("measure_output_scale gives a sane scale", False, f"{type(e).__name__}: {e}")
     measured = K.list_monitors(measure_scale=True)
@@ -601,6 +617,14 @@ def monitor_section():
           all(x.logical_geometry[0] >= 1 and abs(x.logical_geometry[0] * x.effective_scale
                                                   - x.width) <= 2 for x in measured),
           str([(x.name, x.geometry, x.logical_geometry) for x in measured]))
+    if len(measured) > 1:
+        # The layout itself proves the scale: positions are logical and neighbours abut
+        # exactly, so the next monitor's x == the left one's logical right edge.
+        left, right = measured[0], measured[1]
+        want = left.x + left.width / left.effective_scale
+        check("neighbour's logical x == left monitor's logical right edge (proves scale)",
+              abs(right.x - want) <= 2,
+              f"{right.name}.x={right.x} vs {left.name} logical edge {want:.1f}")
     one = measured[0]
     back = one.to_logical(*one.to_physical(100, 60))
     check("to_physical / to_logical round-trip", abs(back[0] - 100) < 1.5
@@ -631,19 +655,56 @@ def monitor_section():
             check(name + " raises", True)
         except Exception as e:  # noqa: BLE001
             check(name + " raises", False, f"{type(e).__name__}: {e}")
-    # area_in='physical' is accepted and measured when a monitor names the frame of
-    # reference; the device rect comes back at (very nearly) that size
-    try:
-        with K.Capture(monitor=m, area=(0, 0, 256, 144), area_in="physical",
-                       shm=K.default_shm_path("mphys")) as cap:
-            f = cap.grab(copy=True, timeout=10)
-            ps = cap.pixel_scale
-            check("area_in='physical' gives a device-pixel sized frame",
-                  abs(f.shape[1] - 256) <= 3 and abs(f.shape[0] - 144) <= 3,
-                  f"{f.shape[1]}x{f.shape[0]} at x{ps:g}")
-    except Exception as e:  # noqa: BLE001
-        check("area_in='physical' gives a device-pixel sized frame", False,
-              f"{type(e).__name__}: {e}")
+    # area_in='physical' names the rectangle in **device pixels of this output** (that is
+    # the whole point of it), so the region covers 256x144 real pixels. The image itself is
+    # still rendered at the scene factor, hence 256*(area_scale/pixel_scale) px wide.
+    # Checked on every output: on one running at the scene scale both mappings coincide and
+    # only the size assertion bites, so the mixed-DPI case is the one that needs a sibling.
+    for mm in monitors:
+        try:
+            with K.Capture(monitor=mm, shm=K.default_shm_path("mphysnat")) as cap:
+                whole = cap.grab(copy=True, timeout=10)
+            # pick a 256x144 device rectangle that actually has detail in it: a flat patch
+            # of wallpaper matches every mapping and proves nothing
+            best = None
+            for yy in range(0, max(1, whole.shape[0] - 148), 90):
+                for xx in range(0, max(1, whole.shape[1] - 260), 90):
+                    c = whole[yy:yy + 144, xx:xx + 256, :3].astype(np.int16)
+                    score = float(np.abs(c - np.roll(c, 2, axis=1)).mean())
+                    if best is None or score > best[0]:
+                        best = (score, xx, yy)
+            detail, dx, dy = best
+            with K.Capture(monitor=mm, area=(dx, dy, 256, 144), area_in="physical",
+                           shm=K.default_shm_path("mphys")) as cap:
+                f = cap.grab(copy=True, timeout=10)
+                ps, a = cap.pixel_scale, cap.area_scale
+            ew, eh = round(256 * a / ps), round(144 * a / ps)
+            check(f"{mm.name}: area_in='physical' converts through the display scale",
+                  abs(f.shape[1] - ew) <= 3 and abs(f.shape[0] - eh) <= 3,
+                  f"{f.shape[1]}x{f.shape[0]} expected {ew}x{eh} "
+                  f"(display x{ps:g}, scene x{a:g})")
+            # the content check: the frame, back at device size, must be the device
+            # rectangle it names -- and clearly not the region the scene factor gives
+            got = K.resize(np.ascontiguousarray(f[..., :3]), width=256)[:144, :256].astype(int)
+            ref = whole[dy:dy + 144, dx:dx + 256, :3].astype(int)
+            mad = float(np.abs(got - ref).mean())
+            k = ps / a
+            if abs(k - 1.0) < 0.02:
+                check(f"{mm.name}: area_in='physical' grabs the device region it names",
+                      mad < 20.0, f"MAD={mad:.1f} (display == scene: one mapping only; "
+                                  f"detail {detail:.1f})")
+            else:
+                ox, oy = int(dx * k), int(dy * k)
+                alt = whole[oy:oy + max(8, int(144 * k)), ox:ox + max(8, int(256 * k)), :3]
+                alt = K.resize(np.ascontiguousarray(alt), width=256)[:144, :256].astype(int)
+                mad_alt = float(np.abs(got - alt).mean())
+                check(f"{mm.name}: area_in='physical' grabs the device region it names",
+                      mad < 20.0 and mad < mad_alt,
+                      f"MAD={mad:.1f} vs {mad_alt:.1f} for the scene-factor region "
+                      f"({detail:.1f} detail at device {dx},{dy})")
+        except Exception as e:  # noqa: BLE001
+            check(f"{mm.name}: area_in='physical' converts through the display scale",
+                  False, f"{type(e).__name__}: {e}")
 
 
 def _open_fds():
@@ -772,23 +833,43 @@ def _x11_windows():
     return rows
 
 
+def _wmctrl_geom(xid):
+    """(w, h) of an X11 window as the X server sees it, or None. `wmctrl -lG` columns:
+    id desktop x y w h host title."""
+    out = subprocess.run(["wmctrl", "-l", "-G"], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        cols = line.split()
+        if len(cols) >= 6 and cols[0] == xid:
+            return int(cols[4]), int(cols[5])
+    return None
+
+
 def _set_base(xid, w, h, tries=12):
-    """Resize the xterm and wait for KWin to agree before the Capture is created."""
+    """Resize the xterm and wait for the resize to land before the Capture is created.
+
+    Checked against wmctrl's own numbers, not KWin's: `Window.geometry` is *logical*, so
+    on a scaled desk a 320 px X11 window is not 320 anything there (256 at scene 1.25).
+    """
     subprocess.run(["wmctrl", "-i", "-r", xid, "-e", f"0,60,60,{w},{h}"], timeout=10)
     for _ in range(tries):
         time.sleep(0.4)
-        cands = [x for x in K.list_windows() if (x.app_id or "") == "XTerm"]
-        if len(cands) == 1 and abs(cands[0].geometry[0] - w) <= 8:
+        g = _wmctrl_geom(xid)
+        if g and abs(g[0] - w) <= 8 and abs(g[1] - h) <= 8:
             return True
     return False
 
 
-def _resize_then_wait(cap, xid, w, h, tries=10):
+def _resize_then_wait(cap, xid, w, h, tries=10, kx=1.0, ky=1.0):
     """Resize, then poll until the capture agrees on the new size.
 
     A window manager takes a moment, and the first frame after a resize can still carry
     the old geometry, so retry rather than declaring a miss too early. Returns
     (frame, matched, error).
+
+    `kx`/`ky` are the frame px per X11 px measured at the base size: the client's size,
+    KWin's logical size and the captured device size all differ under fractional scaling
+    (320 X11 px -> 256 logical -> 192 device at scene 1.25 / display 0.75), so the test
+    calibrates instead of assuming a 1:1 desk.
     """
     subprocess.run(["wmctrl", "-i", "-r", xid, "-e", f"0,60,60,{w},{h}"], timeout=10)
     err = None
@@ -801,7 +882,7 @@ def _resize_then_wait(cap, xid, w, h, tries=10):
             continue
         err = None
         # decorations/shadows: a little slack, but it must have moved to the new size
-        if abs(f.shape[1] - w) <= 60 and abs(f.shape[0] - h) <= 90:
+        if abs(f.shape[1] - w * kx) <= 60 and abs(f.shape[0] - h * ky) <= 90:
             return f, True, None
     return None, False, err
 
@@ -853,9 +934,11 @@ def window_resize_section():
                 check(f"window capture works ({'tiny' if tiny else 'default'} ring)",
                       f0.shape[0] > 0, f"{f0.shape[1]}x{f0.shape[0]} "
                                        f"slot={cap.slot_bytes / 2**20:.2f}MiB")
+                # frame px per X11 px on this desk (1.0 unscaled, 0.6 at scene 1.25 + 75%)
+                kx, ky = f0.shape[1] / base[0], f0.shape[0] / base[1]
                 followed = True
                 for (ww, hh) in steps:
-                    f, ok, err = _resize_then_wait(cap, xid, ww, hh)
+                    f, ok, err = _resize_then_wait(cap, xid, ww, hh, kx=kx, ky=ky)
                     if not ok:
                         followed = False
                         check(f"resize to {ww}x{hh} is followed "
@@ -1004,8 +1087,14 @@ def main():
 
     print("\n== region / workspace capture ==")
     with K.Capture(area=(0, 0, 640, 360)) as cap:
-        check("area capture geometry", cap.geometry() == (640, 360), str(cap.geometry()))
-        check("area frame usable", cap.grab().shape == (360, 640, 4))
+        # `area` is logical and the image is rendered at the scene factor, so on a scaled
+        # desk the frame is 640*area_scale wide, not 640 (1:1 when nothing is scaled).
+        a = cap.area_scale
+        ew, eh = round(640 * a), round(360 * a)
+        check("area capture geometry", cap.geometry() == (ew, eh),
+              f"{cap.geometry()} expected ({ew},{eh}) at area_scale x{a:g}")
+        check("area frame usable", cap.grab().shape == (eh, ew, 4),
+              str(cap.grab().shape))
     with K.Capture(workspace=True) as cap:
         g = cap.geometry()
         check("workspace capture produced a frame", g[0] >= s0["width"] and g[1] >= s0["height"],

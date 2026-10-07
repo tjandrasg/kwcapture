@@ -958,7 +958,14 @@ static int mode_monitors(int as_json)
  * exactly the same rectangle, and their ratio is that output's effective scale.  Costs a
  * 128x128 region each way, not a full screen, and KWin's ~11 ms fixed cost dominates.
  *
- * Prints: native_w native_h logical_w logical_h scale_x scale_y
+ * Prints: native_w native_h logical_w logical_h ratio_x ratio_y native_scale logical_scale
+ *
+ * NOTE the two are different quantities, and both matter.  Measured on a 75% + 125% pair:
+ * CaptureArea came back 160 px for a 128 logical area on *both* outputs -- KWin scales the
+ * area path by one global factor, not by the target output's scale -- while the reply
+ * metadata reported 0.75 and 1.25, the real per-output scales.  So the size ratio is the
+ * factor to divide a device-pixel rect by when handing it to CaptureArea, and the metadata
+ * scale is the answer to "what scale is this display at".
  */
 static int mode_probe_scale(sd_bus *bus, const char *out_name)
 {
@@ -997,13 +1004,29 @@ static int mode_probe_scale(sd_bus *bus, const char *out_name)
         free(buf);
         return 1;
     }
+    /* grab_sync grows *buf and frees the old one, so a pointer must never be left dangling
+     * after a free(): the next grab double-frees it ("free(): double free detected"). */
     free(buf);
+    buf = NULL;
+    cap = 0;
     if (log.width == 0 || log.height == 0) {
         fprintf(stderr, "kwcapture: scale probe got a zero logical size on '%s'\n", out_name);
         return 1;
     }
-    printf("%u %u %u %u %.4f %.4f\n", nat.width, nat.height, log.width, log.height,
-           (double)nat.width / (double)log.width, (double)nat.height / (double)log.height);
+    /* The area grabs above report the *scene* factor even in their `scale` field, so the
+     * display's own scale has to come from a whole-output grab. Costs one grab. */
+    opts_t whole = {0};
+    whole.native_resolution = 1;
+    whole.hide_caller_windows = 1;
+    whole.screen = (char *)out_name;
+    frame_out_t full = {0};
+    double display_scale = 0;
+    if (grab_sync(bus, &whole, &buf, &cap, &full, &gms, &rms) == 0)
+        display_scale = full.scale;
+    free(buf);
+    printf("%u %u %u %u %.4f %.4f %.4f %.4f\n", nat.width, nat.height, log.width, log.height,
+           (double)nat.width / (double)log.width, (double)nat.height / (double)log.height,
+           nat.scale, display_scale);
     return 0;
 }
 
