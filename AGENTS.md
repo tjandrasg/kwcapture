@@ -34,6 +34,123 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 159 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
 
+## FRESH STATUS — 2026-10-08 ~19:20 — **headless CI is GREEN, and honest about what it covers: KWin only owns `ScreenShot2` while it is OpenGL-compositing, and that needs a DRM device GitHub's runners do not have**
+
+> Outcome: `build` + `headless KWin capture (Plasma 6, no GPU)` both pass on PR #1 (run 39). The
+> job starts a real nested KWin 6.3 in a Debian trixie container, authorises the helper over the
+> desktop-entry mechanism, lists the nested output and the client window, and reports the capture
+> path as an `ENVIRONMENT LIMITATION` because that runner cannot give KWin a render node — with the
+> whole reason below, so nobody has to rediscover it. On a machine that *can* composite (this
+> desktop, any KDE self-hosted runner, a GPU runner) the same job runs strict and fails on anything.
+
+> Last verified state of this tree: run **40** green in **61 s** (headless job), `PROBE OK` locally
+> on Plasma 6.6, ring-reader suite green, functional suite **152/152** — after one flake that is now
+> FLAKE-1 below. The desk is **one output at x1** since today, not the 75 %/125 % pair the v0.5.0
+> notes describe, which is why the count is 152 and why the fractional-scaling tests are running in
+> their degenerate branches.
+
+The `headless-kwin` job gets a nested KWin up inside `debian:trixie-slim` (`nested KWin: pid 8033,
+socket kwcapture-test, output 1024x640`, and `list_monitors()` even answers `Virtual-0 (1024,640)`
+over Wayland) and then *every* capture dies with
+
+```
+kwcapture: The name org.kde.KWin.ScreenShot2 was not provided by any .service files
+         ; kwcapture: initial grab failed: No route to host
+```
+
+That is **not** an authorisation bug and not a kwcapture bug. Read out of the upstream source
+(kwin 6.3.6 = what trixie ships; identical in 6.4 / 6.5 / 6.6 and master):
+
+* `src/plugins/screenshot/screenshot.cpp` → `bool ScreenShotEffect::supported() { return
+effects->isOpenGLCompositing(); }`. That effect is the **only** owner of the bus name: its
+constructor makes a `ScreenShotDBusInterface2`, which is what calls
+`registerService("org.kde.KWin.ScreenShot2")` (`screenshotdbusinterface2.cpp`). No OpenGL
+compositing ⇒ effect not loaded ⇒ **name never appears** ⇒ exactly the error above. The same
+code also explains why an unauthorised call *raises* instead of returning black: different layer.
+* `src/backends/virtual/virtual_backend.cpp` → `supportedCompositors()` adds `OpenGLCompositing`
+**only if `findRenderDevice()`/`drmGetDevices2()` found a DRM node**; otherwise it offers
+`QPainterCompositing` alone. A container has no `/dev/dri`, so `WaylandCompositor::createRenderer()`
+logs `kwin_core: Configured compositor not supported by Platform. Falling back to defaults` —
+which we now see in the CI log, and which is the *smoking gun* — and quietly composites with
+QPainter. `kwin_wayland --x11` is no escape: `X11WindowedBackend` likewise only offers OpenGL when
+DRI3 hands it a DRM fd (Xvfb has none).
+* **Therefore the headless recipe needs a DRM render node, and no amount of Mesa env tinkering
+can substitute for it** — the decision is taken on `drmGetDevices2()` before Mesa is asked
+anything, so `LIBGL_ALWAYS_SOFTWARE=1` / `EGL_PLATFORM=surfaceless` / installing `libgl1-mesa-dri`
+change nothing. (`--virtual`'s EGL backend in ≤ 6.6 is `EGL_PLATFORM_GBM_KHR` on that device,
+see `virtual_egl_backend.cpp` — it genuinely cannot work without one.) Upstream even special-cases
+**vgem** in `findRenderDevice()` ("prefer the primary node because gbm will attempt to allocate
+dumb buffers"), i.e. KWin's own CI uses a *virtual* DRM node — that is the thing to get in CI.
+Master (post-6.6) changed `supportedCompositors()` to `{OpenGLCompositing}` unconditionally with
+the new `RenderDevice` abstraction, so a future KWin may do surfaceless llvmpipe with no DRM at
+all; nothing released does today.
+* **Measured on the runner itself (run 38, the first job that printed it):**
+  `/dev/dri/card1` **exists** — driver **`hyperv_drm`**, `root:video`, and **no `renderD*` node**.
+  A card node alone does not count for KWin (`nodeType = DRM_NODE_RENDER`, primary only for vgem),
+  so even passing it in with `--device /dev/dri` does not buy the capture path. `vgem` and `vkms`
+  are **not loadable** on the runner kernel (`6.17.0-1022-azure`): "Module … not found in directory
+  /lib/modules/…" — they ship in `linux-modules-extra-<version>`, which the runner image does not
+  install. The job now installs that package (if the archive still has the exact version) and
+  retries `modprobe vgem`; KWin special-cases vgem precisely because dumb buffers need the primary
+  node, so a vgem render/primary node is the thing that would make this work.
+* **Run 39 answered that experiment too, and the answer is no:**
+  `apt-get install linux-modules-extra-6.17.0-1022-azure` **works** (51 MB from
+  azure.archive.ubuntu.com) and still `modprobe vgem → FATAL: Module vgem not found` — Ubuntu does
+  not build `vgem`/`vkms` for the azure flavour at all. **Conclusion: a GitHub-hosted runner can
+  never give KWin a render node**, so the ScreenShot2 frames are not testable there, period. What
+  would work: a runner image/label with a real GPU, or a **self-hosted runner** on any KDE machine
+  (that is the plan for the frames; the job needs nothing special — with a render node present it
+  silently switches back to strict and tolerates nothing).
+* **The CI proof, verbatim from the log** (`QT_LOGGING_RULES=kwin_core.debug=true`):
+  `Configured compositor not supported by Platform. Falling back to defaults` → `Attempting to load
+  the QPainter scene` → `QPainter compositing has been successfully initialized` → …
+  `Effect is not supported:  "screenshot"`. Everything else in the job works with that compositor:
+  the socket, `monitors: [('Virtual-0', (1024, 640))]`, `windows: 1 [('KCalc', (648, 513))]` — so
+  window *listing* is not GL-dependent, only the frames are.
+* **Upstream's own CI shortcut exists but is not usable for us:** since 6.5 (and in 6.6/6.7)
+  `findRenderDevice()` starts with `if (qEnvironmentVariableIsSet("CI")) return
+  RenderDevice::open("/dev/dri/card1");` — GitHub sets `CI=true`, so that would hand KWin the
+  renderless hyperv node… but it is inside `#if !HAVE_LIBDRM_FAUX`, i.e. compiled out on any distro
+  with libdrm ≥ the faux-bus release, and trixie's 6.3 does not have it at all. Do not build a plan
+  on it.
+* **So the CI job now states its own coverage honestly:** `probe/ci_headless_kwin.sh` asks "would
+  KWin's `findRenderDevice()` find anything?" (render node, or a vgem primary via
+  `/sys/class/drm/card*/device/driver`). Yes → strict, nothing tolerated. No →
+  `KWCAPTURE_NESTED_ALLOW_NO_SCREENSHOT2=1`, which turns *only* the missing-ScreenShot2 failures
+  into a printed `ENVIRONMENT LIMITATION` (socket, authorisation, output listing, window listing,
+  client startup and every other `doctor` check still fail the job). A runner with a GPU — or a
+  self-hosted KDE runner — automatically gets the strict job back.
+* **Not the problem: PipeWire.** KWin logs `kwin_screencast: Failed to create PipeWire context`
+in that container, and `screencast.so` is the *portal* screen-cast plugin. ScreenShot2 needs no
+PipeWire: we hand KWin a **pipe** fd and `ScreenShotWriter2` writes the raw QImage into it from a
+QThreadPool (that writer is also the origin of the benign `pipe is broken` line and of the
+"KWin replies before the pixels arrive" fact). Do not add a `pipewire` package to the job chasing
+that log line.
+* **Second, independent bug in the same run:** the Qt **Wayland** QPA plugin is *not* in
+`qt6-qpa-plugins`. Debian ships it as **`qt6-wayland`** (`.../qt6/plugins/platforms/
+libqwayland-egl.so` + `libqwayland-generic.so`), so `QT_QPA_PLATFORM=wayland kcalc` aborted with
+`Could not find the Qt platform plugin "wayland" ... Available platform plugins are: linuxfb,
+vkkhrdisplay, eglfs, vnc, xcb, minimal, offscreen, minimalegl` — and note that `list_windows()`
+returning `0 []` (not an error!) was the *correct* answer for a session whose only client died.
+* Debugging lever for next time, cheap and decisive: `QT_LOGGING_RULES="kwin_core.debug=true"`
+makes KWin say *why* (`Attempting to load the OpenGL scene` / `Driver does not recommend OpenGL
+compositing` / `QPainter compositing has been successfully initialized`) instead of the one-line
+warning. The probe now passes it when `KWCAPTURE_NESTED_KWIN_DEBUG=1`.
+* Verified after reworking the probe: strict path still **PROBE OK** on this desktop (KCalc
+  (640,508), 1024x640 screen frame, 640x480 window frame, doctor rc=0 ×3), and the tolerant path
+  was exercised with `kwcapture` stubbed to raise exactly the CI error — exit 0 with
+  `ENVIRONMENT LIMITATION` when allowed, exit 1 when not.
+
+### How to run the headless job by hand (it is not GitHub-specific)
+
+```
+docker run --rm --device /dev/dri -v "$PWD:/w" debian:trixie-slim bash /w/probe/ci_headless_kwin.sh
+```
+
+That is the whole CI job (KWin 6.3 + kcalc in trixie, kwcapture pip-installed, probe run with the
+strict window requirement). On a Plasma box no container is needed at all:
+`dbus-run-session -- bash probe/nested_kwin_test.sh`.
+
 ## FRESH STATUS — 2026-10-08 ~15:30 — **merged into nunif**, and **headless KWin capture works**
 
 ### Downstream: nagadomi/nunif#746 is MERGED
@@ -434,6 +551,28 @@ that request). Assume a force-push does not un-publish anything.
 > see it, before you chase it.** Do not investigate first and write it up later — two
 > sessions have now lost findings that way. A half-paragraph with the symptom is worth more
 > than a perfect post-mortem that never gets typed. Mark unverified guesses `(unverified)`.
+
+### FLAKE-1 (test suite, not the library): `area_in='physical' grabs the device region it names` fails when the screen is animating
+
+* **Seen 2026-10-08 ~19:10**, once, on the desktop: `[FAIL] DP-1: area_in='physical' grabs the
+  device region it names  MAD=70.0 (display == scene: one mapping only; detail 12.3)`. Rerunning
+  the whole suite immediately after: **152/152 green**, twice. Nothing in the library was touched
+  (that branch changes `probe/`, the workflow and the docs only).
+* **Why the test can do that** (`tests/test_kwcapture.py`, the `mphysnat`/`mphys` pair): it grabs
+  the whole output, picks the *most detailed* 256x144 device rectangle it can find, then grabs that
+  rectangle again in a **second, separate** ScreenShot2 request and compares contents. Detail is
+  exactly what animation looks like to that scan, so a video / terminal / anything repainting in
+  the chosen rectangle makes MAD explode (70 is far past a cursor sprite: ~12 at most). The
+  comparison is between two frames, not two mappings.
+* **Fix, when someone touches that test**: grab the whole output twice and mask out every rectangle
+  that differs between them, then choose the detailed-and-stable patch. Do not just loosen the
+  20.0 threshold — a threshold that has to cover a moving picture protects nothing.
+* **Also note**: the suite's check **count depends on how many outputs the desk has** — 159 on the
+  two-output desk (DP-1 75 % + HDMI-A-1 125 %) that the v0.5.0 notes describe, **152 now** that the
+  desk has one output at 100 %. `kwcapture monitors --measure-scale` before quoting a number; the
+  per-output checks (`area_in="physical"` especially) are only meaningful with both a display scale
+  and a scene scale that differ, and today's desk has neither (x1/x1 → the degenerate
+  "one mapping only" branch).
 
 ### BUG-1 (surfaced in v0.4.0; KWin's behaviour itself is unfixable): a **minimised window captures a STALE frame**
 
@@ -870,17 +1009,20 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
    what shipped and what was verified, and commit + push that too.
 
 ## Ideas not done yet
-* **CI integration test against a real (headless) KWin — now that `probe/nested_kwin_test.sh`
-  proves it works, this is the highest-value unclaimed thing in the repo.** A job that
-  `apt-get install -y kwin-wayland kcalc` and runs `dbus-run-session -- bash
-  probe/nested_kwin_test.sh` would exercise the *actual* `org.kde.KWin.ScreenShot2` path — the
-  part the 37 ring-reader checks cannot reach — including per-window capture, and it would give a
-  place to finally test BUG-1 (minimised → stale frame: minimise the KCalc from the test) and
-  `scale=` handling (KWin's `--scale` option exists). Unknowns to check before promising it:
-  whether KWin starts in a GitHub runner with no DRM and no X (it did here with
-  `QT_QPA_PLATFORM=offscreen --virtual`, on a machine that *has* a GPU — CI needs the same flags
-  without a real session), and whether the desktop-entry authorisation works when
-  `kbuildsycoca6`/KService has no cache yet.
+* **CI integration test against a real (headless) KWin — DONE in `.github/workflows/ci.yml`
+  (`headless-kwin`, branch `ci/headless-kwin` + PR #1), with one hard limit: GitHub's runners have
+  no DRM render node, so the job covers the nested session (KWin starts, Wayland socket, private
+  D-Bus, desktop-entry authorisation, output listing, per-window listing, the Qt client) but not
+  the frames themselves — see the FRESH STATUS at the top for why that is a hardware fact, not a
+  bug.** Still open, and now cheap because the harness exists:
+  * run the strict job somewhere with a render node: a **self-hosted runner** on this desktop, or a
+    GPU-labelled runner. `docker run --rm --device /dev/dri -v "$PWD:/w" debian:trixie-slim
+    bash /w/probe/ci_headless_kwin.sh` already does it on any KDE machine without a runner.
+  * test BUG-1 (minimised → stale frame) inside the nested session — minimise the KCalc from the
+    probe and assert what comes back; nothing else in the repo can reach that state on demand.
+  * test `scale=` handling: `kwin_wayland --scale` exists, so `KWCAPTURE_NESTED_SIZE` plus a scale
+    knob in `probe/nested_kwin_test.sh` would re-verify the fractional-scaling conclusions on a
+    compositor whose scale is known instead of whatever the desk happens to be set to.
 * ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
   (`Window.active`, `active_window_id()`, `--active-window-id`).
 * `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.

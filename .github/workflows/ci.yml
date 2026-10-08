@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      try_vgem:
+        description: >-
+          headless-kwin: apt-install linux-modules-extra-<kernel> and modprobe vgem. Measured on
+          2026-10-08: the package installs fine and the azure kernel still has no vgem/vkms, so
+          this is only worth turning on to re-test after a runner image or kernel change.
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -71,3 +80,90 @@ jobs:
 
       - name: List artefacts
         run: ls -l dist/
+
+  headless-kwin:
+    # End-to-end capture against a *real* KWin with no GPU, no monitor and nobody logged in:
+    # `kwin_wayland --virtual` on a private D-Bus session, driven by probe/nested_kwin_test.sh.
+    # This is the only automated coverage the org.kde.KWin.ScreenShot2 path ever gets -- the
+    # build job above cannot reach it, which is why whole classes of behaviour (window handles,
+    # authorisation, the empty-session black frame) were only ever verified on one developer
+    # desktop.
+    #
+    # This is deliberately NOT a `container:` job. KWin owns the ScreenShot2 name only while it is
+    # OpenGL-compositing (the name is registered by its screenshot effect, whose supported() is
+    # effects->isOpenGLCompositing()) and the --virtual backend offers OpenGL compositing only when
+    # drmGetDevices2() finds a DRM render node. A container without /dev/dri therefore falls back
+    # to QPainter compositing and capture cannot work at all -- no Mesa variable changes that. So
+    # the container has to be started by hand with --device /dev/dri, and the node may have to be
+    # created first (modprobe vgem): both are host operations, hence a runner-side job that runs
+    # probe/ci_headless_kwin.sh inside a container it starts itself. `docker run --rm --device
+    # /dev/dri -v "$PWD:/w" debian:trixie-slim bash /w/probe/ci_headless_kwin.sh` is the same
+    # thing on any machine with KWin-capable hardware. On a self-hosted runner (or any runner with
+    # a GPU) the same job runs strict by itself: probe/ci_headless_kwin.sh only tolerates the
+    # missing ScreenShot2 when findRenderDevice() would have found nothing.
+    name: headless KWin capture (Plasma 6, no GPU)
+    runs-on: ubuntu-latest
+    env:
+      # No GPU on a runner, and a virtual DRM node has no hardware driver either: force llvmpipe
+      # instead of letting KWin discover that its configured compositor is unavailable.
+      LIBGL_ALWAYS_SOFTWARE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Give the runner a DRM render node
+        # What decides everything here is whether KWin's findRenderDevice() would find a *render*
+        # node: a card node alone does not count (it accepts the primary node only for vgem, whose
+        # own CI that is). Measured on this runner: /dev/dri/card1 from `hyperv_drm`, renderless,
+        # and vgem/vkms are not in the runner kernel's module directory -- they live in
+        # linux-modules-extra-<version>, which the runner image does not install. So try to get it.
+        run: |
+          set -x
+          uname -a
+          ls -l /dev/dri 2>&1 || true
+          for d in /sys/class/drm/card*; do
+            [ -e "$d" ] || continue
+            echo "$d -> $(basename "$(readlink -f "$d/device/driver" 2>/dev/null)")"
+          done
+          find /lib/modules -maxdepth 1 -mindepth 1 | head
+          find /lib/modules \( -name 'vgem*' -o -name 'vkms*' \) 2>/dev/null | head -5
+          if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
+            sudo modprobe vgem || echo "modprobe vgem failed (rc=$?)"
+            # Re-test only when asked: measured 2026-10-08, linux-modules-extra-<kernel> installs
+            # fine on the runner and still contains no vgem/vkms, so doing this on every push buys
+            # nothing but 51 MB of download and a depmod.
+            if [ "${{ inputs.try_vgem }}" = "true" ]; then
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends "linux-modules-extra-$(uname -r)" \
+                || echo "no linux-modules-extra-$(uname -r) package available"
+              sudo modprobe vgem || echo "modprobe vgem failed (rc=$?) after the install"
+            fi
+          fi
+          set +x
+          echo "render nodes now: $(ls /dev/dri 2>/dev/null | grep -c renderD || true)"
+          echo "all drm nodes now: $(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
+          if ls /dev/dri/renderD* >/dev/null 2>&1; then
+            echo "A RENDER NODE IS AVAILABLE: the capture path must work in this job"
+          else
+            echo "::warning::no DRM render node on this runner: KWin cannot OpenGL-composite, so"
+            echo "::warning::it will not own org.kde.KWin.ScreenShot2 and the capture path cannot"
+            echo "::warning::be covered here (see the DRM note in probe/ci_headless_kwin.sh)"
+          fi
+
+      - name: Capture a nested headless KWin (Debian trixie container)
+        # The script installs KWin 6 + kcalc, pip-installs this checkout, authorises the helper
+        # and runs the probe. It exits non-zero if the frame is the wrong size (wrong compositor),
+        # if it is black while a window is up, if the client could not start, or if `doctor`
+        # regresses to failing an empty session -- and only tolerates the one failure that is the
+        # environment's fault (no render node), which it says so out loud.
+        run: |
+          DEVICE=()
+          # /dev/dri as a whole: KWin wants a render node, but pass the card node too so the log
+          # shows what was there rather than pretending the directory was empty.
+          if [ -d /dev/dri ]; then
+            DEVICE=(--device /dev/dri)
+            echo "passing $(ls /dev/dri | tr '\n' ' ')into the container"
+          fi
+          docker run --rm "${DEVICE[@]+"${DEVICE[@]}"}" \
+            -e LIBGL_ALWAYS_SOFTWARE -e SRC=/w \
+            -v "$GITHUB_WORKSPACE:/w" \
+            debian:trixie-slim bash /w/probe/ci_headless_kwin.sh

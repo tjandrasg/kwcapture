@@ -34,8 +34,32 @@ import kwcapture as K
 W, H = (int(x) for x in os.environ.get("KWCAPTURE_NESTED_SIZE", "1024x640").lower().split("x"))
 
 
+# What "the bus name is not there" means. KWin registers org.kde.KWin.ScreenShot2 from its
+# screenshot effect, and that effect's supported() is effects->isOpenGLCompositing(); the
+# --virtual backend offers OpenGL compositing only when drmGetDevices2() found a DRM node. With no
+# /dev/dri KWin falls back to QPainter compositing and the name never appears -- no Mesa setting
+# changes that, the choice is made before GL is asked. `kwin_wayland --x11` needs a DRM fd from
+# DRI3 too. (Verified against kwin 6.3.6 sources: src/plugins/screenshot/screenshot.cpp,
+# src/backends/virtual/virtual_backend.cpp, src/compositor_wayland.cpp.)
+SCREENSHOT2_NOT_REGISTERED = "was not provided by any .service files"
+
+SCREENSHOT2_MISSING = ("KWin does not own org.kde.KWin.ScreenShot2: it only registers that name "
+                       "while OpenGL-compositing, and its --virtual backend offers OpenGL only if "
+                       "it found a DRM device. With no /dev/dri it silently falls back to QPainter "
+                       "compositing (kwin_core: 'Configured compositor not supported by Platform'). "
+                       "Fix: give the environment a render node -- pass the host's in "
+                       "(docker run --device /dev/dri) or create a virtual one (modprobe vgem).")
+
+
+# Set to accept "this environment cannot provide ScreenShot2 at all" as an environment limitation
+# (exit 0, loudly) instead of a failure. CI sets it only when no DRM render node exists; on a
+# machine where KWin *can* composite, a missing ScreenShot2 stays a hard failure.
+ALLOW_NO_SCREENSHOT2 = os.environ.get("KWCAPTURE_NESTED_ALLOW_NO_SCREENSHOT2") == "1"
+
+
 def main() -> int:
-    failures = []
+    failures = []          # kwcapture is broken, or the frame is wrong: always a failure
+    env_failures = []      # the compositor cannot offer ScreenShot2: the machine's fault
     print("WAYLAND_DISPLAY =", os.environ.get("WAYLAND_DISPLAY"))
     print("DBUS_SESSION_BUS_ADDRESS =", os.environ.get("DBUS_SESSION_BUS_ADDRESS"))
 
@@ -47,37 +71,78 @@ def main() -> int:
         failures.append(f"expected the nested {W}x{H} output, got {monitors[0].name} "
                         f"{monitors[0].width}x{monitors[0].height}")
 
-    windows = K.list_windows()
-    print("windows:", len(windows), [(w.name, w.geometry) for w in windows[:4]])
+    # Listing windows goes through KWin's krunner integration plugin (/WindowsRunner). A stripped
+    # KWin install can lack it, and then the capture path still works -- so a failure here is a
+    # note unless the caller insists (CI does, because losing window coverage silently is worse).
+    require_window = os.environ.get("KWCAPTURE_NESTED_REQUIRE_WINDOW") == "1"
+    windows = []
+    try:
+        windows = K.list_windows()
+        print("windows:", len(windows), [(w.name, w.geometry) for w in windows[:4]])
+    except Exception as e:
+        print("windows: listing FAILED:", type(e).__name__, e)
+        if require_window:
+            failures.append(f"window listing failed: {e} "
+                            "(KWin's krunnerintegration plugin provides /WindowsRunner)")
 
-    with K.Capture(shm=K.unique_shm_path("nested")) as cap:
-        frame = cap.grab(copy=True, timeout=20)
-        mean = [round(float(frame[..., i].mean()), 1) for i in range(3)]
-        print("screen grab:", frame.shape, "mean B/G/R =", mean, "max =", int(frame.max()))
-        if frame.shape[:2] != (H, W):
-            failures.append(f"screen frame is {frame.shape[1]}x{frame.shape[0]}, "
-                            f"expected {W}x{H} -> the capture came from another compositor")
-        if frame.max() <= 16:
-            failures.append("screen frame is black (empty nested session? start a client in it)")
+    # A missing/unreachable ScreenShot2 name is an *environment* verdict, not a kwcapture bug, so
+    # report it as a failure with the reason instead of a traceback (see SCREENSHOT2_MISSING).
+    try:
+        with K.Capture(shm=K.unique_shm_path("nested")) as cap:
+            frame = cap.grab(copy=True, timeout=20)
+            mean = [round(float(frame[..., i].mean()), 1) for i in range(3)]
+            print("screen grab:", frame.shape, "mean B/G/R =", mean, "max =", int(frame.max()))
+            if frame.shape[:2] != (H, W):
+                failures.append(f"screen frame is {frame.shape[1]}x{frame.shape[0]}, "
+                                f"expected {W}x{H} -> the capture came from another compositor")
+            if frame.max() <= 16:
+                failures.append("screen frame is black (empty nested session? start a client in it)")
+    except Exception as e:
+        print("screen grab: FAILED:", type(e).__name__, e)
+        target = env_failures if SCREENSHOT2_NOT_REGISTERED in str(e) else failures
+        target.append(f"screen capture failed: {e}")
+        if target is env_failures:
+            target.append(SCREENSHOT2_MISSING)
 
     if windows:
-        with K.Capture(window=windows[0].id, shm=K.unique_shm_path("nestedw")) as win_cap:
-            tick = time.perf_counter()
-            wf = win_cap.grab(copy=True, timeout=20)
-            ms = (time.perf_counter() - tick) * 1000
-            print("window grab:", wf.shape, f"{ms:.1f} ms",
-                  "mean B/G/R =", [round(float(wf[..., i].mean()), 1) for i in range(3)],
-                  "max =", int(wf.max()))
-            if wf.max() <= 16:
-                failures.append(f"window frame for {windows[0].name!r} is black")
+        try:
+            with K.Capture(window=windows[0].id, shm=K.unique_shm_path("nestedw")) as win_cap:
+                tick = time.perf_counter()
+                wf = win_cap.grab(copy=True, timeout=20)
+                ms = (time.perf_counter() - tick) * 1000
+                print("window grab:", wf.shape, f"{ms:.1f} ms",
+                      "mean B/G/R =", [round(float(wf[..., i].mean()), 1) for i in range(3)],
+                      "max =", int(wf.max()))
+                if wf.max() <= 16:
+                    failures.append(f"window frame for {windows[0].name!r} is black")
+        except Exception as e:
+            print("window grab: FAILED:", type(e).__name__, e)
+            target = env_failures if SCREENSHOT2_NOT_REGISTERED in str(e) else failures
+            target.append(f"window capture for {windows[0].name!r} failed: {e}")
     else:
         print("NOTE: no window in the nested session, only the screen path was checked")
+        if require_window:
+            failures.append("no capturable window in the nested session: did the client start?")
 
     for f in failures:
         print("FAIL:", f, file=sys.stderr)
-    print("OK: nested KWin composites and kwcapture captured it" if not failures else
-          "FAILED: see above", file=sys.stderr if failures else sys.stdout)
-    return 1 if failures else 0
+    if failures:
+        print("FAILED: see above", file=sys.stderr)
+        return 1
+
+    if env_failures:
+        out = sys.stderr if not ALLOW_NO_SCREENSHOT2 else sys.stdout
+        for f in env_failures:
+            print("NOTE:" if ALLOW_NO_SCREENSHOT2 else "FAIL:", f, file=out)
+        if ALLOW_NO_SCREENSHOT2:
+            print("ENVIRONMENT LIMITATION: KWin could not offer the capture path here, and "
+                  "everything else checked out (KWin started, output listed, windows listed). "
+                  "Run this on a machine with a DRM render node to cover the frames.", file=out)
+            return 0
+        return 1
+
+    print("OK: nested KWin composites and kwcapture captured it")
+    return 0
 
 
 if __name__ == "__main__":
