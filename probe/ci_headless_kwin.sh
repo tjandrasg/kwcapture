@@ -49,7 +49,31 @@ setcap -r /usr/bin/kwin_wayland
 echo "capabilities after setcap -r: '$(getcap /usr/bin/kwin_wayland)'"
 kwin_wayland --version 2>&1 | head -2
 
-echo "DRM devices: $(ls /dev/dri 2>/dev/null | tr '\n' ' ' || true)(empty => KWin cannot OpenGL-composite => no ScreenShot2)"
+# What KWin's findRenderDevice() would accept: a render node, or the primary node of a vgem
+# device (it takes the primary only for vgem, because gbm allocates dumb buffers). Anything else -
+# e.g. a renderless hyperv_drm card node, which is what a GitHub runner has - is not a device as
+# far as KWin is concerned, and then it composites with QPainter and never registers ScreenShot2.
+kwin_drm_node() {
+    for n in /dev/dri/renderD*; do
+        [ -e "$n" ] && { echo "$n"; return 0; }
+    done
+    for c in /sys/class/drm/card*; do
+        [ -e "$c" ] || continue
+        if [ "$(basename "$(readlink -f "$c/device/driver" 2>/dev/null)")" = vgem ]; then
+            echo "/dev/dri/$(basename "$c") (vgem primary)"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if NODE=$(kwin_drm_node); then
+    echo "DRM node KWin can use: $NODE"
+else
+    echo "DRM nodes present: '$(ls /dev/dri 2>/dev/null | tr '\n' ' ')'(none usable by KWin =>"
+    echo "  no OpenGL compositing => no org.kde.KWin.ScreenShot2 => capturing is impossible here)"
+fi
+echo "all drm nodes: $(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
 # What the probe depends on, printed so a failure is not a mystery: /WindowsRunner comes from
 # kwin's krunnerintegration plugin, the client needs the Qt Wayland platform plugin (package
 # `qt6-wayland`, NOT qt6-qpa-plugins), and OpenGL compositing needs some GL driver (llvmpipe).
@@ -70,7 +94,18 @@ ls -l "${XDG_DATA_HOME:-$HOME/.local/share/applications}"/io.github.kwcapture-*.
 # "helper not found" for a perfectly good install. The installed-package path is the one users
 # take anyway.
 cd /tmp
+# Only the one failure that is the machine's fault is tolerated, and only when KWin demonstrably
+# cannot offer the capture path here. Everything else -- client that cannot start, helper that
+# cannot be authorised, frame at the wrong size, a doctor that fails for any other reason -- still
+# fails the job, and on a runner that DOES have a render node nothing is tolerated at all.
+ALLOW=()
+if ! kwin_drm_node >/dev/null; then
+  ALLOW=(KWCAPTURE_NESTED_ALLOW_NO_SCREENSHOT2=1)
+  echo "no usable DRM render node: the capture path cannot exist in this container, so that one"
+  echo "  failure will be reported as an environment limitation instead of a kwcapture failure"
+fi
 dbus-run-session -- env PYTHON=/tmp/venv/bin/python \
   KWCAPTURE_NESTED_REQUIRE_WINDOW=1 \
   KWCAPTURE_NESTED_KWIN_DEBUG=1 \
+  "${ALLOW[@]+"${ALLOW[@]}"}" \
   bash "$SRC/probe/nested_kwin_test.sh"

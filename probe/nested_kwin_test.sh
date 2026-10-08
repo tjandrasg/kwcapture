@@ -30,7 +30,17 @@
 # warnings (`qt.qpa.services`, `kf.wallet.ksecretd`, `fusermount3 ... gvfs`) mean nothing.
 #
 # Needs: kwin_wayland (Debian/Ubuntu: kwin-wayland, Fedora/Arch: kwin), a Wayland client for
-# the window path (kcalc/konsole/gtk4-demo/...), dbus-run-session, and a built helper.
+# the window path (kcalc/konsole/gtk4-demo/...), dbus-run-session, a built helper, and -- for the
+# capture path itself -- a DRM render node: KWin registers org.kde.KWin.ScreenShot2 from its
+# screenshot effect, whose supported() is effects->isOpenGLCompositing(), and its --virtual backend
+# offers OpenGL compositing only when drmGetDevices2() finds a device. Without one KWin composites
+# with QPainter and every capture fails with "The name org.kde.KWin.ScreenShot2 was not provided by
+# any .service files". KWCAPTURE_NESTED_ALLOW_NO_SCREENSHOT2=1 reports that as an environment
+# limitation instead of a failure (used by CI on runners that have no render node); window listing,
+# the socket, the client and the authorisation are still checked either way.
+#
+# Environment: KWCAPTURE_NESTED_SOCKET / _SIZE / _CLIENT / _REQUIRE_WINDOW / _KWIN_DEBUG /
+# _ALLOW_NO_SCREENSHOT2, PYTHON.
 set -u
 
 SOCK="${KWCAPTURE_NESTED_SOCKET:-kwcapture-test}"
@@ -67,12 +77,12 @@ fi
 # "The name org.kde.KWin.ScreenShot2 was not provided by any .service files". Say so up front --
 # no Mesa environment variable can substitute for the device, the choice is made before GL is
 # even asked. (kwin_wayland --x11 needs one too: OpenGL only appears when DRI3 provides an fd.)
-if ! ls /dev/dri/renderD* /dev/dri/card* >/dev/null 2>&1; then
-    echo "note: no DRM device on this machine (/dev/dri absent or empty):"
-    echo "      KWin cannot do OpenGL compositing, so it will NOT register"
-    echo "      org.kde.KWin.ScreenShot2 and capturing cannot work here."
-    echo "      A container needs the host's render node passed in (docker --device /dev/dri);"
-    echo "      on a kernel without a GPU driver, vgem provides one (modprobe vgem)."
+if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
+    echo "note: no DRM RENDER node here ('$(ls /dev/dri 2>/dev/null | tr '\n' ' ')'): KWin cannot"
+    echo "      do OpenGL compositing, so it will NOT register org.kde.KWin.ScreenShot2 and"
+    echo "      capturing cannot work. A card node alone is not enough -- KWin accepts a primary"
+    echo "      node only for vgem. Pass the host's node into a container (docker run --device"
+    echo "      /dev/dri) or create a virtual one (modprobe vgem, from linux-modules-extra)."
 fi
 
 # QT_LOGGING_RULES=kwin_core.debug=true is what tells you *why* a compositor was not chosen
@@ -120,7 +130,18 @@ run_doctor() {
         timeout 60 "$PYTHON" -m kwcapture doctor "${@:2}" 2>&1)
     rc=$?
     echo "doctor ($label): rc=$rc | $(printf '%s\n' "$out" | grep -E "capture works|all-black|FAIL" | head -2 | tr '\n' ' ')"
-    [ "$rc" -eq 0 ] || FAILED=1
+    if [ "$rc" -ne 0 ]; then
+        # Same rule as probe/nested_kwin.py: a compositor that cannot offer ScreenShot2 is the
+        # machine's fault, and only when the caller said that is acceptable (CI does when it has
+        # no DRM render node). Any other doctor failure still fails the run.
+        if [ "${KWCAPTURE_NESTED_ALLOW_NO_SCREENSHOT2:-}" = "1" ] &&
+               printf '%s' "$out" | grep -q "org.kde.KWin.ScreenShot2"; then
+            echo "      doctor could not capture because KWin has no ScreenShot2 here:"
+            echo "      environment limitation, not counted as a failure"
+        else
+            FAILED=1
+        fi
+    fi
 }
 
 run_doctor "empty session"

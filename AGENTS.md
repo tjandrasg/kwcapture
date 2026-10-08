@@ -71,6 +71,34 @@ dumb buffers"), i.e. KWin's own CI uses a *virtual* DRM node — that is the thi
 Master (post-6.6) changed `supportedCompositors()` to `{OpenGLCompositing}` unconditionally with
 the new `RenderDevice` abstraction, so a future KWin may do surfaceless llvmpipe with no DRM at
 all; nothing released does today.
+* **Measured on the runner itself (run 38, the first job that printed it):**
+  `/dev/dri/card1` **exists** — driver **`hyperv_drm`**, `root:video`, and **no `renderD*` node**.
+  A card node alone does not count for KWin (`nodeType = DRM_NODE_RENDER`, primary only for vgem),
+  so even passing it in with `--device /dev/dri` does not buy the capture path. `vgem` and `vkms`
+  are **not loadable** on the runner kernel (`6.17.0-1022-azure`): "Module … not found in directory
+  /lib/modules/…" — they ship in `linux-modules-extra-<version>`, which the runner image does not
+  install. The job now installs that package (if the archive still has the exact version) and
+  retries `modprobe vgem`; KWin special-cases vgem precisely because dumb buffers need the primary
+  node, so a vgem render/primary node is the thing that would make this work.
+* **The CI proof, verbatim from the log** (`QT_LOGGING_RULES=kwin_core.debug=true`):
+  `Configured compositor not supported by Platform. Falling back to defaults` → `Attempting to load
+  the QPainter scene` → `QPainter compositing has been successfully initialized` → …
+  `Effect is not supported:  "screenshot"`. Everything else in the job works with that compositor:
+  the socket, `monitors: [('Virtual-0', (1024, 640))]`, `windows: 1 [('KCalc', (648, 513))]` — so
+  window *listing* is not GL-dependent, only the frames are.
+* **Upstream's own CI shortcut exists but is not usable for us:** since 6.5 (and in 6.6/6.7)
+  `findRenderDevice()` starts with `if (qEnvironmentVariableIsSet("CI")) return
+  RenderDevice::open("/dev/dri/card1");` — GitHub sets `CI=true`, so that would hand KWin the
+  renderless hyperv node… but it is inside `#if !HAVE_LIBDRM_FAUX`, i.e. compiled out on any distro
+  with libdrm ≥ the faux-bus release, and trixie's 6.3 does not have it at all. Do not build a plan
+  on it.
+* **So the CI job now states its own coverage honestly:** `probe/ci_headless_kwin.sh` asks "would
+  KWin's `findRenderDevice()` find anything?" (render node, or a vgem primary via
+  `/sys/class/drm/card*/device/driver`). Yes → strict, nothing tolerated. No →
+  `KWCAPTURE_NESTED_ALLOW_NO_SCREENSHOT2=1`, which turns *only* the missing-ScreenShot2 failures
+  into a printed `ENVIRONMENT LIMITATION` (socket, authorisation, output listing, window listing,
+  client startup and every other `doctor` check still fail the job). A runner with a GPU — or a
+  self-hosted KDE runner — automatically gets the strict job back.
 * **Not the problem: PipeWire.** KWin logs `kwin_screencast: Failed to create PipeWire context`
 in that container, and `screencast.so` is the *portal* screen-cast plugin. ScreenShot2 needs no
 PipeWire: we hand KWin a **pipe** fd and `ScreenShotWriter2` writes the raw QImage into it from a
@@ -87,6 +115,20 @@ returning `0 []` (not an error!) was the *correct* answer for a session whose on
 makes KWin say *why* (`Attempting to load the OpenGL scene` / `Driver does not recommend OpenGL
 compositing` / `QPainter compositing has been successfully initialized`) instead of the one-line
 warning. The probe now passes it when `KWCAPTURE_NESTED_KWIN_DEBUG=1`.
+* Verified after reworking the probe: strict path still **PROBE OK** on this desktop (KCalc
+  (640,508), 1024x640 screen frame, 640x480 window frame, doctor rc=0 ×3), and the tolerant path
+  was exercised with `kwcapture` stubbed to raise exactly the CI error — exit 0 with
+  `ENVIRONMENT LIMITATION` when allowed, exit 1 when not.
+
+### How to run the headless job by hand (it is not GitHub-specific)
+
+```
+docker run --rm --device /dev/dri -v "$PWD:/w" debian:trixie-slim bash /w/probe/ci_headless_kwin.sh
+```
+
+That is the whole CI job (KWin 6.3 + kcalc in trixie, kwcapture pip-installed, probe run with the
+strict window requirement). On a Plasma box no container is needed at all:
+`dbus-run-session -- bash probe/nested_kwin_test.sh`.
 
 ## FRESH STATUS — 2026-10-08 ~15:30 — **merged into nunif**, and **headless KWin capture works**
 
