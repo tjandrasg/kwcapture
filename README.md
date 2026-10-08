@@ -1,5 +1,7 @@
 # kwcapture — fast screen capture on Wayland (KDE Plasma)
 
+[![CI: build](https://github.com/tjandrasg/kwcapture/actions/workflows/ci.yml/badge.svg)](https://github.com/tjandrasg/kwcapture/actions/workflows/ci.yml)
+
 **`PIL.ImageGrab` runs at ~2 fps on Wayland** (it shells out to `spectacle`) and **`mss`
 captures XWayland**, which is black for native Wayland windows. `kwcapture` talks to the
 KWin compositor directly: **~40 fps at 2560×1440**, real pixels, ~26 ms from "give me a
@@ -446,9 +448,11 @@ kwcapture/
   _desktop.py            the KWin authorisation desktop entry
   native/kwcapture.c     the capture daemon (sd-bus + shm ring + output and window listing)
   native/include/kwcapture_shm.h   shared-memory protocol (asserted on both sides)
-tests/test_kwcapture.py  159 functional checks (also `pytest tests/`)
+tests/test_kwcapture.py  159 functional checks, live Plasma required (also `pytest tests/`)
+tests/test_ring_reader.py 37 checks of the shm protocol — no compositor needed
 bench.py                 comparison against mss and PIL.ImageGrab
-probe/                   the reverse-engineering experiments (Wayland global dumper, etc.)
+probe/                   experiments: nested-KWin headless test, Wayland global dumper, etc.
+.github/workflows/       ci.yml (build + headless KWin), release.yml (wheels + release + PyPI)
 AGENTS.md                investigation log — how the KWin API and its auth really work
 ```
 
@@ -460,6 +464,46 @@ make setup          # build the helper into kwcapture/bin + authorise
 make test bench     # tests, then the comparison table
 make wheel          # dist/*.whl
 ```
+
+## How this is tested
+
+| workflow | runs on | what it proves |
+|---|---|---|
+| [`ci.yml`](actions/workflows/ci.yml) | every push and PR | **`build`**: the helper really ends up in the wheel, the sdist builds and installs from scratch in a clean venv, and the 37 ring-reader checks (shared-memory protocol, torn-frame guards, concurrent writer) run with no compositor at all. **`headless KWin capture`**: a real Plasma 6 KWin, below. |
+| [`release.yml`](actions/workflows/release.yml) | `v*` tags | sdist + `manylinux` wheels via cibuildwheel, attached to the GitHub release; PyPI publishing is a separate job behind the `pypi` environment and an opt-in input. |
+
+**The headless job captures from a real KWin with no GPU, no monitor and nobody logged in** —
+`kwin_wayland --virtual` on a **private D-Bus session** inside a Debian trixie container (Ubuntu's
+runners still ship KWin 5.27, whose window handles are not what kwcapture speaks). The private bus
+is the part that makes or breaks it: ScreenShot2 is D-Bus, so against the desktop's own bus a
+nested KWin answers `list_monitors()` while the *desktop's* KWin answers `list_windows()` and hands
+back the desktop's resolution — a silent split-brain that would have a test assert against the
+developer's screen. The job builds the helper from source, installs it, authorises it through the
+same `.desktop` file Plasma uses, and checks the nested output and a real Qt client's window are
+listed.
+
+**What GitHub's runners cannot cover, and why: the pixels.** KWin owns
+`org.kde.KWin.ScreenShot2` only through its screenshot effect, whose `supported()` is
+`effects->isOpenGLCompositing()`, and the `--virtual` backend offers OpenGL compositing only when
+`drmGetDevices2()` finds a DRM device. A hosted runner has `/dev/dri/card1` (`hyperv_drm`) and no
+render node — and no `vgem`, not even after installing `linux-modules-extra-<kernel>` — so KWin
+falls back to QPainter compositing and never registers the name. The job says so
+(`ENVIRONMENT LIMITATION`) for that one failure instead of failing, and still fails on everything
+else. On a machine that *can* composite — your desktop, a self-hosted KDE runner, a GPU runner —
+the same job runs strict: the frame has to be the nested 1024×640 (not the host's screen) and
+non-black, for the screen *and* for the window.
+
+```bash
+# the headless job, whole, on any machine with a render node — no GitHub involved
+docker run --rm --device /dev/dri -v "$PWD:/w" debian:trixie-slim bash /w/probe/ci_headless_kwin.sh
+
+# or on a Plasma session, no container
+dbus-run-session -- bash probe/nested_kwin_test.sh
+```
+
+The functional suite (`tests/test_kwcapture.py`) needs a live Plasma session and is not run in CI.
+Its per-output checks multiply, so the count follows the hardware: 159 on a 75 % + 125 % two-monitor
+desk, 152 on a single output at 100 %.
 
 ## Troubleshooting
 

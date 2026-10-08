@@ -43,7 +43,13 @@ docs; this file is the investigation log + gotchas.
 > whole reason below, so nobody has to rediscover it. On a machine that *can* composite (this
 > desktop, any KDE self-hosted runner, a GPU runner) the same job runs strict and fails on anything.
 
-> Last verified state of this tree: run **40** green in **61 s** (headless job), `PROBE OK` locally
+> **MERGED 2026-10-08 ~19:50**: PR #1 → `main` as `a575828` (merge commit, all 7 commits kept),
+> branch `ci/headless-kwin` deleted (the repo has `delete_branch_on_merge`, and the local branch is
+> gone too). `README.md` now has a **How this is tested** section + a CI badge, so the DRM-node
+> limitation is documented where users and distributors will look at it rather than only here.
+> Runs on `main` now, on every push and PR.
+
+> Last verified state of this tree: run **41** green (`build` + `headless KWin capture`), `PROBE OK` locally
 > on Plasma 6.6, ring-reader suite green, functional suite **152/152** — after one flake that is now
 > FLAKE-1 below. The desk is **one output at x1** since today, not the 75 %/125 % pair the v0.5.0
 > notes describe, which is why the count is 152 and why the fractional-scaling tests are running in
