@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+- **`list_windows()` now returns every window KWin can capture, not only the ones KWin
+  calls *normal*.** KWin's krunner interface (`/WindowsRunner`) — the only unrestricted
+  enumeration there is — filters on `Window::isNormalWindow()`, so dialogs, tool windows,
+  docks/panels, the desktop, splash screens and override-redirect popups were invisible:
+  capturable through `CaptureWindow(handle)`, impossible to *find*. (Real case: Winamp's
+  big skinned window is `_NET_WM_WINDOW_TYPE_DIALOG`; only its tiny `NORMAL` sibling was
+  ever listed.) The helper now also asks KWin's **scripting interface**
+  (`org.kde.kwin.Scripting.loadScript` + `org.kde.kwin.Script run`) whose JS
+  `workspace.windowList()` is KWin's unfiltered list. The script is generated per call into
+  `$XDG_RUNTIME_DIR` (0600), answers on the helper's own unique bus name with a nonce, and
+  is unloaded and deleted before the helper exits — ~0.5 ms, nothing installed, no config
+  touched, and no focus change anywhere. Windows that came from there carry
+  `krunner_listed=False`; every window now also carries `window_type_name` (`"normal"`,
+  `"dialog"`, `"dock"`, `"desktop"`, …) and a `Window.normal` property.
+- **`list_windows(all_types=…)`** — `False` restricts it to KWin's own list again (no
+  scripting round trip). **`require_full=True`** turns an unavailable scripting interface
+  into a `CaptureError` instead of the default quiet fallback to the filtered list; the CLI
+  equivalent is `--normal-only` / `--require-full` (exit 3), and `kwcapture doctor` now
+  reports which of the two it got.
+- **`Capture(window=HANDLE)` / `--window HANDLE` accept a handle KWin's list does not
+  mention** (validated with `getWindowInfo` instead of against the listing), so a handle
+  obtained elsewhere — a KWin script, `--active-window-id`, a log — is always usable.
+- **Behaviour change:** the wider list means a *name* can now match more than it used to —
+  an app whose dialog shares its caption matches twice and raises `AmbiguousWindow`
+  (`.candidates`) where it used to resolve. Resolve by handle, or pass
+  `all_types=False` / `--normal-only`.
+- Functional suite: 152 → **165 checks**. Three probes keep the mechanism reproducible on its
+  own: `probe/non_normal_windows.py` (the user-facing reproducer — capture every window KWin's
+  list hides, assert focus never moved and nothing was left behind),
+  `probe/kwin_script_enumerate.py` (the raw scripting round trip) and
+  `probe/kwin_script_failure_path.py` (a deliberately broken script must report a reason
+  instead of timing out).
+- `kwcapture doctor` now says which enumeration it got, and `kwcapture windows` gained
+  `--normal-only` / `--require-full`.
+
 ## 0.5.0 — 2026-10-07
 
 Monitors are now first-class (list them, capture one by name or id), fractional scaling is

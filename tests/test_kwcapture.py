@@ -301,6 +301,105 @@ def window_section():
             time.sleep(0.2)
 
 
+def _script_objects():
+    """How many /Scripting/Script<N> objects KWin exports right now.
+
+    kwcapture loads a script per full enumeration and unloads it again, so the count
+    must be unchanged by our calls -- whatever the user's own scripts contributed.
+    """
+    if not shutil.which("busctl"):
+        return None
+    r = subprocess.run(["busctl", "--user", "tree", "org.kde.KWin"],
+                       capture_output=True, text=True)
+    return r.stdout.count("/Scripting/Script")
+
+
+def _helper_scripts():
+    """Our enumeration scripts still sitting in $XDG_RUNTIME_DIR (there must be none)."""
+    rt = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    try:
+        return sorted(f for f in os.listdir(rt) if f.startswith("kwcapture-winlist-"))
+    except OSError:
+        return []
+
+
+def special_window_section():
+    """The windows KWin's application-window list filters out: dialogs, panels, desktop.
+
+    This is the Winamp case: its big skinned window is _NET_WM_WINDOW_TYPE_DIALOG, and
+    WindowsRunner::Match() skips every window that is not `isNormalWindow()` -- so it
+    was capturable but undetectable.  The panel and the desktop window exist on any
+    Plasma session, so this needs no application of its own.
+    """
+    print("\n== windows outside KWin's own application-window list ==")
+    scripts_before, files_before = _script_objects(), set(_helper_scripts())
+    try:
+        full = K.list_windows(require_full=True, mark_active=False)
+    except Exception as e:  # noqa: BLE001 - report and stop this section
+        check("list_windows(require_full=True) works", False, f"{type(e).__name__}: {e}")
+        return
+    check("list_windows(require_full=True) works", True, f"{len(full)} window(s)")
+    normal = K.list_windows(all_types=False, mark_active=False)
+    full_ids, normal_ids = {w.id for w in full}, {w.id for w in normal}
+    check("KWin's own list is a subset of the full one",
+          normal_ids <= full_ids, ", ".join(sorted(normal_ids - full_ids)) or "nothing missing")
+    extra = [w for w in full if not w.krunner_listed]
+    check("everything the runner filters out is marked krunner_listed=False",
+          {w.id for w in extra} == full_ids - normal_ids,
+          ", ".join(sorted(w.window_type_name for w in extra)) or "none here")
+    check("everything the runner lists is marked krunner_listed=True",
+          all(w.krunner_listed for w in normal))
+    check("KWin's own list holds only normal windows", all(w.normal for w in normal))
+    check("every window carries a window type name",
+          bool(full) and all(w.window_type_name for w in full),
+          ", ".join(sorted({w.window_type_name for w in full})))
+    try:
+        K.list_windows(all_types=False, require_full=True)
+        check("require_full with all_types=False is refused", False, "no exception raised")
+    except ValueError:
+        check("require_full with all_types=False is refused", True)
+
+    targets = [w for w in extra if w.width > 64 and w.height > 32]
+    if not targets:
+        print("  [skip] no panel/desktop/dialog window here to capture")
+    else:
+        w = targets[0]
+        label = w.window_type_name or "special"
+        focus_before = K.active_window_id()
+        try:
+            with K.Capture(window=w.id, shm=K.default_shm_path("special")) as cap:
+                frame = cap.grab()
+                fw, fh = cap.geometry()
+                s = cap.pixel_scale
+                check(f"the {label} window captures at its own size",
+                      abs(fw - w.width * s) <= 90 and abs(fh - w.height * s) <= 90,
+                      f"frame {fw}x{fh}, window {w.width}x{w.height} at x{s:g}")
+                check(f"the {label} frame has content", float(frame[:, :, :3].max()) > 8,
+                      f"max={int(frame[:, :, :3].max())}")
+        except Exception as e:  # noqa: BLE001
+            check(f"the {label} window captures", False, f"{type(e).__name__}: {e}")
+        focus_after = K.active_window_id()
+        check("capturing a background window does not steal focus",
+              focus_before == focus_after, f"{focus_before} -> {focus_after}")
+
+        # The helper on its own, with a handle its own listing never mentioned:
+        # --window must fall back to getWindowInfo instead of rejecting it.
+        exe = K.ensure_binary(allow_build=False)
+        r = subprocess.run([str(exe), "--window", w.id, "--normal-only", "--out", os.devnull],
+                           capture_output=True, text=True, timeout=30)
+        check("--window accepts a handle --list-windows did not offer",
+              r.returncode == 0 and "window=" in r.stderr,
+              r.stderr.strip().replace("\n", " ")[:110])
+
+    check("no enumeration script left in $XDG_RUNTIME_DIR",
+          set(_helper_scripts()) == files_before,
+          ", ".join(sorted(set(_helper_scripts()) - files_before)) or "clean")
+    scripts_after = _script_objects()
+    check("no script left loaded in KWin",
+          scripts_before is None or scripts_after == scripts_before,
+          f"{scripts_before} before, {scripts_after} after")
+
+
 def window_vanish_section():
     """Killing a captured window must raise WindowGone, not wedge the daemon."""
     print("\n== captured window disappears ==")
@@ -970,6 +1069,7 @@ def main():
     quick = "quick" in sys.argv
     if "windows" in sys.argv:
         window_section()
+        special_window_section()
         window_vanish_section()
         return _summary()
     print("== discovery ==")
@@ -1102,6 +1202,7 @@ def main():
 
     monitor_section()
     window_section()
+    special_window_section()
     window_vanish_section()
 
     print("\n== two independent instances ==")

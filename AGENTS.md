@@ -57,10 +57,13 @@ docs; this file is the investigation log + gotchas.
 > Runs on `main` now, on every push and PR.
 
 > Last verified state of this tree: run **41** green (`build` + `headless KWin capture`), `PROBE OK` locally
-> on Plasma 6.6, ring-reader suite green, functional suite **152/152** — after one flake that is now
-> FLAKE-1 below. The desk is **one output at x1** since today, not the 75 %/125 % pair the v0.5.0
-> notes describe, which is why the count is 152 and why the fractional-scaling tests are running in
-> their degenerate branches.
+> on Plasma 6.6, ring-reader suite green, functional suite **165/165** — **152 before the
+> non-normal-window work below, +13 checks** — after one flake that is now FLAKE-1 below. The desk is
+> **one output at x1** since today, not the 75 %/125 % pair the v0.5.0 notes describe, which is why
+> the count is 165 and why the fractional-scaling tests are running in their degenerate branches.
+> `probe/nested_kwin_test.sh` also says **PROBE OK** with the new code, and inside a nested KWin
+> `--list-windows --require-full` exits 0 — the scripting route works in the CI harness too, not
+> only on a real desk (a bare nested session has no panel/desktop, so full == filtered there).
 
 The `headless-kwin` job gets a nested KWin up inside `debian:trixie-slim` (`nested KWin: pid 8033,
 socket kwcapture-test, output 1024x640`, and `list_monitors()` even answers `Virtual-0 (1024,640)`
@@ -253,6 +256,85 @@ that request). Assume a force-push does not un-publish anything.
 * Never `git add -f`/`git add private/...` — `-f` overrides the ignore rules that protect
   this folder.
 
+## SESSION STATUS — 2026-10-08 ~23:50 — **DONE: non-normal windows are visible and capturable (the Winamp case)**
+
+> **Acceptance, on the user's own window:** `list_windows()` reports the 1041x662 Winamp dialog
+> (`krunner_listed=False`, `window_type_name="dialog"`), `Capture(window=…)` streams it at ~7 ms a
+> frame, the PNG is the window from the screenshot, and `active_window_id()` is unchanged before
+> and after — nothing was raised, focused or moved. 165/165 functional + 37 ring-reader checks
+> green, `PROBE OK` in the nested KWin, no script or file left behind in either session.
+>
+> Task: the last functional TODO below ("expose non-normal windows"). Repro on the desk right now:
+> Winamp (wine, `winamp.exe`) has **two** X11 windows — `0x01e00001` 275x116
+> `_NET_WM_WINDOW_TYPE_NORMAL` and `0x01e0000e` 1041x662 `_NET_WM_WINDOW_TYPE_DIALOG` (the big
+> skinned one in the user's screenshot, `WM_TRANSIENT_FOR` set). `kwcapture --list-windows` shows
+> only the NORMAL one.
+>
+> **Root cause, read out of the kwin v6.6.6 source** (fetched from
+> `invent.kde.org/plasma/kwin/-/archive/v6.6.6/kwin-v6.6.6.tar.gz` — keep a copy under `/tmp`, it is
+> the reference for every "does KWin expose X?" question):
+> * `src/plugins/krunner-integration/windowsrunnerinterface.cpp` — every loop over
+>   `Workspace::self()->windows()` skips `window->isUnmanaged()` **and** `!window->isNormalWindow()`.
+> * `src/window.h:796` — `isNormalWindow()` is "NET::Normal or NET::Unknown non-transient". Dialog /
+>   utility / dock / splash / desktop are all excluded, in every branch of `Match()`, so no query
+>   string can reach them.
+> * `src/plugins/screenshot/screenshotdbusinterface2.cpp:296` — `CaptureWindow` resolves its
+>   argument with `workspace()->findWindow(QUuid(handle))`: **a uuid or nothing**, and `handle` is
+>   `Window::internalId()`, which is `QUuid::createUuid()` (`src/window.cpp:62`) — random, so it
+>   cannot be derived from the X11 window id.
+> * `src/dbusinterface.cpp` — `getWindowInfo(uuid)` (uuid only; `getWindowInfo("0x…")`,
+>   `getWindowInfo("winamp.exe")` and `getWindowInfo(caption)` all return an empty map — measured)
+>   and `queryWindowInfo()`, which is the **interactive** "click a window" picker, not a query.
+> * `supportInformation` again lists no windows (re-verified on 6.6.6), and there is no `/Tasks`,
+>   no `windowIds` on `/VirtualDesktopManager`, nothing window-shaped on `org.kde.plasmashell`.
+>   **Conclusion: the only API in Plasma 6 that reaches the full window list is the scripting one.**
+>
+> **The route (matches what the TODO guessed):** `org.kde.kwin.Scripting` at `/Scripting`
+> (`src/scripting/scripting.{h,cpp}`) exposes `loadScript(filePath, pluginName) -> i`,
+> `loadDeclarativeScript`, `isScriptLoaded`, `unloadScript` — **unauthenticated**, and `filePath` is
+> a plain path, so nothing has to be installed under `~/.local/share`. The JS global `workspace` is
+> `QtScriptWorkspaceWrapper`, and `windowList()` is literally `workspace()->windows()` — every
+> window, unfiltered (`src/scripting/workspace_wrapper.cpp:477`). Plasma 6 has **no**
+> `registerDBusAdaptor` anymore (grepped: zero hits), so a script cannot export a method — but
+> `Script::callDBus(service, path, interface, method, args…, callback)` is **async** and can post
+> the list back to us on *our own unique bus name* (`:1.NNN`, so nobody else can impersonate the
+> reply). `Script::run()` early-returns while running, so re-triggering is load-once-per-query +
+> `unloadScript`, not `run()` in a loop. `config()` is the script's own kwinrc group and JS only has
+> `readConfig` — no accidental config writes.
+>
+> Probes: **`probe/kwin_script_enumerate.py`** (dbus_fast; owns a bus object, writes the JS to
+> `$XDG_RUNTIME_DIR`, loads it, waits for the `callDBus` callback, unloads). **It works** — and
+> so does the C port: `kwcapture --list-windows` now reports 9 windows instead of 6 (the Winamp
+> dialog, the plasmashell desktop and the panel), and `kwcapture --window '{c5de347d-…}'
+> --decoration` returns a 1041x662 frame of the Winamp window **while it is still behind
+> Konsole** — checked by eye, not just by pixel statistics (98.5 % non-black).
+>
+> Implemented in `kwcapture/native/kwcapture.c` (the "full window enumeration" section):
+> `collect_windows(bus, wins, max, all_types, why, whysz)` = the krunner pass plus
+> `collect_windows_script()`, which writes a private 0600 script into `$XDG_RUNTIME_DIR`,
+> listens on our own unique bus name (`sd_bus_add_object_vtable`, nonce-guarded),
+> `loadScript(path, plugin)` → `run()` on `/Scripting/Script<id>` → waits ≤1500 ms →
+> `unloadScript(plugin)` → `unlink()`. Measured: **load+run+reply ≈ 0.5 ms**, and any failure is
+> a stderr note plus the old krunner list — never a failed call. New flags: `--normal-only`
+> (skip the script route entirely) and `--require-full` (exit 3 when the full enumeration was
+> unavailable — what `doctor` will use). `--window HANDLE` now also accepts a handle the runner
+> list does not mention, validated with `getWindowInfo` (`window_handle_exists`): that alone
+> fixes "cannot capture a window whose handle I already know". JSON gains `window_type_name`
+> + `krunner_listed`; the table flags non-listed windows with `not-in-app-list,<type>`.
+>
+> **`probe/non_normal_windows.py`** is the user-facing reproducer for the original complaint: it
+> lists the full and filtered lists side by side, captures **every** window KWin's own list hides,
+> writes a PNG per capture, and asserts that focus never moved and nothing was left behind
+> (`kwcapture-winlist-*.js` in `$XDG_RUNTIME_DIR`, or a `/Scripting/Script<N>` object still
+> exported). On this desk: desktop + dock + the Winamp dialog, all captured, PROBE OK.
+> **`probe/kwin_script_failure_path.py`** loads a deliberately broken script and checks the
+> `Failed(nonce, reason)` channel reports the JS error instead of timing out.
+>
+> **Behaviour change to document:** with desktop/dock/dialog windows included, a *name* lookup
+> can be ambiguous where it used to be unique (`--window winamp` matches both Winamp windows).
+> That is the honest answer — the message lists the candidates and their handles, and
+> `--normal-only` / `all_types=False` restores the old list.
+
 ## OPEN BUGS — found, not yet fixed
 
 > **RULE FOR FRESH SESSIONS: anything that looks wrong goes in this section the moment you
@@ -275,9 +357,11 @@ that request). Assume a force-push does not un-publish anything.
 * **Fix, when someone touches that test**: grab the whole output twice and mask out every rectangle
   that differs between them, then choose the detailed-and-stable patch. Do not just loosen the
   20.0 threshold — a threshold that has to cover a moving picture protects nothing.
-* **Also note**: the suite's check **count depends on how many outputs the desk has** — 159 on the
-  two-output desk (DP-1 75 % + HDMI-A-1 125 %) that the v0.5.0 notes describe, **152 now** that the
-  desk has one output at 100 %. `kwcapture monitors --measure-scale` before quoting a number; the
+* **Also note**: the suite's check **count depends on how many outputs the desk has** — 172 on the
+  two-output desk (DP-1 75 % + HDMI-A-1 125 %) that the v0.5.0 notes describe — **165 now** that the
+  desk has one output at 100 %, the +13 non-normal-window checks do not multiply with outputs, so
+  172 there is arithmetic, not a measurement. `kwcapture monitors --measure-scale` before quoting a
+  number; the
   per-output checks (`area_in="physical"` especially) are only meaningful with both a display scale
   and a scene scale that differ, and today's desk has neither (x1/x1 → the degenerate
   "one mapping only" branch).
@@ -520,14 +604,32 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   first token canonicalises to that exe and whose `X-KDE-DBUS-Restricted-Interfaces` contains
   `org.kde.KWin.ScreenShot2`. **A Python script can never be authorised** → native helper +
   desktop entry (`_desktop.py`, `kbuildsycoca6`, async propagation → retry with backoff).
-* **Window enumeration** (KWin has none on ScreenShot2): `/WindowsRunner` `org.kde.krunner1`
-  `Match("")` — empty query matches every window, locale-independent (do NOT use the
-  translated `"window"` keyword); ids are `"<action>_<uuid>"`, dedupe (one entry per desktop);
-  `Run("0_<uuid>","")` activate / `1` close / `2` minimise. Details from
-  `/KWin getWindowInfo(uuid)` → a{sv}: caption, resourceClass/Name, desktopFile, role, icon,
-  x/y/width/height as **doubles**, minimized/fullscreen/keepAbove/keepBelow/noBorder/
-  skipTaskbar/skipPager/skipSwitcher, maximizeHorizontal/Vertical (**ints**), type, layer,
-  desktops/activities (`as`), uuid — **no pid, no focus flag**.
+* **Window enumeration** (KWin has none on ScreenShot2) needs **two** sources. (1)
+  `/WindowsRunner` `org.kde.krunner1` `Match("")` — empty query matches every window,
+  locale-independent (do NOT use the translated `"window"` keyword); ids are
+  `"<action>_<uuid>"`, dedupe (one entry per desktop); `Run("0_<uuid>","")` activate / `1`
+  close / `2` minimise. **It filters: every loop skips `isUnmanaged()` and
+  `!isNormalWindow()`** ("NET::Normal or NET::Unknown non-transient"), so dialogs, docks,
+  the desktop, splash, tooltips and override-redirect windows are unreachable there — no
+  query string changes that. (2) `org.kde.kwin.Scripting` `/Scripting`
+  `loadScript(filePath, pluginName) -> i` + `org.kde.kwin.Script` `/Scripting/Script<id>`
+  `run()` + `unloadScript(pluginName)` gives the whole list, because the JS global
+  `workspace`'s `windowList()` is literally `Workspace::windows()`; the script answers by
+  calling *us* (`callDBus(our_unique_name, …)`, async, so the compositor never blocks) —
+  Plasma 6 has no `registerDBusAdaptor` anymore, so it cannot export a method. Four traps,
+  each measured: `loadScript` **does not run** the script; `run()` sets `setDelayedReply`
+  and only ever replies on its error path, so send it with a short timeout and ignore that
+  one; `loadScript` is overloaded `(s)`/`(ss)` and a name-keyed binding picks `(s)` and
+  silently loses the plugin name (then `unloadScript` cannot find it — ask for `ss`
+  explicitly); `Script::run()` early-returns while running, so re-triggering means
+  load-once-per-query + `unloadScript`, not `run()` in a loop. `String(w.internalId)` in JS
+  is the uuid with braces, same spelling as krunner's.
+  Details from `/KWin getWindowInfo(uuid)` → a{sv}: caption, resourceClass/Name,
+  desktopFile, role, icon, x/y/width/height as **doubles**, minimized/fullscreen/
+  keepAbove/keepBelow/noBorder/skipTaskbar/skipPager/skipSwitcher,
+  maximizeHorizontal/Vertical (**ints**), type, layer, desktops/activities (`as`), uuid —
+  **no pid, no focus flag**. It answers for *any* window (dialogs and panels included, and
+  an unknown handle gives an empty map, which is what makes it usable as a handle check).
 * `activeOutputName()` → the focused output (`busctl call` with **no** input args).
   `supportInformation` lists **no windows** in Plasma 6.6.
 * **A closed window is not a D-Bus error**: KWin returns a 0x0 / stride-0 image. Treat
@@ -568,8 +670,9 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   → 192 device at scene 1.25 / display 0.75), so any assertion comparing a frame to `Window.width`
   must multiply by `Capture.pixel_scale`.
 * Both mappings are only *distinguished* when the two factors differ. One output at 100 % runs these
-  checks in a degenerate branch (see FLAKE-1), and the check count follows the hardware: **159** on
-  the 75 % + 125 % desk, **152** on a single output at 100 %.
+  checks in a degenerate branch (see FLAKE-1), and the check count follows the hardware: **165** on
+  a single output at 100 % (172 on the 75 % + 125 % desk, by arithmetic: the 13 checks added for
+  non-normal windows are per-session, not per-output).
 
 ## MONITORS & RESILIENCE — facts the design rests on (from the v0.4.0 / v0.5.0 work)
 
@@ -723,10 +826,15 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 * ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
   (`Window.active`, `active_window_id()`, `--active-window-id`).
 * `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.
-* **TODO (kept deliberately, low priority):** expose non-normal windows — panels, desktop,
-  overlays. krunner filters them out, so `list_windows()` cannot see them; a KWin script or
-  the qml console could hand out those handles, and `Capture(window=…)` already accepts
-  them. Not important; revisit if anyone ever needs it.
+* ~~Expose non-normal windows — panels, desktop, overlays~~ **done (unreleased).** The
+  guess in the old wording was right: a throwaway KWin script hands out the handles the
+  krunner interface filters out (see the SESSION STATUS section and KEY FACTS → *Window
+  enumeration*). `list_windows()` now returns them by default with `krunner_listed=False`
+  and a `window_type_name`, `--normal-only`/`all_types=False` gives the old list, and
+  `--window HANDLE` no longer insists that the handle came from krunner. What is *not*
+  done, on purpose: no script is installed under `~/.local/share`, nothing is kept loaded
+  in KWin between calls, and there is no event/streaming API for window changes — every
+  query pays its ~0.5 ms and leaves nothing behind.
 * ~~Window resize handling~~ **done** — frames follow the resized window automatically (the
   per-frame geometry in the slot descriptor was already correct; what was missing was the
   recovery when it outgrows the ring). See `Capture.resized`, `last_geometry`.

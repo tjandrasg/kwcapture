@@ -52,6 +52,16 @@ K.active_window()                         # the focused window, as a Window
 K.active_window_id()                      # … or just its KWin handle (~8 ms)
 ```
 
+**The windows a taskbar would not show are capturable too** — dialogs, tool windows, the
+panel and the desktop itself are not in KWin's own application-window list, so
+`list_windows()` also asks KWin's scripting interface for them (see
+[Per-window capture](#per-window-capture)):
+
+```python
+panel = next(w for w in K.list_windows() if w.window_type_name == "dock")
+K.Capture(window=panel.id).grab()          # the Plasma panel; focus stays where it was
+```
+
 **A minimised window returns stale pixels** — KWin stops rendering it, so every grab repeats
 the same buffer and nothing tells you. Ask explicitly, or opt in to a per-grab check:
 
@@ -127,6 +137,9 @@ kwcapture install-desktop [--uninstall]# manage the KWin authorisation file
 kwcapture screens                      # DP-1 2560x1440 @164.69Hz pos 0,0 scale 1
 kwcapture windows                      # every capturable window: handle, name, app, size
 kwcapture windows -f kcalc --json      # filter by name/app id; machine-readable
+kwcapture windows --normal-only        # KWin's own app-window list only: no dialogs,
+                                       # panels, desktop or popups (and no scripting)
+kwcapture windows --require-full       # fail instead of quietly returning the short list
 kwcapture grab -o shot.png --width 1280
 kwcapture grab -o frame.bgra --raw     # pure BGRA bytes
 kwcapture grab --window Kate -o kate.png
@@ -142,7 +155,13 @@ kwcapture bench --frames 200
 WINDOW HANDLE (id)                      NAME                          APP_ID              SIZE    POSITION  FLAGS
 {e0b1aab4-4e10-47fd-ae46-77a4ee6bc4d8}  build-pgo : llama-server      org.kde.konsole  2560x1394      +0,+0  maximized
 {2c14f294-93ea-48bf-bbea-f501d59f6fe5}  KCalc                         org.kde.kcalc      692x468  +1563,+738
+{c6195fb1-94bd-4094-a687-e4f1aac1b184}                                  plasmashell      2560x1440     +0,+0  skip-taskbar,not-in-app-list,desktop
+{9ab544aa-1356-44f7-8be2-8d99903f34a7}                                  plasmashell       2560x46    +0,+1394  skip-taskbar,not-in-app-list,dock
+{c5de347d-3db3-4a82-a622-c1b62f02519a}  1572. vrec1 - Winamp          winamp.exe        1041x662  +1094,+502  skip-taskbar,not-in-app-list,dialog
 ```
+
+The last three are the ones KWin's own application-window list hides (`not-in-app-list`),
+each tagged with its window type — capturable, just not something a taskbar would show.
 
 ## Python API
 
@@ -208,18 +227,42 @@ focused = K.Capture(active_window=True)    # whatever has focus right now
 `Window` fields: `id` (the KWin handle — pass it back as `window=`), `name`, `app_id`,
 `resource_name`, `desktop_file`, `role`, `icon`, `x`, `y`, `width`, `height`, `minimized`,
 `fullscreen`, `maximized`, `keep_above/keep_below`, `no_border`, `skip_taskbar/pager/switcher`,
-`window_type`, `layer`, `desktops`, plus `geometry`/`position`/`visible`.
+`window_type` / `window_type_name` (`"normal"`, `"dialog"`, `"dock"`, `"desktop"`, …),
+`krunner_listed`, `layer`, `desktops`, plus `geometry`/`position`/`visible`/`normal`.
 
 How the handles are found (and what they can and cannot do):
 
 * KWin's `org.kde.KWin.ScreenShot2` **`CaptureWindow(handle)`** takes a window's internal
   id (a `QUuid`). There is no list method on that interface, so the helper asks KWin's
   krunner interface (`/WindowsRunner`, empty query → every window) for the ids and
-  `org.kde.KWin` **`getWindowInfo(handle)`** for the details. Neither needs the
+  `org.kde.KWin` **`getWindowInfo(handle)`** for the details, plus KWin's scripting
+  interface for the windows krunner filters out (above). None of that needs the
   desktop-file authorisation; only the pixel grab does.
-* **Normal application windows only.** Panels/docks, the desktop/wallpaper and overlay
-  windows are not in `list_windows()` (that is KWin's own filter). If you get hold of one
-  of their handles anyway, `Capture(window=…)` captures it.
+* **Everything KWin can capture, not just what its taskbar shows.** KWin's krunner list
+  (`/WindowsRunner`) skips every window that is not *normal* — dialogs, tool windows,
+  docks/panels, the desktop, splash screens, override-redirect popups — which is a real
+  trap: Winamp's big skinned window is `_NET_WM_WINDOW_TYPE_DIALOG`, and it used to be
+  invisible to `list_windows()` while `CaptureWindow()` captured it perfectly. So the
+  helper also asks KWin's **scripting interface** (`org.kde.kwin.Scripting`) for the
+  whole list: it writes a tiny JS file into `$XDG_RUNTIME_DIR`, `loadScript` + `run`
+  hand it to KWin, the script answers on the helper's own unique bus name, and both the
+  script and its file are gone before the helper exits. ~0.5 ms, nothing installed
+  anywhere, and it degrades to the filtered list if KWin refuses. Those windows carry
+  **`krunner_listed=False`** and a `window_type_name`:
+
+  ```python
+  for w in K.list_windows():
+      if not w.krunner_listed:            # panel, desktop, dialog, popup …
+          print(w.window_type_name, w.app_id, w.geometry)
+  panel = K.Capture(window="dock")        # panels and the desktop are capturable too
+  ```
+
+  `list_windows(all_types=False)` is KWin's filtered list only (no scripting round trip),
+  `list_windows(require_full=True)` turns an unavailable scripting interface into a
+  `CaptureError` instead of a quiet fallback — that is what `kwcapture doctor` uses.
+  Because the list is wider now, a *name* that used to match one window can match two
+  (a dialog and its main window share a caption): you get `AmbiguousWindow` with the
+  candidates, and resolving by handle never is.
 * `decoration=False` (default) grabs the client area; `decoration=True` grabs the window
   with its title bar and shadow — the shadow area is **transparent** (alpha 0), so
   composite it or drop the alpha channel before saving a JPEG.
@@ -448,10 +491,11 @@ kwcapture/
   _desktop.py            the KWin authorisation desktop entry
   native/kwcapture.c     the capture daemon (sd-bus + shm ring + output and window listing)
   native/include/kwcapture_shm.h   shared-memory protocol (asserted on both sides)
-tests/test_kwcapture.py  159 functional checks, live Plasma required (also `pytest tests/`)
+tests/test_kwcapture.py  165 functional checks, live Plasma required (also `pytest tests/`)
 tests/test_ring_reader.py 37 checks of the shm protocol — no compositor needed
 bench.py                 comparison against mss and PIL.ImageGrab
-probe/                   experiments: nested-KWin headless test, Wayland global dumper, etc.
+probe/                   experiments: nested-KWin headless test, Wayland global dumper,
+                         non-normal-window enumeration (probe/non_normal_windows.py), etc.
 .github/workflows/       ci.yml (build + headless KWin), release.yml (wheels + release + PyPI)
 AGENTS.md                investigation log — how the KWin API and its auth really work
 ```
@@ -502,8 +546,8 @@ dbus-run-session -- bash probe/nested_kwin_test.sh
 ```
 
 The functional suite (`tests/test_kwcapture.py`) needs a live Plasma session and is not run in CI.
-Its per-output checks multiply, so the count follows the hardware: 159 on a 75 % + 125 % two-monitor
-desk, 152 on a single output at 100 %.
+Its per-output checks multiply, so the count follows the hardware: 172 on a 75 % + 125 % two-monitor
+desk, 165 on a single output at 100 %.
 
 ## Troubleshooting
 
@@ -514,7 +558,8 @@ desk, 152 on a single output at 100 %.
 | `failed to compile the kwcapture helper` | install `build-essential libsystemd-dev libwayland-dev`, or build it yourself and set `KWCAPTURE_BIN` |
 | `frame needs N bytes, slot has M` | resolution went above ~5K: restart the helper |
 | `no window matches 'x'` | `kwcapture windows` for the handles; the error lists what is there. Matching is exact caption/app id, or a unique substring |
-| `AmbiguousWindow` | several windows share that name/caption — pass the handle from `kwcapture windows` |
+| `AmbiguousWindow` | several windows share that name/caption — pass the handle from `kwcapture windows`. (A name that used to match one window can match its dialog too now; `all_types=False` / `--normal-only` narrows the list again) |
+| `doctor`: *only KWin's own application-window list is reachable* | the scripting enumeration failed — the message says why (no `org.kde.kwin.Scripting`, a refused call, a timeout). Dialogs, panels and the desktop cannot be listed; ordinary windows still capture. Not an authorisation problem |
 | `WindowGone: the window has nothing to capture` | the window was closed (or is being unmapped). The helper is fine: `list_windows()` again and make a new `Capture` |
 | `unsupported kwcapture ABI 1` | an old helper binary (`$KWCAPTURE_BIN`, or a stale `kwcapture/bin`): rebuild with `kwcapture setup` |
 | `frame N reports an invalid geometry` / `outside the …-byte ring` | the client refused a frame descriptor that cannot fit the ring (old/mismatched helper, or a ring truncated under it). `Capture.restart()`; if it repeats, `kwcapture setup` to rebuild the helper |

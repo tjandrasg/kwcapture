@@ -7,7 +7,7 @@
     cap.close()
 
     for w in kwcapture.list_windows():       # every capturable window: name + handle
-        print(w.id, w.name, w.app_id)
+        print(w.id, w.name, w.app_id, w.window_type_name, w.krunner_listed)
     win = kwcapture.Capture(window="Kate")   # one window instead of a whole screen
     win2 = kwcapture.Capture(active_window=True)
 
@@ -65,6 +65,7 @@ __all__ = [
     "measure_output_scale",
     "list_windows",
     "find_window",
+    "WINDOW_TYPES",
     "active_window",
     "active_window_id",
     "Window",
@@ -638,6 +639,18 @@ def find_monitor(
 
 
 # --------------------------------------------------------------------- windows
+
+# KWin's WindowType enum as words (kwin src/effect/globals.h).  Only the names
+# differ between KWin and us; the numbers are KWin's.
+WINDOW_TYPES = {
+    -2: "undefined", -1: "unknown", 0: "normal", 1: "desktop", 2: "dock",
+    3: "toolbar", 4: "menu", 5: "dialog", 6: "override", 7: "top-menu",
+    8: "utility", 9: "splash", 10: "dropdown-menu", 11: "popup-menu", 12: "tooltip",
+    13: "notification", 14: "combo-box", 15: "dnd-icon", 16: "on-screen-display",
+    17: "critical-notification", 18: "applet-popup",
+}
+
+
 @dataclass
 class Window:
     """One capturable window, as KWin sees it.
@@ -668,9 +681,14 @@ class Window:
     skip_switcher: bool = False
     maximized: bool = False
     window_type: int = 0
+    window_type_name: str = ""  # "normal", "dialog", "dock", "desktop", ... (KWin's enum)
     layer: int = 0
     desktops: tuple[str, ...] = ()
     active: bool = False        # has keyboard focus (list_windows() fills this in)
+    # False for the windows KWin's own application-window list (its krunner
+    # interface) filters out: dialogs, tool windows, docks/panels, the desktop,
+    # splash screens and override-redirect popups.  Still perfectly capturable.
+    krunner_listed: bool = True
     extra: dict = field(default_factory=dict)
 
     # ``id`` is what CaptureWindow() wants; ``handle``/``uuid`` read better in code
@@ -694,22 +712,31 @@ class Window:
     def visible(self) -> bool:
         return not self.minimized
 
+    @property
+    def normal(self) -> bool:
+        """True for an ordinary top-level window (KWin's ``WindowType::Normal``)."""
+        return self.window_type == 0
+
     def __str__(self) -> str:
         flags = " ".join(
             n for n, on in (("minimized", self.minimized), ("fullscreen", self.fullscreen),
                             ("maximized", self.maximized)) if on
         )
-        return (f"{self.name or '(untitled)'} [{self.app_id or '?'}] "
+        kind = "" if self.normal else f"{self.window_type_name or 'type'} "
+        return (f"{self.name or '(untitled)'} [{self.app_id or '?'}] {kind}"
                 f"{self.width}x{self.height}+{self.x}+{self.y} "
                 f"{'(' + flags + ') ' if flags else ''}{self.id}")
 
     @classmethod
     def from_dict(cls, d: dict) -> "Window":
         known = {f for f in cls.__dataclass_fields__ if f != "extra"}
-        return cls(
+        win = cls(
             **{k: (tuple(v) if k == "desktops" else v) for k, v in d.items() if k in known},
             extra={k: v for k, v in d.items() if k not in known},
         )
+        if not win.window_type_name:  # an older helper sends the number only
+            win.window_type_name = WINDOW_TYPES.get(win.window_type, "other")
+        return win
 
 
 _HANDLE_RE = re.compile(r"^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
@@ -761,22 +788,46 @@ def active_window(
 def list_windows(
     binary: Optional[str] = None,
     mark_active: bool = True,
+    all_types: bool = True,
+    require_full: bool = False,
 ) -> list[Window]:
-    """Every window KWin considers a normal application window.
+    """Every window KWin can capture.
 
-    KWin's screenshot interface cannot enumerate windows, so the helper asks KWin's
-    krunner interface (`/WindowsRunner`, an empty query matches all windows) for the
-    handles and `/KWin getWindowInfo(handle)` for the details of each.  Panels, the
-    desktop/wallpaper and other special windows are not in that list; if you do have a
-    handle for one, `Capture(window=...)` still captures it.
+    KWin's screenshot interface cannot enumerate windows.  Two sources together give
+    the whole picture:
+
+    * KWin's own application-window list (`/WindowsRunner`, an empty query matches all
+      windows) plus `/KWin getWindowInfo(handle)` for the details of each -- fast, but
+      KWin filters out everything that is not a "normal" window: dialogs, tool windows,
+      docks/panels, the desktop, splash screens and override-redirect popups.
+    * a throwaway script handed to KWin's scripting interface
+      (`org.kde.kwin.Scripting.loadScript` + `run`), whose `workspace.windowList()` is
+      KWin's unfiltered window list.  ~0.5 ms; the script is unloaded and its file
+      deleted before the helper exits, and it is never installed anywhere.
+
+    `all_types=True` (the default) uses both, so panels, the desktop and dialogs come
+    back with `krunner_listed=False` and a `window_type_name`.  Pass False for the
+    filtered list only (marginally faster, and it never touches the scripting
+    interface).  When the scripting route is unavailable for any reason -- a KWin
+    without it, a refused call, a timeout -- you get the filtered list and a note on
+    stderr rather than an error; pass `require_full=True` to turn that into a
+    `CaptureError` (that is what `kwcapture doctor` uses).
 
     `mark_active` sets `Window.active` on the focused window (one extra ~8 ms query);
     pass False to skip it -- the focus query needs KWin's screenshot authorisation,
     enumeration does not.
     """
+    if require_full and not all_types:
+        raise ValueError("require_full=True needs all_types=True")
     binary = str(_native.resolve(binary))
-    out = subprocess.run([binary, "--list-windows", "--json"], capture_output=True,
-                         text=True, timeout=30)
+    argv = [binary, "--list-windows", "--json"]
+    if not all_types:
+        argv.append("--normal-only")
+    if require_full:
+        argv.append("--require-full")
+    out = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+    if out.returncode == 3:  # the filtered list is on stdout; the full one is not
+        raise CaptureError(out.stderr.strip() or "full window enumeration unavailable")
     if out.returncode != 0:
         raise CaptureError(out.stderr.strip() or "kwcapture --list-windows failed")
     try:
@@ -823,6 +874,10 @@ def find_window(
 
     Raises WindowNotFound if nothing matches and AmbiguousWindow (with .candidates) if
     several do.  Pass `windows` to search a pre-fetched list.
+
+    Resolution uses :func:`list_windows` with its defaults, so dialogs, panels and the
+    desktop are findable too -- which also means a caption shared by a window and its own
+    dialog is ambiguous now where it used to resolve.  A handle never is.
     """
     if isinstance(spec, Window):
         return spec

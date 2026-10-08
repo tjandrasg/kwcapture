@@ -1063,7 +1063,28 @@ typedef struct {
     int minimized, fullscreen, keep_above, keep_below, no_border, skip_taskbar,
         skip_pager, skip_switcher, max_h, max_v;
     long long type, layer;
+    int krunner_listed; /* 1: KWin's own application-window list offered it */
 } win_t;
+
+/* A KWin handle is a QUuid, with or without the braces. */
+static int looks_like_handle(const char *s)
+{
+    size_t n = strlen(s);
+    if (n >= 2 && s[0] == '{' && s[n - 1] == '}')
+        return 1;
+    return n == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-';
+}
+
+/* QUuid accepts "2c14...-..." and "{2c14...-...}"; treat them as the same handle. */
+static int handle_eq(const char *a, const char *b)
+{
+    while (*a == '{')
+        a++;
+    while (*b == '{')
+        b++;
+    size_t la = strcspn(a, "}"), lb = strcspn(b, "}");
+    return la == lb && !strncasecmp(a, b, la);
+}
 
 /* One value of an a{sv} whose key we already read. */
 static void wininfo_apply(sd_bus_message *m, const char *key, char type,
@@ -1200,8 +1221,30 @@ static void parse_window_info(sd_bus_message *reply, win_t *w)
     sd_bus_message_exit_container(reply);
 }
 
+/* Details of one window; leaves the struct untouched if KWin does not know the
+ * handle any more (closed between two calls). */
+static void fetch_window_info(sd_bus *bus, win_t *w)
+{
+    sd_bus_error e2 = SD_BUS_ERROR_NULL;
+    sd_bus_message *r2 = NULL;
+    if (sd_bus_call_method(bus, "org.kde.KWin", "/KWin", "org.kde.KWin", "getWindowInfo",
+                           &e2, &r2, "s", w->uuid) >= 0) {
+        parse_window_info(r2, w);
+        sd_bus_message_unref(r2);
+    } else {
+        sd_bus_error_free(&e2);
+    }
+}
+
+/* getWindowInfo answered something usable?  A window closed between the listing
+ * and the detail query gives an empty map: no caption, no class, no size. */
+static int window_is_live(const win_t *w)
+{
+    return w->caption[0] || w->resource_class[0] || w->width > 0;
+}
+
 /* Every normal window: handles from /WindowsRunner, details from /KWin. */
-static int collect_windows(sd_bus *bus, win_t *wins, int max)
+static int collect_windows_runner(sd_bus *bus, win_t *wins, int max)
 {
     sd_bus_error error = SD_BUS_ERROR_NULL;
     sd_bus_message *reply = NULL;
@@ -1245,17 +1288,10 @@ static int collect_windows(sd_bus *bus, win_t *wins, int max)
     sd_bus_message_unref(reply);
 
     for (int i = 0; i < n; i++) {
-        sd_bus_error e2 = SD_BUS_ERROR_NULL;
-        sd_bus_message *r2 = NULL;
-        if (sd_bus_call_method(bus, "org.kde.KWin", "/KWin", "org.kde.KWin",
-                               "getWindowInfo", &e2, &r2, "s", wins[i].uuid) >= 0) {
-            parse_window_info(r2, &wins[i]);
-            sd_bus_message_unref(r2);
-        } else {
-            sd_bus_error_free(&e2);
-        }
+        fetch_window_info(bus, &wins[i]);
+        wins[i].krunner_listed = 1;
         /* closed between the two calls: no info at all -> drop it */
-        if (!wins[i].caption[0] && !wins[i].resource_class[0] && wins[i].width <= 0) {
+        if (!window_is_live(&wins[i])) {
             wins[i] = wins[n - 1];
             memset(&wins[n - 1], 0, sizeof(wins[n - 1]));
             n--;
@@ -1263,6 +1299,338 @@ static int collect_windows(sd_bus *bus, win_t *wins, int max)
         }
     }
     return n;
+}
+
+/* ------------------------------------------------- full window enumeration
+ * The krunner list above is filtered twice over: WindowsRunner::Match() skips
+ * every window that `isUnmanaged()` or `!isNormalWindow()` ("NET::Normal or
+ * NET::Unknown non-transient", kwin src/window.h), so dialogs, tool windows,
+ * docks, the desktop, splash screens and override-redirect popups never appear
+ * -- although CaptureWindow() takes any of them.  A real case on this desk:
+ * Winamp's big skinned window is _NET_WM_WINDOW_TYPE_DIALOG and only the tiny
+ * NORMAL one was ever listed.
+ *
+ * What is missing is the uuid, and KWin hands those out in only three places:
+ * krunner (filtered), getWindowInfo (needs the uuid already) and the `windowId`
+ * field of a capture reply.  The one API that reaches the whole list is the
+ * scripting interface (kwin src/scripting/scripting.h):
+ *
+ *   org.kde.kwin.Scripting /Scripting          loadScript(filePath s, pluginName s) -> i
+ *   org.kde.kwin.Script    /Scripting/Script<i> run()
+ *   org.kde.kwin.Scripting /Scripting          unloadScript(pluginName s) -> b
+ *
+ * `loadScript` takes a plain path -- nothing has to be installed under
+ * ~/.local/share -- but does *not* run the script, so `run()` is the trigger.
+ * The JS global `workspace` is QtScriptWorkspaceWrapper and its `windowList()`
+ * is literally `Workspace::windows()`: every window, no filter.  Plasma 6 has
+ * no registerDBusAdaptor anymore (grepped: zero hits), so a script cannot export
+ * a method; instead it answers on our *unique* bus name (":1.NNN" -- nobody else
+ * can own it, so nobody else can forge the reply) with `callDBus(...)`, which is
+ * asynchronous and therefore cannot stall the compositor.
+ *
+ * Two KWin facts that cost an hour each:
+ *   * `loadScript` is overloaded (s)/(ss) and a name-keyed binding silently picks
+ *     the one-arg form, dropping the plugin name -- then unloadScript() cannot
+ *     find the script again.  Ask for "ss" explicitly.
+ *   * `run()` calls setDelayedReply() and only ever sends a reply on its error
+ *     path, so the trigger is sent with a short timeout and a timeout there is
+ *     not treated as a failure.
+ *
+ * Measured on Plasma 6.6: load + run + reply ~0.5 ms, plus ~1 ms of getWindowInfo
+ * per window that krunner did not already mention.  Everything here is optional:
+ * any failure leaves the caller with the krunner list and `why` explains it.
+ */
+#define SCRIPTING_SVC "org.kde.KWin"
+#define SCRIPTING_OBJ "/Scripting"
+#define SCRIPTING_IFACE "org.kde.kwin.Scripting"
+#define SCRIPT_IFACE "org.kde.kwin.Script"
+#define WINLIST_OBJ "/org/kde/kwcapture"
+#define WINLIST_IFACE "org.kde.kwcapture.WinList"
+#define WINLIST_TIMEOUT_MS 1500
+#define WINLIST_MAX_IDS MAXWIN
+
+/* %s: our unique bus name, the object path, the interface and the nonce. */
+static const char WINLIST_JS[] =
+    "/* kwcapture: hand out every KWin window handle, including the ones the\n"
+    "   application-window list filters out. Loaded with loadScript(), triggered\n"
+    "   with run(), unloaded by whoever loaded it. */\n"
+    "(function () {\n"
+    "    var ids = [];\n"
+    "    try {\n"
+    "        var ws = workspace.windowList();\n"
+    "        for (var i = 0; i < ws.length; ++i) {\n"
+    "            var id = String(ws[i].internalId);\n"
+    "            if (id.length >= 36 && id.indexOf('-') !== -1) ids.push(id);\n"
+    "        }\n"
+    "    } catch (e) {\n"
+    "        callDBus(\"%s\", \"%s\", \"%s\", \"Failed\", \"%s\", String(e));\n"
+    "        return;\n"
+    "    }\n"
+    "    callDBus(\"%s\", \"%s\", \"%s\", \"Windows\", \"%s\", ids.join(\"\\n\"));\n"
+    "})();\n";
+
+typedef struct {
+    int got;
+    int failed;
+    char nonce[32];
+    char buf[64 * WINLIST_MAX_IDS]; /* one uuid per line */
+} winlist_state_t;
+
+/* The script's answer, either Windows(nonce, ids) or Failed(nonce, reason). */
+static int winlist_dispatch(sd_bus_message *m, void *userdata, sd_bus_error *ret_error)
+{
+    (void)ret_error;
+    winlist_state_t *st = userdata;
+    const char *nonce = NULL, *payload = NULL;
+    if (sd_bus_message_read(m, "ss", &nonce, &payload) < 0)
+        return 1;
+    if (!nonce || strcmp(nonce, st->nonce) != 0)
+        return 1; /* a leftover script from a killed helper: not our answer */
+    if (!st->got) {
+        const char *member = sd_bus_message_get_member(m);
+        st->failed = member && strstr(member, "Failed") != NULL;
+        snprintf(st->buf, sizeof(st->buf), "%s", payload ? payload : "");
+        st->got = 1;
+    }
+    return 1;
+}
+
+static const sd_bus_vtable winlist_vtable[] = {
+    SD_BUS_VTABLE_START(0),
+    SD_BUS_METHOD("Windows", "ss", "", winlist_dispatch, 0),
+    SD_BUS_METHOD("Failed", "ss", "", winlist_dispatch, 0),
+    SD_BUS_VTABLE_END
+};
+
+static void random_nonce(char *out, size_t outsz)
+{
+    unsigned char raw[8];
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0 || read(fd, raw, sizeof(raw)) != (ssize_t)sizeof(raw)) {
+        uint64_t s = (uint64_t)getpid() * 0x9E3779B97F4A7C15ull ^ now_ns();
+        for (size_t i = 0; i < sizeof(raw); i++)
+            raw[i] = (unsigned char)(s >> ((i % 8) * 8)), s = s * 6364136223846793005ull + 1;
+    }
+    if (fd >= 0)
+        close(fd);
+    for (size_t i = 0; i < sizeof(raw) && i * 2 + 2 < outsz; i++)
+        snprintf(out + i * 2, 3, "%02x", raw[i]);
+}
+
+/* Append the windows KWin's own list omits.  Returns the new count (never
+ * fewer than `n`); `why` says why nothing was added, empty when it worked. */
+static int collect_windows_script(sd_bus *bus, win_t *wins, int max, int n, char *why,
+                                  size_t whysz)
+{
+    if (why)
+        why[0] = '\0';
+    const char *uniq = NULL;
+    if (sd_bus_get_unique_name(bus, &uniq) < 0 || !uniq || !*uniq) {
+        snprintf(why, whysz, "cannot get our own bus name");
+        return n;
+    }
+
+    char nonce[32];
+    random_nonce(nonce, sizeof(nonce));
+    winlist_state_t *st = calloc(1, sizeof(*st));
+    if (!st) {
+        snprintf(why, whysz, "out of memory");
+        return n;
+    }
+    snprintf(st->nonce, sizeof(st->nonce), "%s", nonce);
+
+    /* A private script per call: the destination is our unique name, so the
+     * file is of no use to anyone else, and 0600 in $XDG_RUNTIME_DIR (0700) is
+     * enough to keep it that way. */
+    const char *rt = getenv("XDG_RUNTIME_DIR");
+    if (!rt || !*rt)
+        rt = "/tmp";
+    char js_path[PATH_MAX];
+    snprintf(js_path, sizeof(js_path), "%s/kwcapture-winlist-%d-%s.js", rt, (int)getpid(),
+             nonce);
+    char plugin[64];
+    snprintf(plugin, sizeof(plugin), "kwcapture-%d-%s", (int)getpid(), nonce);
+
+    char js[2048];
+    int jn = snprintf(js, sizeof(js), WINLIST_JS, uniq, WINLIST_OBJ, WINLIST_IFACE, nonce,
+                      uniq, WINLIST_OBJ, WINLIST_IFACE, nonce);
+    if (jn < 0 || jn >= (int)sizeof(js)) {
+        free(st);
+        snprintf(why, whysz, "the enumeration script does not fit");
+        return n;
+    }
+    int fd = open(js_path, O_WRONLY | O_CLOEXEC | O_CREAT | O_EXCL, 0600);
+    if (fd < 0 || write(fd, js, (size_t)jn) != jn) {
+        if (fd >= 0)
+            close(fd);
+        unlink(js_path);
+        free(st);
+        snprintf(why, whysz, "cannot write %.128s", js_path);
+        return n;
+    }
+    if (close(fd) != 0) {
+        unlink(js_path);
+        free(st);
+        snprintf(why, whysz, "cannot write %.128s", js_path);
+        return n;
+    }
+
+    sd_bus_slot *slot = NULL;
+    int added = sd_bus_add_object_vtable(bus, &slot, WINLIST_OBJ, WINLIST_IFACE,
+                                         winlist_vtable, st);
+    if (added < 0) {
+        unlink(js_path);
+        free(st);
+        snprintf(why, whysz, "cannot listen for the answer");
+        return n;
+    }
+
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    sd_bus_message *reply = NULL;
+    int script_id = -1;
+    if (sd_bus_call_method(bus, SCRIPTING_SVC, SCRIPTING_OBJ, SCRIPTING_IFACE, "loadScript",
+                           &error, &reply, "ss", js_path, plugin) < 0) {
+        snprintf(why, whysz, "KWin cannot load the enumeration script: %s",
+                 error.message ? error.message : "D-Bus call failed");
+        sd_bus_error_free(&error);
+        sd_bus_slot_unref(slot);
+        unlink(js_path);
+        free(st);
+        return n;
+    }
+    sd_bus_message_read(reply, "i", &script_id);
+    sd_bus_message_unref(reply);
+    if (script_id < 0) {
+        snprintf(why, whysz, "a script named %s is already loaded", plugin);
+        sd_bus_slot_unref(slot);
+        unlink(js_path);
+        free(st);
+        return n;
+    }
+
+    /* Trigger it.  KWin marks this reply delayed and never sends it on the
+     * success path, so a timeout here means "it ran", not "it failed". */
+    {
+        char obj[64];
+        snprintf(obj, sizeof(obj), "/Scripting/Script%d", script_id);
+        sd_bus_message *call = NULL;
+        if (sd_bus_message_new_method_call(bus, &call, SCRIPTING_SVC, obj, SCRIPT_IFACE,
+                                           "run") >= 0) {
+            sd_bus_error e2 = SD_BUS_ERROR_NULL;
+            sd_bus_message *r2 = NULL;
+            sd_bus_call(bus, call, 300ull * 1000ull, &e2, &r2);
+            if (r2)
+                sd_bus_message_unref(r2);
+            sd_bus_error_free(&e2);
+            sd_bus_message_unref(call);
+        }
+    }
+
+    uint64_t deadline = now_ns() + (uint64_t)WINLIST_TIMEOUT_MS * 1000000ull;
+    while (!st->got) {
+        int r = sd_bus_process(bus, NULL);
+        if (r < 0)
+            break;
+        if (r > 0)
+            continue;
+        int64_t left = (int64_t)((deadline - now_ns()) / 1000000ull);
+        if (left <= 0)
+            break;
+        struct pollfd pfd = {.fd = sd_bus_get_fd(bus), .events = POLLIN};
+        poll(&pfd, 1, (int)left);
+    }
+    if (!st->got)
+        snprintf(why, whysz, "the enumeration script did not answer in %d ms",
+                 WINLIST_TIMEOUT_MS);
+    else if (st->failed)
+        snprintf(why, whysz, "the enumeration script failed: %.160s",
+                 st->buf[0] ? st->buf : "no reason given");
+
+    /* KWin keeps a script object until it is asked to go; the file is ours to
+     * delete either way. */
+    {
+        sd_bus_error e3 = SD_BUS_ERROR_NULL;
+        sd_bus_message *r3 = NULL;
+        sd_bus_call_method(bus, SCRIPTING_SVC, SCRIPTING_OBJ, SCRIPTING_IFACE,
+                           "unloadScript", &e3, &r3, "s", plugin);
+        if (r3)
+            sd_bus_message_unref(r3);
+        sd_bus_error_free(&e3);
+    }
+    sd_bus_slot_unref(slot);
+    unlink(js_path);
+
+    if (!st->got || st->failed) {
+        free(st);
+        return n;
+    }
+
+    /* One uuid per line; everything already listed by krunner is skipped, so the
+     * details of the new ones come from the same getWindowInfo() as the rest. */
+    char *save = NULL;
+    for (char *line = strtok_r(st->buf, "\n ", &save); line;
+         line = strtok_r(NULL, "\n ", &save)) {
+        if (n >= max)
+            break;
+        int dup = 0;
+        for (int i = 0; i < n; i++)
+            if (handle_eq(wins[i].uuid, line))
+                dup = 1;
+        if (dup)
+            continue;
+        win_t *w = &wins[n];
+        memset(w, 0, sizeof(*w));
+        snprintf(w->uuid, sizeof(w->uuid), "%s", line);
+        fetch_window_info(bus, w);
+        if (!window_is_live(w))
+            continue;
+        w->krunner_listed = 0;
+        n++;
+    }
+    free(st);
+    return n;
+}
+
+/* The list as one caller wants it: KWin's own application windows, plus --
+ * unless asked not to -- everything the scripting route can reach. */
+static int collect_windows(sd_bus *bus, win_t *wins, int max, int all_types, char *why,
+                           size_t whysz)
+{
+    int n = collect_windows_runner(bus, wins, max);
+    if (n < 0)
+        return n;
+    if (!all_types)
+        return n;
+    return collect_windows_script(bus, wins, max, n, why, whysz);
+}
+
+/* KWin's WindowType enum (kwin src/effect/globals.h), as the words users know. */
+static const char *win_type_name(long long type)
+{
+    switch (type) {
+    case -2: return "undefined";
+    case -1: return "unknown";
+    case 0: return "normal";
+    case 1: return "desktop";
+    case 2: return "dock";
+    case 3: return "toolbar";
+    case 4: return "menu";
+    case 5: return "dialog";
+    case 6: return "override";
+    case 7: return "top-menu";
+    case 8: return "utility";
+    case 9: return "splash";
+    case 10: return "dropdown-menu";
+    case 11: return "popup-menu";
+    case 12: return "tooltip";
+    case 13: return "notification";
+    case 14: return "combo-box";
+    case 15: return "dnd-icon";
+    case 16: return "on-screen-display";
+    case 17: return "critical-notification";
+    case 18: return "applet-popup";
+    default: return "other";
+    }
 }
 
 static void json_string(FILE *f, const char *s)
@@ -1308,6 +1676,9 @@ static void window_to_json(FILE *f, const win_t *w, int first)
             w->skip_switcher ? "true" : "false");
     fprintf(f, ",\"maximized\":%s", (w->max_h && w->max_v) ? "true" : "false");
     fprintf(f, ",\"window_type\":%lld,\"layer\":%lld", w->type, w->layer);
+    fprintf(f, ",\"window_type_name\":");
+    json_string(f, win_type_name(w->type));
+    fprintf(f, ",\"krunner_listed\":%s", w->krunner_listed ? "true" : "false");
     fprintf(f, ",\"desktops\":[");
     for (int i = 0; i < w->n_desktops; i++)
         fprintf(f, "\"%s\"%s", w->desktops[i], i + 1 < w->n_desktops ? "," : "");
@@ -1350,51 +1721,60 @@ static void window_to_table(FILE *f, const win_t *w)
     for (char *p = app; *p; p++)
         if ((unsigned char)*p < 0x20)
             *p = ' ';
-    char flags[64] = {0};
+    char flags[192] = {0};
+    size_t fl = 0;
+#define APPFLAG(s)                                                                      \
+    do {                                                                                \
+        int _n = snprintf(flags + fl, sizeof(flags) - fl, "%s%s", fl ? "," : "", s);     \
+        if (_n > 0 && (size_t)_n < sizeof(flags) - fl)                                   \
+            fl += (size_t)_n;                                                           \
+    } while (0)
     if (w->minimized)
-        strcat(flags, "minimized,");
+        APPFLAG("minimized");
     if (w->fullscreen)
-        strcat(flags, "fullscreen,");
+        APPFLAG("fullscreen");
     if (w->max_h && w->max_v)
-        strcat(flags, "maximized,");
+        APPFLAG("maximized");
     if (w->keep_above)
-        strcat(flags, "above,");
+        APPFLAG("above");
     if (w->keep_below)
-        strcat(flags, "below,");
+        APPFLAG("below");
     if (w->skip_taskbar)
-        strcat(flags, "skip-taskbar,");
-    if (flags[0])
-        flags[strlen(flags) - 1] = '\0';
+        APPFLAG("skip-taskbar");
+    if (!w->krunner_listed)
+        APPFLAG("not-in-app-list");
+    if (w->type != 0) /* what kind of special window it is */
+        APPFLAG(win_type_name(w->type));
+#undef APPFLAG
     fprintf(f, "%-38s  %-46s  %-26s  %4dx%-4d %+5d,%-6d %s\n", w->uuid, name, app,
             (int)w->width, (int)w->height, (int)w->x, (int)w->y, flags);
 }
 
-static int mode_list_windows(sd_bus *bus, int as_json)
+static int mode_list_windows(sd_bus *bus, int as_json, int all_types, int require_full)
 {
     static win_t wins[MAXWIN];
-    int n = collect_windows(bus, wins, MAXWIN);
+    char why[256] = "";
+    int n = collect_windows(bus, wins, MAXWIN, all_types, why, sizeof(why));
     if (n < 0)
         return 1;
+    if (why[0]) /* a note, never on stdout: --json must stay parseable */
+        fprintf(stderr, "kwcapture: full window enumeration unavailable: %s\n", why);
     if (as_json) {
         printf("[");
         for (int i = 0; i < n; i++)
             window_to_json(stdout, &wins[i], i == 0);
         printf("]\n");
-        return 0;
+        return (require_full && why[0]) ? 3 : 0;
     }
     printf("%-38s  %-46s  %-26s  %-9s  %s\n", "WINDOW HANDLE (id)", "NAME", "APP_ID",
            "SIZE", "POSITION / FLAGS");
     for (int i = 0; i < n; i++)
         window_to_table(stdout, &wins[i]);
     if (!n)
-        printf("(no normal windows: KWin lists application windows only, not panels, "
-               "overlays or the desktop)\n");
-    return 0;
+        printf("(no windows: KWin has none, or none that it will let us enumerate)\n");
+    return (require_full && why[0]) ? 3 : 0;
 }
 
-/* --window accepts a handle from --list-windows, or an exact (case-insensitive) name:
- * caption, app id, desktop file or resource name, matching exactly one window.  The
- * Python API additionally allows unique substring matches. */
 /* =============================================== active window, no pixels
  * KWin has no "which window is focused" call on any of its D-Bus interfaces
  * (`supportInformation` in Plasma 6.6 does not list windows at all), but
@@ -1449,25 +1829,6 @@ static int mode_active_window_id(sd_bus *bus)
     return 0;
 }
 
-static int looks_like_handle(const char *s)
-{
-    size_t n = strlen(s);
-    if (n >= 2 && s[0] == '{' && s[n - 1] == '}')
-        return 1;
-    return n == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-';
-}
-
-/* QUuid accepts "2c14...-..." and "{2c14...-...}"; treat them as the same handle. */
-static int handle_eq(const char *a, const char *b)
-{
-    while (*a == '{')
-        a++;
-    while (*b == '{')
-        b++;
-    size_t la = strcspn(a, "}"), lb = strcspn(b, "}");
-    return la == lb && !strncasecmp(a, b, la);
-}
-
 static int name_matches(const win_t *w, const char *spec)
 {
     return !strcasecmp(w->caption, spec) ||
@@ -1482,17 +1843,37 @@ static void list_windows_stderr(const win_t *wins, int n)
         fprintf(stderr, "  %-38s %s\n", wins[i].uuid, wins[i].caption);
 }
 
-/* Returns the handle to use (a pointer that stays valid), or NULL after printing why. */
-static const char *resolve_window_handle(sd_bus *bus, const char *spec)
+/* Does KWin know this handle at all?  getWindowInfo is the only lookup that takes a
+ * handle, and it answers with an empty map for anything it does not know. */
+static int window_handle_exists(sd_bus *bus, const char *handle)
+{
+    win_t w = {0};
+    snprintf(w.uuid, sizeof(w.uuid), "%s", handle);
+    fetch_window_info(bus, &w);
+    return window_is_live(&w);
+}
+
+/* Returns the handle to use (a pointer that stays valid), or NULL after printing why.
+ *
+ * A handle is looked up in the listing first so that the error message can say what
+ * *is* there; if the listing does not mention it, it is checked against getWindowInfo
+ * directly -- KWin knows windows its own application-window list filters out, and
+ * CaptureWindow() captures them fine. */
+static const char *resolve_window_handle(sd_bus *bus, const char *spec, int all_types)
 {
     static win_t wins[MAXWIN];
-    int n = collect_windows(bus, wins, MAXWIN);
+    char why[256] = "";
+    int n = collect_windows(bus, wins, MAXWIN, all_types, why, sizeof(why));
+    if (why[0])
+        fprintf(stderr, "kwcapture: full window enumeration unavailable: %s\n", why);
     if (n < 0)
         return NULL;
     if (looks_like_handle(spec)) {
         for (int i = 0; i < n; i++)
             if (handle_eq(wins[i].uuid, spec))
                 return wins[i].uuid; /* KWin's own spelling of the handle */
+        if (window_handle_exists(bus, spec))
+            return spec; /* KWin has it; its own listing just does not show it */
         fprintf(stderr, "kwcapture: no window with handle '%s' -- available:\n", spec);
         list_windows_stderr(wins, n);
         return NULL;
@@ -1529,7 +1910,9 @@ static void usage(const char *argv0)
             "  (default)          grab one frame\n"
             "  --list             list outputs: NAME WxH refresh x y scale\n"
             "  --list-monitors    list enabled outputs (index, id, name, position, scale)\n"
-            "  --list-windows     list capturable windows (handle, name, app, geometry)\n"
+            "  --list-windows     list capturable windows (handle, name, app, geometry):\n"
+            "                     everything KWin can capture -- dialogs, panels and the\n"
+            "                     desktop included, see --normal-only\n"
             "  --active-window-id print the handle of the focused window (no pixels)\n"
             "                     exit 2 = nothing has focus\n"
             "  --bench N          grab N frames and report timings\n"
@@ -1543,6 +1926,10 @@ static void usage(const char *argv0)
             "  --workspace        capture the whole virtual desktop\n"
             "  --window HANDLE    capture one window: a handle from --list-windows, or an\n"
             "                     exact (case-insensitive) window name / app id\n"
+            "  --normal-only      with --list-windows / --window: only what KWin's own\n"
+            "                     application-window list offers (no dialogs, panels,\n"
+            "                     desktop or popups), and no scripting round trip\n"
+            "  --require-full     fail with exit 3 if the full enumeration was unavailable\n"
             "  --active-window    capture the window that has focus\n"
             "  --json             with --list-windows: machine-readable output\n"
             "  --out FILE         raw BGRA8888 output ('-' = stdout, default)\n"
@@ -1573,6 +1960,7 @@ int main(int argc, char **argv)
     const char *window_spec = NULL;
     int bench = 0, quiet = 0, serve = 0, depth = 2;
     int list_windows = 0, list_monitors = 0, as_json = 0;
+    int all_types = 1, require_full = 0;
     const char *probe_scale = NULL;
     uint32_t slots = 4;
     double fps = 0, idle_exit = 120;
@@ -1593,6 +1981,10 @@ int main(int argc, char **argv)
             return rc;
         } else if (!strcmp(a, "--list-windows") || !strcmp(a, "windows"))
             list_windows = 1;
+        else if (!strcmp(a, "--normal-only") || !strcmp(a, "--app-windows"))
+            all_types = 0;
+        else if (!strcmp(a, "--require-full"))
+            require_full = 1;
         else if (!strcmp(a, "--list-monitors") || !strcmp(a, "monitors"))
             list_monitors = 1;
         else if (!strcmp(a, "--probe-scale") && i + 1 < argc)
@@ -1671,13 +2063,13 @@ int main(int argc, char **argv)
         return rc;
     }
     if (list_windows) {
-        int rc = mode_list_windows(bus, as_json);
+        int rc = mode_list_windows(bus, as_json, all_types, require_full);
         if (bus)
             sd_bus_unref(bus);
         return rc;
     }
     if (window_spec) {
-        o.window = resolve_window_handle(bus, window_spec);
+        o.window = resolve_window_handle(bus, window_spec, all_types);
         if (!o.window) {
             sd_bus_unref(bus);
             return 1;

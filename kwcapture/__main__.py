@@ -117,6 +117,21 @@ def cmd_doctor(argv: argparse.Namespace) -> int:
         _ok(f"{len(windows)} capturable window(s): "
             + ", ".join((w.name or w.app_id or "?")[:28] for w in windows[:6])
             + (" …" if len(windows) > 6 else ""))
+        # The whole list needs KWin's scripting interface; KWin's own application-
+        # window list does not.  Only the second one is enough to capture normal apps.
+        try:
+            list_windows(str(exe), mark_active=False, require_full=True)
+            extra = [w for w in windows if not w.krunner_listed]
+            msg = "full window enumeration works via KWin scripting"
+            if extra:
+                kinds = ", ".join(sorted({w.window_type_name for w in extra}))
+                msg += (f": {len(extra)} window(s) outside KWin's own app-window list "
+                        f"({kinds})")
+            _ok(msg)
+        except CaptureError as e:
+            _warn("only KWin's own application-window list is reachable, so dialogs, "
+                  f"panels and the desktop cannot be listed: "
+                  f"{str(e).removeprefix('kwcapture: ')}")
     except (CaptureError, subprocess.SubprocessError, OSError) as e:
         _warn(f"could not list windows: {e}")
 
@@ -209,17 +224,35 @@ def cmd_screens(argv: argparse.Namespace) -> int:  # kept: the old, terse output
 
 
 def _window_flags(w: Window) -> str:
-    return ",".join(n for n, on in (("active", w.active),
-                                    ("minimized", w.minimized), ("fullscreen", w.fullscreen),
-                                    ("maximized", w.maximized), ("above", w.keep_above),
-                                    ("below", w.keep_below),
-                                    ("skip-taskbar", w.skip_taskbar)) if on)
+    flags = [n for n, on in (("active", w.active),
+                             ("minimized", w.minimized), ("fullscreen", w.fullscreen),
+                             ("maximized", w.maximized), ("above", w.keep_above),
+                             ("below", w.keep_below),
+                             ("skip-taskbar", w.skip_taskbar)) if on]
+    if not w.krunner_listed:
+        flags.append("not-in-app-list")
+    if not w.normal:
+        flags.append(w.window_type_name or f"type={w.window_type}")
+    return ",".join(flags)
 
 
 def cmd_windows(argv: argparse.Namespace) -> int:
-    windows = list_windows(mark_active=not getattr(argv, "no_active", False))
+    normal_only = getattr(argv, "normal_only", False)
+    require_full = getattr(argv, "require_full", False)
+    if normal_only and require_full:
+        print("kwcapture: --normal-only and --require-full contradict each other",
+              file=sys.stderr)
+        return 2
+    try:
+        windows = list_windows(mark_active=not getattr(argv, "no_active", False),
+                               all_types=not normal_only, require_full=require_full)
+    except CaptureError as e:
+        print(str(e), file=sys.stderr)   # the helper already prefixes "kwcapture:"
+        return 1
     if getattr(argv, "active_only", False):
         windows = [w for w in windows if w.active]
+    if getattr(argv, "normal_only", False):
+        windows = [w for w in windows if w.krunner_listed]
     if argv.filter:
         needle = argv.filter.lower()
         windows = [w for w in windows
@@ -238,8 +271,7 @@ def cmd_windows(argv: argparse.Namespace) -> int:
         print(f"{w.id:<38}  {(w.name or '')[:44]:<44}  {(w.app_id or '')[:26]:<26}  "
               f"{size:>11}  {pos:>12}  {_window_flags(w)}")
     if not windows:
-        print("(no capturable windows: KWin lists normal application windows only, "
-              "not panels, overlays or the desktop)")
+        print("(no capturable windows: KWin has none, or none it will let us enumerate)")
     return 0
 
 
@@ -399,6 +431,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument("-f", "--filter", default=None,
                    help="only windows whose name/app id contains this text")
+    p.add_argument("--normal-only", action="store_true",
+                   help="only KWin's own application windows: skip dialogs, panels, "
+                        "the desktop and popups (no scripting round trip)")
+    p.add_argument("--require-full", action="store_true",
+                   help="fail instead of quietly returning the short list when the "
+                        "full enumeration is unavailable")
     p.add_argument("-a", "--active-only", action="store_true",
                    help="only the window that has focus")
     p.add_argument("--no-active", action="store_true",

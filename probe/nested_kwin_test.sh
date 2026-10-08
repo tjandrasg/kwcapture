@@ -129,7 +129,7 @@ run_doctor() {
     out=$(WAYLAND_DISPLAY="$SOCK" XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=KDE \
         timeout 60 "$PYTHON" -m kwcapture doctor "${@:2}" 2>&1)
     rc=$?
-    echo "doctor ($label): rc=$rc | $(printf '%s\n' "$out" | grep -E "capture works|all-black|FAIL" | head -2 | tr '\n' ' ')"
+    echo "doctor ($label): rc=$rc | $(printf '%s\n' "$out" | grep -E "capture works|all-black|enumeration|FAIL" | head -3 | tr '\n' ' ')"
     if [ "$rc" -ne 0 ]; then
         # Same rule as probe/nested_kwin.py: a compositor that cannot offer ScreenShot2 is the
         # machine's fault, and only when the caller said that is acceptable (CI does when it has
