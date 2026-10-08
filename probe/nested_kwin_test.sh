@@ -59,6 +59,28 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [[ "$DBUS_SESSION_BUS_ADDRESS" != u
     echo "         (otherwise the desktop KWin answers and the test proves nothing)"
 fi
 
+# KWin only *owns* org.kde.KWin.ScreenShot2 while it is OpenGL-compositing: the bus name is
+# registered by the screenshot effect, whose supported() is effects->isOpenGLCompositing(). And
+# the --virtual backend only offers OpenGL compositing when drmGetDevices2() found a DRM node
+# (VirtualBackend::supportedCompositors), so a machine/container with no /dev/dri silently falls
+# back to QPainter compositing and the capture path then fails with
+# "The name org.kde.KWin.ScreenShot2 was not provided by any .service files". Say so up front --
+# no Mesa environment variable can substitute for the device, the choice is made before GL is
+# even asked. (kwin_wayland --x11 needs one too: OpenGL only appears when DRI3 provides an fd.)
+if ! ls /dev/dri/renderD* /dev/dri/card* >/dev/null 2>&1; then
+    echo "note: no DRM device on this machine (/dev/dri absent or empty):"
+    echo "      KWin cannot do OpenGL compositing, so it will NOT register"
+    echo "      org.kde.KWin.ScreenShot2 and capturing cannot work here."
+    echo "      A container needs the host's render node passed in (docker --device /dev/dri);"
+    echo "      on a kernel without a GPU driver, vgem provides one (modprobe vgem)."
+fi
+
+# QT_LOGGING_RULES=kwin_core.debug=true is what tells you *why* a compositor was not chosen
+# ("Attempting to load the OpenGL scene" / "Driver does not recommend OpenGL compositing" /
+# "... compositing has been successfully initialized") instead of the single warning line.
+KWIN_DEBUG=()
+[ "${KWCAPTURE_NESTED_KWIN_DEBUG:-}" = "1" ] && KWIN_DEBUG=(QT_LOGGING_RULES='kwin_core.debug=true;kwin_scene.debug=true')
+
 cleanup() {
     [ -n "${CLIENT_PID:-}" ] && kill "$CLIENT_PID" 2>/dev/null
     [ -n "${KWIN_PID:-}" ] && kill "$KWIN_PID" 2>/dev/null
@@ -72,7 +94,7 @@ trap cleanup EXIT
 # never attach to the compositor we are sitting in: `--virtual` renders to its own framebuffer
 # and needs no display at all, which is the whole point (CI has none, and a developer's desktop
 # must not end up being the thing under test).
-env -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen \
+env -u WAYLAND_DISPLAY "${KWIN_DEBUG[@]+"${KWIN_DEBUG[@]}"}" QT_QPA_PLATFORM=offscreen \
     kwin_wayland --virtual --socket "$SOCK" --width "$WIDTH" --height "$HEIGHT" \
     --no-lockscreen --no-global-shortcuts &
 KWIN_PID=$!
@@ -117,6 +139,14 @@ if command -v "$CLIENT" >/dev/null 2>&1; then
     else
         echo "client: $CLIENT DIED, its output was:"
         tail -8 "$CLIENT_LOG" | sed 's/^/    /'
+        # A dead client is not by itself a capture failure (an empty session is capturable), but
+        # when the caller asked for window coverage it must not be lost quietly: a Qt client that
+        # cannot even start is usually a missing QPA plugin -- Debian puts the Wayland one in
+        # `qt6-wayland`, NOT in `qt6-qpa-plugins`.
+        if [ "${KWCAPTURE_NESTED_REQUIRE_WINDOW:-}" = "1" ]; then
+            echo "      and KWCAPTURE_NESTED_REQUIRE_WINDOW=1, so this is a failure"
+            FAILED=1
+        fi
     fi
 else
     echo "client: $CLIENT not found -- the screen path is still tested, the window path is not"

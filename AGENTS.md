@@ -34,6 +34,60 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 159 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
 
+## FRESH STATUS — 2026-10-08 ~17:40 — **WHY HEADLESS CI FAILS: KWin only owns `ScreenShot2` while it is OpenGL-compositing, and that needs a DRM device**
+
+The `headless-kwin` job gets a nested KWin up inside `debian:trixie-slim` (`nested KWin: pid 8033,
+socket kwcapture-test, output 1024x640`, and `list_monitors()` even answers `Virtual-0 (1024,640)`
+over Wayland) and then *every* capture dies with
+
+```
+kwcapture: The name org.kde.KWin.ScreenShot2 was not provided by any .service files
+         ; kwcapture: initial grab failed: No route to host
+```
+
+That is **not** an authorisation bug and not a kwcapture bug. Read out of the upstream source
+(kwin 6.3.6 = what trixie ships; identical in 6.4 / 6.5 / 6.6 and master):
+
+* `src/plugins/screenshot/screenshot.cpp` → `bool ScreenShotEffect::supported() { return
+effects->isOpenGLCompositing(); }`. That effect is the **only** owner of the bus name: its
+constructor makes a `ScreenShotDBusInterface2`, which is what calls
+`registerService("org.kde.KWin.ScreenShot2")` (`screenshotdbusinterface2.cpp`). No OpenGL
+compositing ⇒ effect not loaded ⇒ **name never appears** ⇒ exactly the error above. The same
+code also explains why an unauthorised call *raises* instead of returning black: different layer.
+* `src/backends/virtual/virtual_backend.cpp` → `supportedCompositors()` adds `OpenGLCompositing`
+**only if `findRenderDevice()`/`drmGetDevices2()` found a DRM node**; otherwise it offers
+`QPainterCompositing` alone. A container has no `/dev/dri`, so `WaylandCompositor::createRenderer()`
+logs `kwin_core: Configured compositor not supported by Platform. Falling back to defaults` —
+which we now see in the CI log, and which is the *smoking gun* — and quietly composites with
+QPainter. `kwin_wayland --x11` is no escape: `X11WindowedBackend` likewise only offers OpenGL when
+DRI3 hands it a DRM fd (Xvfb has none).
+* **Therefore the headless recipe needs a DRM render node, and no amount of Mesa env tinkering
+can substitute for it** — the decision is taken on `drmGetDevices2()` before Mesa is asked
+anything, so `LIBGL_ALWAYS_SOFTWARE=1` / `EGL_PLATFORM=surfaceless` / installing `libgl1-mesa-dri`
+change nothing. (`--virtual`'s EGL backend in ≤ 6.6 is `EGL_PLATFORM_GBM_KHR` on that device,
+see `virtual_egl_backend.cpp` — it genuinely cannot work without one.) Upstream even special-cases
+**vgem** in `findRenderDevice()` ("prefer the primary node because gbm will attempt to allocate
+dumb buffers"), i.e. KWin's own CI uses a *virtual* DRM node — that is the thing to get in CI.
+Master (post-6.6) changed `supportedCompositors()` to `{OpenGLCompositing}` unconditionally with
+the new `RenderDevice` abstraction, so a future KWin may do surfaceless llvmpipe with no DRM at
+all; nothing released does today.
+* **Not the problem: PipeWire.** KWin logs `kwin_screencast: Failed to create PipeWire context`
+in that container, and `screencast.so` is the *portal* screen-cast plugin. ScreenShot2 needs no
+PipeWire: we hand KWin a **pipe** fd and `ScreenShotWriter2` writes the raw QImage into it from a
+QThreadPool (that writer is also the origin of the benign `pipe is broken` line and of the
+"KWin replies before the pixels arrive" fact). Do not add a `pipewire` package to the job chasing
+that log line.
+* **Second, independent bug in the same run:** the Qt **Wayland** QPA plugin is *not* in
+`qt6-qpa-plugins`. Debian ships it as **`qt6-wayland`** (`.../qt6/plugins/platforms/
+libqwayland-egl.so` + `libqwayland-generic.so`), so `QT_QPA_PLATFORM=wayland kcalc` aborted with
+`Could not find the Qt platform plugin "wayland" ... Available platform plugins are: linuxfb,
+vkkhrdisplay, eglfs, vnc, xcb, minimal, offscreen, minimalegl` — and note that `list_windows()`
+returning `0 []` (not an error!) was the *correct* answer for a session whose only client died.
+* Debugging lever for next time, cheap and decisive: `QT_LOGGING_RULES="kwin_core.debug=true"`
+makes KWin say *why* (`Attempting to load the OpenGL scene` / `Driver does not recommend OpenGL
+compositing` / `QPainter compositing has been successfully initialized`) instead of the one-line
+warning. The probe now passes it when `KWCAPTURE_NESTED_KWIN_DEBUG=1`.
+
 ## FRESH STATUS — 2026-10-08 ~15:30 — **merged into nunif**, and **headless KWin capture works**
 
 ### Downstream: nagadomi/nunif#746 is MERGED

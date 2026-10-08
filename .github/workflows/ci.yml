@@ -76,76 +76,59 @@ jobs:
     # End-to-end capture against a *real* KWin with no GPU, no monitor and nobody logged in:
     # `kwin_wayland --virtual` on a private D-Bus session, driven by probe/nested_kwin_test.sh.
     # This is the only automated coverage the org.kde.KWin.ScreenShot2 path ever gets -- the
-    # ring-reader job above cannot reach it, which is why whole classes of behaviour (window
-    # handles, authorisation, the empty-session black frame) were only ever verified on one
-    # developer desktop.
+    # build job above cannot reach it, which is why whole classes of behaviour (window handles,
+    # authorisation, the empty-session black frame) were only ever verified on one developer
+    # desktop.
     #
-    # Debian 13 (trixie) rather than ubuntu-latest because Plasma 6 is required: ubuntu-24.04
-    # still ships KWin 5.27, whose window handles and ScreenShot2 flags are not what kwcapture
-    # speaks (Plasma 6 hands out {uuid} window ids).
+    # This is deliberately NOT a `container:` job. KWin owns the ScreenShot2 name only while it is
+    # OpenGL-compositing (the name is registered by its screenshot effect, whose supported() is
+    # effects->isOpenGLCompositing()) and the --virtual backend offers OpenGL compositing only when
+    # drmGetDevices2() finds a DRM render node. A container without /dev/dri therefore falls back
+    # to QPainter compositing and capture cannot work at all -- no Mesa variable changes that. So
+    # the container has to be started by hand with --device /dev/dri, and the node may have to be
+    # created first (modprobe vgem): both are host operations, hence a runner-side job that runs
+    # probe/ci_headless_kwin.sh inside a container it starts itself. `docker run --rm --device
+    # /dev/dri -v "$PWD:/w" debian:trixie-slim bash /w/probe/ci_headless_kwin.sh` is the same
+    # thing on any machine with KWin-capable hardware.
     name: headless KWin capture (Plasma 6, no GPU)
     runs-on: ubuntu-latest
-    container:
-      image: debian:trixie-slim
     env:
-      XDG_RUNTIME_DIR: /tmp/xdg-run
-      # No GPU on a runner: make sure a software GL exists and is chosen, rather than letting
-      # KWin discover that its "configured compositor" (OpenGL) is unavailable.
+      # No GPU on a runner, and a virtual DRM node has no hardware driver either: force llvmpipe
+      # instead of letting KWin discover that its configured compositor is unavailable.
       LIBGL_ALWAYS_SOFTWARE: "1"
-      EGL_PLATFORM: surfaceless
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install KWin, D-Bus and the build toolchain
+      - name: Give the runner a DRM render node
+        # Facts, not guesses (AGENTS.md): KWin's choice of compositor is made on drmGetDevices2(),
+        # so the only thing that matters here is whether a /dev/dri node exists afterwards.
+        # vgem is what KWin's own CI uses -- findRenderDevice() special-cases it.
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            ca-certificates \
-            build-essential pkg-config libsystemd-dev libwayland-dev libcap2-bin \
-            libgl1-mesa-dri qt6-qpa-plugins \
-            python3 python3-venv python3-pip \
-            dbus dbus-x11 xkb-data \
-            kwin-wayland kwin-common kcalc
-          # Debian's postinst grants CAP_SYS_NICE to kwin_wayland so it can raise its scheduling
-          # priority. A binary with file capabilities cannot be exec'd in a container running
-          # with no-new-privileges -- which is how GitHub runs container jobs -- and every attempt
-          # dies with `Operation not permitted`. KWin does not need the capability, so remove it.
-          setcap -r /usr/bin/kwin_wayland
-          echo "capabilities after setcap -r: '$(getcap /usr/bin/kwin_wayland)'"
-          kwin_wayland --version 2>&1 | head -2
-          # What the probe depends on, printed so a failure is not a mystery: /WindowsRunner comes
-          # from kwin's krunnerintegration plugin, kcalc needs the wayland QPA plugin, and --virtual
-          # needs some GL driver (llvmpipe here).
-          echo "kwin plugins: $(ls /usr/lib/x86_64-linux-gnu/qt6/plugins/kwin/plugins/ 2>/dev/null | tr '\n' ' ')"
-          echo "qt platforms: $(ls /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/ 2>/dev/null | tr '\n' ' ')"
-          echo "dri drivers: $(ls /usr/lib/x86_64-linux-gnu/dri/ 2>/dev/null | tr '\n' ' ')"
+          set -x
+          uname -a
+          echo "before: $(ls /dev/dri 2>&1 | tr '\n' ' ')"
+          for mod in vgem vkms; do
+            sudo modprobe "$mod" 2>&1 || echo "modprobe $mod failed (rc=$?)"
+          done
+          echo "after: $(ls -l /dev/dri 2>&1 | tr '\n' ' ')"
+          lsmod | grep -E 'vgem|vkms|drm' || echo "(no drm modules loaded)"
+          find "/lib/modules/$(uname -r)" \( -name 'vgem*' -o -name 'vkms*' \) 2>/dev/null | head -5
+          sudo ls -l /dev/dri 2>/dev/null || echo "NO DRM DEVICE: KWin will not be able to capture"
 
-      - name: Environment
+      - name: Capture a nested headless KWin (Debian trixie container)
+        # The script installs KWin 6 + kcalc, pip-installs this checkout, authorises the helper
+        # and runs the probe; it exits non-zero if the frame is the wrong size (wrong
+        # compositor), if it is black while a window is up, if the client could not start, or if
+        # `doctor` regresses to failing an empty session.
         run: |
-          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
-          command -v dbus-run-session
-          command -v kcalc
-          python3 -c "import sys; print('python', sys.version)"
-
-      - name: Install kwcapture from this checkout
-        run: |
-          python3 -m venv /tmp/venv
-          /tmp/venv/bin/pip install --quiet --upgrade pip
-          /tmp/venv/bin/pip install --quiet .
-          /tmp/venv/bin/kwcapture --version
-          # the nested KWin authorises the helper through this file, exactly like Plasma does
-          /tmp/venv/bin/kwcapture install-desktop
-          ls -l "${XDG_DATA_HOME:-$HOME/.local/share/applications}"/io.github.kwcapture-*.desktop
-
-      - name: Capture a nested headless KWin
-        # exits non-zero if the frame is the wrong size (wrong compositor), black while a window
-        # is up, or if `doctor` regresses to failing an empty session
-        run: |
-          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
-          # NOT from the checkout: a cwd inside the tree puts ./kwcapture on sys.path ahead of
-          # the installed package, and the source tree has no compiled helper -- doctor then
-          # reports "helper not found" for a perfectly good install.
-          cd /tmp
-          dbus-run-session -- env PYTHON=/tmp/venv/bin/python \
-            KWCAPTURE_NESTED_REQUIRE_WINDOW=1 \
-            bash "$GITHUB_WORKSPACE/probe/nested_kwin_test.sh"
+          DEVICE=()
+          if ls /dev/dri/renderD* /dev/dri/card* >/dev/null 2>&1; then
+            DEVICE=(--device /dev/dri)
+            echo "passing the host's DRM node into the container"
+          else
+            echo "no /dev/dri on this runner -- the container will not be able to capture"
+          fi
+          docker run --rm "${DEVICE[@]+"${DEVICE[@]}"}" \
+            -e LIBGL_ALWAYS_SOFTWARE -e SRC=/w \
+            -v "$GITHUB_WORKSPACE:/w" \
+            debian:trixie-slim bash /w/probe/ci_headless_kwin.sh
