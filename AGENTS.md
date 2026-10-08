@@ -43,6 +43,12 @@ docs; this file is the investigation log + gotchas.
 > whole reason below, so nobody has to rediscover it. On a machine that *can* composite (this
 > desktop, any KDE self-hosted runner, a GPU runner) the same job runs strict and fails on anything.
 
+> Last verified state of this tree: run **40** green in **61 s** (headless job), `PROBE OK` locally
+> on Plasma 6.6, ring-reader suite green, functional suite **152/152** — after one flake that is now
+> FLAKE-1 below. The desk is **one output at x1** since today, not the 75 %/125 % pair the v0.5.0
+> notes describe, which is why the count is 152 and why the fractional-scaling tests are running in
+> their degenerate branches.
+
 The `headless-kwin` job gets a nested KWin up inside `debian:trixie-slim` (`nested KWin: pid 8033,
 socket kwcapture-test, output 1024x640`, and `list_monitors()` even answers `Virtual-0 (1024,640)`
 over Wayland) and then *every* capture dies with
@@ -545,6 +551,28 @@ that request). Assume a force-push does not un-publish anything.
 > see it, before you chase it.** Do not investigate first and write it up later — two
 > sessions have now lost findings that way. A half-paragraph with the symptom is worth more
 > than a perfect post-mortem that never gets typed. Mark unverified guesses `(unverified)`.
+
+### FLAKE-1 (test suite, not the library): `area_in='physical' grabs the device region it names` fails when the screen is animating
+
+* **Seen 2026-10-08 ~19:10**, once, on the desktop: `[FAIL] DP-1: area_in='physical' grabs the
+  device region it names  MAD=70.0 (display == scene: one mapping only; detail 12.3)`. Rerunning
+  the whole suite immediately after: **152/152 green**, twice. Nothing in the library was touched
+  (that branch changes `probe/`, the workflow and the docs only).
+* **Why the test can do that** (`tests/test_kwcapture.py`, the `mphysnat`/`mphys` pair): it grabs
+  the whole output, picks the *most detailed* 256x144 device rectangle it can find, then grabs that
+  rectangle again in a **second, separate** ScreenShot2 request and compares contents. Detail is
+  exactly what animation looks like to that scan, so a video / terminal / anything repainting in
+  the chosen rectangle makes MAD explode (70 is far past a cursor sprite: ~12 at most). The
+  comparison is between two frames, not two mappings.
+* **Fix, when someone touches that test**: grab the whole output twice and mask out every rectangle
+  that differs between them, then choose the detailed-and-stable patch. Do not just loosen the
+  20.0 threshold — a threshold that has to cover a moving picture protects nothing.
+* **Also note**: the suite's check **count depends on how many outputs the desk has** — 159 on the
+  two-output desk (DP-1 75 % + HDMI-A-1 125 %) that the v0.5.0 notes describe, **152 now** that the
+  desk has one output at 100 %. `kwcapture monitors --measure-scale` before quoting a number; the
+  per-output checks (`area_in="physical"` especially) are only meaningful with both a display scale
+  and a scene scale that differ, and today's desk has neither (x1/x1 → the degenerate
+  "one mapping only" branch).
 
 ### BUG-1 (surfaced in v0.4.0; KWin's behaviour itself is unfixable): a **minimised window captures a STALE frame**
 
