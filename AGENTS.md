@@ -188,6 +188,22 @@ though "ultimately it comes down to whether the binary is trusted". The facts th
 
 ### NEW: kwcapture captures a KWin nobody is looking at (nested, headless, ~6 s)
 
+> **CORRECTED the same evening — two things written here (and in commit `2334a04`, which said
+> "`--virtual` … no DRM, no X server, no GPU") were over-claimed, and CI is what proved it.**
+> No X server, no monitor, no GPU *session*: still true. **"no DRM": false.** KWin's `--virtual`
+> backend offers OpenGL compositing only if `drmGetDevices2()` finds a device, and ScreenShot2 is
+> registered only while KWin is OpenGL-compositing — so **a DRM render node is mandatory for the
+> frames** (see the FRESH STATUS at the top: `/dev/dri/renderD128` on a normal desktop, a vgem node,
+> or nothing at all on a GitHub runner, where the whole capture path therefore does not exist).
+> It looked true here because this machine has a render node, so the requirement was invisible.
+> And "in about six seconds" is the **probe's own runtime** (re-measured: **7.52 s** wall, including
+> its three `doctor` runs), not the cost of getting there: on a bare Debian trixie box, Plasma 6 is
+> **248 MB of archives → 986 MB on disk → 437 packages** even with `--no-install-recommends`, i.e.
+> another ~40 s of `apt` before the 6-second part starts. So the honest one-liner for a downstream
+> tester (nagadomi and anyone else without Plasma) is: *no KDE session, no monitor and no GPU
+> needed — but Plasma 6's packages and any DRM render node are.* See
+> `probe/ci_headless_kwin.sh` / README "How this is tested".
+
 `probe/nested_kwin_test.sh` + `probe/nested_kwin.py` (both verified today on Plasma 6.6 / KWin
 6.6.6). This is the answer to "how do you test the KDE path without KDE hardware" — and therefore a
 real CI path, see *Ideas* below.
