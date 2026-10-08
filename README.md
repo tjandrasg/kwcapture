@@ -480,6 +480,22 @@ Non-KDE compositors need `ext-image-copy-capture-v1` / `wlr-screencopy-unstable-
 instead (kwcapture does not implement those; `probe/globals.c` shows how to check what a
 compositor advertises).
 
+## Used by
+
+* **[iw3-desktop](https://github.com/nagadomi/nunif/tree/dev/iw3)** (part of
+  [nunif](https://github.com/nagadomi/nunif)) — converts the PC desktop into side-by-side 3D and
+  streams it to VR headsets over Wi-Fi. kwcapture is its **Wayland (KDE Plasma) screenshot
+  backend** (`--screenshot kwcapture`): whole-monitor and per-window capture at ~40 fps, picked by
+  default on a Plasma session. It is an *optional* dependency there on purpose — nunif installs
+  nothing automatically and warns instead of streaming a black XWayland screen.
+  Merged 2026-10-08: [nagadomi/nunif#746](https://github.com/nagadomi/nunif/pull/746).
+  What that integration exercises, i.e. the entry points a release must not break:
+  `Capture(monitor=…)` / `Capture(window=…)` with `cursor=` and a private `shm=` path,
+  `grab(copy=True)`, `geometry()`, `list_monitors(measure_scale=True)`, `list_windows()`,
+  `find_window()` + `AmbiguousWindow`, and the measured `effective_scale` / `area_scale`.
+
+Built something on top of kwcapture? Open an issue or a PR and it goes in this list.
+
 ## License
 
 MIT — see `LICENSE`. `AGENTS.md` documents the reverse engineering behind it.
