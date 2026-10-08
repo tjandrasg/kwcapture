@@ -97,17 +97,24 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates \
-            build-essential pkg-config libsystemd-dev libwayland-dev \
+            build-essential pkg-config libsystemd-dev libwayland-dev libcap2-bin \
             python3 python3-venv python3-pip \
             dbus dbus-x11 xkb-data \
             kwin-wayland kcalc
+          # Debian's postinst grants CAP_SYS_NICE to kwin_wayland so it can raise its scheduling
+          # priority. A binary with file capabilities cannot be exec'd in a container running
+          # with no-new-privileges -- which is how GitHub runs container jobs -- and every attempt
+          # dies with `Operation not permitted`. KWin does not need the capability, so remove it.
+          setcap -r /usr/bin/kwin_wayland
+          echo "capabilities after setcap -r: '$(getcap /usr/bin/kwin_wayland)'"
+          kwin_wayland --version 2>&1 | head -2
 
       - name: Environment
         run: |
           mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
-          kwin_wayland --version 2>&1 | head -2 || true
           command -v dbus-run-session
           command -v kcalc
+          python3 -c "import sys; print('python', sys.version)"
 
       - name: Install kwcapture from this checkout
         run: |

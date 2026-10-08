@@ -82,7 +82,10 @@ for _ in $(seq 1 40); do
 done
 if [ ! -S "$RUNTIME/$SOCK" ]; then
     echo "FAIL: kwin_wayland did not create $RUNTIME/$SOCK"
-    echo "      (is kwin_wayland installed? does it need --x11 / a different backend here?)"
+    echo "      is kwin_wayland installed? does this build need --x11 or --drm instead of --virtual?"
+    echo "      'Operation not permitted' in a container: the distro granted the binary file"
+    echo "      capabilities (Debian: CAP_SYS_NICE) and no-new-privileges blocks exec of those --"
+    echo "      fix with:  setcap -r \$(command -v kwin_wayland)"
     exit 1
 fi
 echo "nested KWin: pid $KWIN_PID, socket $SOCK, output ${WIDTH}x${HEIGHT}, bus $DBUS_SESSION_BUS_ADDRESS"
