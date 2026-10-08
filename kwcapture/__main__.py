@@ -1,6 +1,8 @@
 """`kwcapture` command line interface.
 
     kwcapture doctor               is everything in place?  (also: kwcapture setup)
+                                   --allow-black for empty/locked/headless sessions where a
+                                   black frame is the correct answer
     kwcapture setup                build the helper + authorise it with KWin
     kwcapture screens              list outputs
     kwcapture windows              list capturable windows (handle, name, app, size)
@@ -108,8 +110,10 @@ def cmd_doctor(argv: argparse.Namespace) -> int:
         _bad(f"could not list outputs: {e}")
         problems += 1
 
+    window_count: Optional[int] = None
     try:
         windows = list_windows(str(exe))
+        window_count = len(windows)
         _ok(f"{len(windows)} capturable window(s): "
             + ", ".join((w.name or w.app_id or "?")[:28] for w in windows[:6])
             + (" …" if len(windows) > 6 else ""))
@@ -122,12 +126,27 @@ def cmd_doctor(argv: argparse.Namespace) -> int:
             frame = cap.grab()
             ms = (time.perf_counter() - t0) * 1e3
             mean = float(frame.mean())
-            if mean < 1.0:
-                _bad("capture returned an all-black frame")
-                problems += 1
+            size = f"{frame.shape[1]}x{frame.shape[0]}"
+            timing = f"{size} in {ms:.1f} ms (grab {cap.stats()['grab_ms']:.1f} ms)"
+            if mean >= 1.0:
+                _ok(f"capture works: {timing}")
+            elif argv.allow_black:
+                _ok(f"capture works: {timing}, frame is black as expected (--allow-black)")
+            elif window_count == 0:
+                # Nothing is drawing in this session, so black is what a *correct* capture of
+                # an empty desktop looks like: a nested/headless KWin (probe/nested_kwin_test.sh
+                # starts one before any client is up), a session that just started, or a plain
+                # black wallpaper with no windows open. Say it, do not fail it.
+                _warn(f"capture works: {timing}, but the frame is all black and this session "
+                      "has 0 capturable windows - nothing is drawing, so that is expected "
+                      "(start an app, or pass --allow-black to stay quiet)")
             else:
-                _ok(f"capture works: {frame.shape[1]}x{frame.shape[0]} in {ms:.1f} ms "
-                    f"(grab {cap.stats()['grab_ms']:.1f} ms)")
+                # A black frame with windows on screen is not nothing: KWin refused to composite
+                # this output, the screen is locked/DPMS-blanked, or the frame is stale.
+                _bad(f"capture returned an all-black frame while {window_count} window(s) are "
+                     "capturable - is the screen locked or blanked? (not a missing-authorization "
+                     "problem: that raises instead of returning black)")
+                problems += 1
     except CaptureError as e:
         _bad(f"capture failed: {e}")
         problems += 1
@@ -352,6 +371,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     p = sub.add_parser("doctor", help="check the environment")
     p.add_argument("--fix", action="store_true", help="write the authorisation file if needed")
     p.add_argument("--build", action="store_true", help="allow building the helper")
+    p.add_argument("--allow-black", action="store_true",
+                   help="an all-black frame is fine (empty, locked or headless/nested "
+                        "sessions); without it a black frame is only accepted when no window "
+                        "is capturable")
     p.set_defaults(func=cmd_doctor)
 
     sub.add_parser("setup", help="build the helper and authorise it with KWin")

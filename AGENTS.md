@@ -89,9 +89,16 @@ dbus-run-session -- bash probe/nested_kwin_test.sh
   the developer's desktop. On a private bus the nested KWin owns the name and every answer is its
   own. `nested_kwin.py` asserts the frame size for exactly this reason.
 * Interpreting a failure: **all-black frame of the right size** = the nested session is empty (start
-  a client in it) — `kwcapture doctor` calls that `FAIL: capture returned an all-black frame`, a
-  **false alarm on an empty nested session**; **frame at the other size** = you captured the other
-  compositor (missing private bus).
+  a client in it); **frame at the other size** = you captured the other compositor (no private bus).
+* **FIXED same day — the `doctor` false alarm is gone.** It used to report
+  `FAIL: capture returned an all-black frame` (exit 1) on an empty session, which is exactly what a
+  *correct* capture of nothing looks like. Now: black + **0 capturable windows** → `warn`, exit 0;
+  black **with windows** → still `FAIL` (locked/DPMS/not compositing — note that a missing
+  authorisation *raises*, it does not return black, so this is never an auth symptom); and
+  `--allow-black` accepts it unconditionally for CI. Verified on a nested session: empty → rc 0,
+  empty + `--allow-black` → rc 0, with KCalc → rc 0; host session unchanged; suite still 159/159.
+  `probe/nested_kwin_test.sh` runs doctor three times (empty, empty+flag, with client) so the
+  heuristic cannot rot back, and prints `PROBE OK` + a single exit code.
 * Benign noise, not bugs: KWin logs `kwin_screenshot: ... pipe is broken` when the helper exits with
   a request queued; `qt.qpa.services: Failed to register with host portal`, `kf.globalaccel…`,
   `fusermount3: failed to access mountpoint /run/user/1000/gvfs: Permission denied` and the

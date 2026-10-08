@@ -118,6 +118,8 @@ the pixels land, so EOF on the pipe — not the reply — is the frame boundary.
 
 ```bash
 kwcapture doctor [--fix] [--build]     # is everything OK? (--fix also authorises)
+kwcapture doctor --allow-black         # ditto, for empty / locked / headless-nested sessions
+                                       # where an all-black frame is the correct answer
 kwcapture setup                        # build the helper + authorise it
 kwcapture install-desktop [--uninstall]# manage the KWin authorisation file
 kwcapture screens                      # DP-1 2560x1440 @164.69Hz pos 0,0 scale 1

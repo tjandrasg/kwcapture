@@ -4,10 +4,11 @@
 #     dbus-run-session -- bash probe/nested_kwin_test.sh
 #
 # What it does: starts `kwin_wayland --virtual` (a nested KWin rendering to a virtual
-# framebuffer) inside a PRIVATE D-Bus session, puts one client in it (KCalc, any Wayland app
-# will do), and runs probe/nested_kwin.py against it. Verified on Plasma 6.6 / KWin 6.6.6 in
-# about 6 seconds:
+# framebuffer) inside a PRIVATE D-Bus session, checks `kwcapture doctor` against the empty
+# session, puts one client in it (KCalc, any Wayland app will do) and runs probe/nested_kwin.py.
+# Verified on Plasma 6.6 / KWin 6.6.6 in about 6 seconds:
 #
+#     doctor on the empty session: rc=0 (black frame + 0 windows is expected, not a failure)
 #     monitors: [('Virtual-0', (1024, 640))]
 #     windows: 1 [('KCalc', (640, 508))]
 #     screen grab: (640, 1024, 4) mean B/G/R = [22.0, 20.4, 19.0] max = 255
@@ -24,8 +25,12 @@
 # `X-KDE-DBUS-Restricted-Interfaces` entry in ~/.local/share/applications (see kwcapture
 # install-desktop), which the nested KWin reads the same way.
 #
-# Needs: kwin_wayland (Debian/Ubuntu: kwin-wayland, Fedora: kwin-wayland, Arch: kwin),
-# a Wayland client for the window path (kcalc/konsole/gtk4-demo/...), and a built helper.
+# Noise that is benign: KWin logs `kwin_screenshot: ... pipe is broken` when the helper exits
+# with a request still queued, and `dbus-run-session` activates portals/atspi/kwallet whose
+# warnings (`qt.qpa.services`, `kf.wallet.ksecretd`, `fusermount3 ... gvfs`) mean nothing.
+#
+# Needs: kwin_wayland (Debian/Ubuntu: kwin-wayland, Fedora/Arch: kwin), a Wayland client for
+# the window path (kcalc/konsole/gtk4-demo/...), dbus-run-session, and a built helper.
 set -u
 
 SOCK="${KWCAPTURE_NESTED_SOCKET:-kwcapture-test}"
@@ -35,6 +40,8 @@ HEIGHT="${SIZE#*x}"
 CLIENT="${KWCAPTURE_NESTED_CLIENT:-kcalc}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PYTHON="${PYTHON:-python3}"
+RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
+FAILED=0
 
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [[ "$DBUS_SESSION_BUS_ADDRESS" != unix:path=/tmp/dbus-* ]]; then
     echo "warning: this does not look like a private D-Bus session;"
@@ -55,15 +62,29 @@ kwin_wayland --virtual --socket "$SOCK" --width "$WIDTH" --height "$HEIGHT" \
     --no-lockscreen --no-global-shortcuts &
 KWIN_PID=$!
 for _ in $(seq 1 40); do
-    [ -S "${XDG_RUNTIME_DIR:-/tmp}/$SOCK" ] && break
+    [ -S "$RUNTIME/$SOCK" ] && break
     sleep 0.5
 done
-if [ ! -S "${XDG_RUNTIME_DIR:-/tmp}/$SOCK" ]; then
-    echo "FAIL: kwin_wayland did not create ${XDG_RUNTIME_DIR:-/tmp}/$SOCK"
+if [ ! -S "$RUNTIME/$SOCK" ]; then
+    echo "FAIL: kwin_wayland did not create $RUNTIME/$SOCK"
     echo "      (is kwin_wayland installed? does it need --x11 / a different backend here?)"
     exit 1
 fi
 echo "nested KWin: pid $KWIN_PID, socket $SOCK, output ${WIDTH}x${HEIGHT}, bus $DBUS_SESSION_BUS_ADDRESS"
+
+# doctor on a session with nothing in it: a black frame is the CORRECT answer there, so this
+# must not fail (it used to: "FAIL capture returned an all-black frame" -> exit 1).
+run_doctor() {
+    local label="$1" out rc
+    out=$(WAYLAND_DISPLAY="$SOCK" XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=KDE \
+        timeout 60 "$PYTHON" -m kwcapture doctor "${@:2}" 2>&1)
+    rc=$?
+    echo "doctor ($label): rc=$rc | $(printf '%s\n' "$out" | grep -E "capture works|all-black|FAIL" | head -2 | tr '\n' ' ')"
+    [ "$rc" -eq 0 ] || FAILED=1
+}
+
+run_doctor "empty session"
+run_doctor "empty session, --allow-black" --allow-black
 
 if command -v "$CLIENT" >/dev/null 2>&1; then
     QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY="$SOCK" "$CLIENT" >/dev/null 2>&1 &
@@ -77,8 +98,9 @@ fi
 WAYLAND_DISPLAY="$SOCK" XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=KDE \
     KWCAPTURE_NESTED_SIZE="$SIZE" "$PYTHON" "$HERE/nested_kwin.py"
 RC=$?
+[ "$RC" -eq 0 ] || FAILED=1
 
-# Benign on teardown, for the record: KWin logs `kwin_screenshot: ... pipe is broken` when the
-# screenshot pipe closes while a request is still queued (helper shut down first). It is KWin's
-# own writer complaining, not a failed capture.
-exit $RC
+run_doctor "session with a client"
+
+[ "$FAILED" -eq 0 ] && echo "PROBE OK" || echo "PROBE FAILED"
+exit "$FAILED"
