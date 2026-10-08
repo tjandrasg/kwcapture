@@ -71,3 +71,57 @@ jobs:
 
       - name: List artefacts
         run: ls -l dist/
+
+  headless-kwin:
+    # End-to-end capture against a *real* KWin with no GPU, no monitor and nobody logged in:
+    # `kwin_wayland --virtual` on a private D-Bus session, driven by probe/nested_kwin_test.sh.
+    # This is the only automated coverage the org.kde.KWin.ScreenShot2 path ever gets -- the
+    # ring-reader job above cannot reach it, which is why whole classes of behaviour (window
+    # handles, authorisation, the empty-session black frame) were only ever verified on one
+    # developer desktop.
+    #
+    # Debian 13 (trixie) rather than ubuntu-latest because Plasma 6 is required: ubuntu-24.04
+    # still ships KWin 5.27, whose window handles and ScreenShot2 flags are not what kwcapture
+    # speaks (Plasma 6 hands out {uuid} window ids).
+    name: headless KWin capture (Plasma 6, no GPU)
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie-slim
+    env:
+      XDG_RUNTIME_DIR: /tmp/xdg-run
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install KWin, D-Bus and the build toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            build-essential pkg-config libsystemd-dev libwayland-dev \
+            python3 python3-venv python3-pip \
+            dbus dbus-x11 xkb-data \
+            kwin-wayland kcalc
+
+      - name: Environment
+        run: |
+          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+          kwin_wayland --version 2>&1 | head -2 || true
+          command -v dbus-run-session
+          command -v kcalc
+
+      - name: Install kwcapture from this checkout
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet --upgrade pip
+          /tmp/venv/bin/pip install --quiet .
+          /tmp/venv/bin/kwcapture --version
+          # the nested KWin authorises the helper through this file, exactly like Plasma does
+          /tmp/venv/bin/kwcapture install-desktop
+          ls -l "${XDG_DATA_HOME:-$HOME/.local/share/applications}"/io.github.kwcapture-*.desktop
+
+      - name: Capture a nested headless KWin
+        # exits non-zero if the frame is the wrong size (wrong compositor), black while a window
+        # is up, or if `doctor` regresses to failing an empty session
+        run: |
+          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+          dbus-run-session -- env PYTHON=/tmp/venv/bin/python bash probe/nested_kwin_test.sh

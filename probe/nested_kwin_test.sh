@@ -40,8 +40,18 @@ HEIGHT="${SIZE#*x}"
 CLIENT="${KWCAPTURE_NESTED_CLIENT:-kcalc}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PYTHON="${PYTHON:-python3}"
-RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
 FAILED=0
+
+# KWin insists on XDG_RUNTIME_DIR (the Wayland socket lives there) and refuses a directory it
+# does not own with 0700. Create a private one when the environment has none -- CI runners
+# typically do not set it -- instead of failing with a cryptic message.
+RUNTIME="${XDG_RUNTIME_DIR:-}"
+if [ -z "$RUNTIME" ] || [ ! -d "$RUNTIME" ]; then
+    RUNTIME="/tmp/kwcapture-nested-run-$(id -u)"
+    mkdir -p "$RUNTIME" && chmod 700 "$RUNTIME"
+    export XDG_RUNTIME_DIR="$RUNTIME"
+    echo "XDG_RUNTIME_DIR: created $RUNTIME (0700) for the nested session"
+fi
 
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [[ "$DBUS_SESSION_BUS_ADDRESS" != unix:path=/tmp/dbus-* ]]; then
     echo "warning: this does not look like a private D-Bus session;"
@@ -58,7 +68,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-kwin_wayland --virtual --socket "$SOCK" --width "$WIDTH" --height "$HEIGHT" \
+# WAYLAND_DISPLAY is cleared and the Qt platform is pinned to offscreen so the nested KWin can
+# never attach to the compositor we are sitting in: `--virtual` renders to its own framebuffer
+# and needs no display at all, which is the whole point (CI has none, and a developer's desktop
+# must not end up being the thing under test).
+env -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen \
+    kwin_wayland --virtual --socket "$SOCK" --width "$WIDTH" --height "$HEIGHT" \
     --no-lockscreen --no-global-shortcuts &
 KWIN_PID=$!
 for _ in $(seq 1 40); do
