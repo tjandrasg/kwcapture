@@ -34,7 +34,14 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 159 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
 
-## FRESH STATUS — 2026-10-08 ~17:40 — **WHY HEADLESS CI FAILS: KWin only owns `ScreenShot2` while it is OpenGL-compositing, and that needs a DRM device**
+## FRESH STATUS — 2026-10-08 ~19:20 — **headless CI is GREEN, and honest about what it covers: KWin only owns `ScreenShot2` while it is OpenGL-compositing, and that needs a DRM device GitHub's runners do not have**
+
+> Outcome: `build` + `headless KWin capture (Plasma 6, no GPU)` both pass on PR #1 (run 39). The
+> job starts a real nested KWin 6.3 in a Debian trixie container, authorises the helper over the
+> desktop-entry mechanism, lists the nested output and the client window, and reports the capture
+> path as an `ENVIRONMENT LIMITATION` because that runner cannot give KWin a render node — with the
+> whole reason below, so nobody has to rediscover it. On a machine that *can* composite (this
+> desktop, any KDE self-hosted runner, a GPU runner) the same job runs strict and fails on anything.
 
 The `headless-kwin` job gets a nested KWin up inside `debian:trixie-slim` (`nested KWin: pid 8033,
 socket kwcapture-test, output 1024x640`, and `list_monitors()` even answers `Virtual-0 (1024,640)`
@@ -80,6 +87,14 @@ all; nothing released does today.
   install. The job now installs that package (if the archive still has the exact version) and
   retries `modprobe vgem`; KWin special-cases vgem precisely because dumb buffers need the primary
   node, so a vgem render/primary node is the thing that would make this work.
+* **Run 39 answered that experiment too, and the answer is no:**
+  `apt-get install linux-modules-extra-6.17.0-1022-azure` **works** (51 MB from
+  azure.archive.ubuntu.com) and still `modprobe vgem → FATAL: Module vgem not found` — Ubuntu does
+  not build `vgem`/`vkms` for the azure flavour at all. **Conclusion: a GitHub-hosted runner can
+  never give KWin a render node**, so the ScreenShot2 frames are not testable there, period. What
+  would work: a runner image/label with a real GPU, or a **self-hosted runner** on any KDE machine
+  (that is the plan for the frames; the job needs nothing special — with a render node present it
+  silently switches back to strict and tolerates nothing).
 * **The CI proof, verbatim from the log** (`QT_LOGGING_RULES=kwin_core.debug=true`):
   `Configured compositor not supported by Platform. Falling back to defaults` → `Attempting to load
   the QPainter scene` → `QPainter compositing has been successfully initialized` → …
@@ -966,17 +981,20 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
    what shipped and what was verified, and commit + push that too.
 
 ## Ideas not done yet
-* **CI integration test against a real (headless) KWin — now that `probe/nested_kwin_test.sh`
-  proves it works, this is the highest-value unclaimed thing in the repo.** A job that
-  `apt-get install -y kwin-wayland kcalc` and runs `dbus-run-session -- bash
-  probe/nested_kwin_test.sh` would exercise the *actual* `org.kde.KWin.ScreenShot2` path — the
-  part the 37 ring-reader checks cannot reach — including per-window capture, and it would give a
-  place to finally test BUG-1 (minimised → stale frame: minimise the KCalc from the test) and
-  `scale=` handling (KWin's `--scale` option exists). Unknowns to check before promising it:
-  whether KWin starts in a GitHub runner with no DRM and no X (it did here with
-  `QT_QPA_PLATFORM=offscreen --virtual`, on a machine that *has* a GPU — CI needs the same flags
-  without a real session), and whether the desktop-entry authorisation works when
-  `kbuildsycoca6`/KService has no cache yet.
+* **CI integration test against a real (headless) KWin — DONE in `.github/workflows/ci.yml`
+  (`headless-kwin`, branch `ci/headless-kwin` + PR #1), with one hard limit: GitHub's runners have
+  no DRM render node, so the job covers the nested session (KWin starts, Wayland socket, private
+  D-Bus, desktop-entry authorisation, output listing, per-window listing, the Qt client) but not
+  the frames themselves — see the FRESH STATUS at the top for why that is a hardware fact, not a
+  bug.** Still open, and now cheap because the harness exists:
+  * run the strict job somewhere with a render node: a **self-hosted runner** on this desktop, or a
+    GPU-labelled runner. `docker run --rm --device /dev/dri -v "$PWD:/w" debian:trixie-slim
+    bash /w/probe/ci_headless_kwin.sh` already does it on any KDE machine without a runner.
+  * test BUG-1 (minimised → stale frame) inside the nested session — minimise the KCalc from the
+    probe and assert what comes back; nothing else in the repo can reach that state on demand.
+  * test `scale=` handling: `kwin_wayland --scale` exists, so `KWCAPTURE_NESTED_SIZE` plus a scale
+    knob in `probe/nested_kwin_test.sh` would re-verify the fractional-scaling conclusions on a
+    compositor whose scale is known instead of whatever the desk happens to be set to.
 * ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
   (`Window.active`, `active_window_id()`, `--active-window-id`).
 * `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.
