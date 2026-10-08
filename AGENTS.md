@@ -34,6 +34,73 @@ Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayla
 Python API + CLI + 159 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
 
+## FRESH STATUS — 2026-10-08 ~15:30 — **merged into nunif**, and **headless KWin capture works**
+
+### Downstream: nagadomi/nunif#746 is MERGED
+
+`iw3-desktop` (part of [nunif](https://github.com/nagadomi/nunif)) ships kwcapture as its **optional
+Wayland (KDE Plasma) screenshot backend**; nagadomi merged it 2026-10-08 into `nagadomi/nunif:dev`.
+`README.md` now has a **Used by** section (commit `d429ea2`) naming it and the API it calls, which is
+the compatibility list for future releases: `Capture(monitor=…)` / `Capture(window=…)` with
+`cursor=` and a private `shm=`, `grab(copy=True)`, `geometry()`, `list_monitors(measure_scale=True)`,
+`list_windows()`, `find_window()` + `AmbiguousWindow`, `unique_shm_path()`, `effective_scale` /
+`area_scale`. It never requires kwcapture at import time and installs nothing automatically — the
+maintainer's condition for merging — so **do not make importing `kwcapture` heavier or add a hard
+install-time step**, or the optional-dependency story upstream breaks.
+
+His stated reason for accepting, worth keeping in mind for any future discussion with a distributor:
+he had not tested KDE capture but it "won't affect other environments", and on the shipped binary —
+the GitHub Actions build "provides some evidence that the project is being handled responsibly",
+though "ultimately it comes down to whether the binary is trusted". The facts that answer that
+(verified in this tree, do not restate them without re-checking):
+* the helper is one C file (`kwcapture/native/kwcapture.c`, 1749 lines) + `kwcapture_shm.h` (103),
+  a ~54 KB dynamically linked ELF; `ldd` = libc, glib/gio, libsystemd, libwayland-client;
+* the only outbound connection in the source is `wl_display_connect(NULL)` — no sockets, no network
+  code, no root, no portal; frames come from the shm ring KWin fills;
+* KWin's authorisation is a plain `.desktop` file in `~/.local/share/applications` the user can read
+  and delete (`_desktop.py`);
+* the sdist carries the C source and `setup.py`/`_native.py` build it with `cc -O2 -std=gnu11` +
+  pkg-config, so `pip install --no-binary=kwcapture kwcapture` needs no trust in us at all;
+* the PyPI files for a release are the artefacts of that tag's public `release.yml` run.
+
+### NEW: kwcapture captures a KWin nobody is looking at (nested, headless, ~6 s)
+
+`probe/nested_kwin_test.sh` + `probe/nested_kwin.py` (both verified today on Plasma 6.6 / KWin
+6.6.6). This is the answer to "how do you test the KDE path without KDE hardware" — and therefore a
+real CI path, see *Ideas* below.
+
+```
+dbus-run-session -- bash probe/nested_kwin_test.sh
+  monitors: [('Virtual-0', (1024, 640))]
+  windows: 1 [('KCalc', (640, 508))]
+  screen grab: (640, 1024, 4) mean B/G/R = [22.0, 20.4, 19.0] max = 255
+  window grab: (480, 640, 4) 5.7 ms  mean B/G/R = [43.4, 40.1, 37.3] max = 255
+```
+
+* Recipe: `kwin_wayland --virtual --socket <name> --width W --height H --no-lockscreen
+  --no-global-shortcuts` renders to a **virtual framebuffer** (`QT_QPA_PLATFORM=offscreen` works, no
+  X server, no GPU); a client started with `WAYLAND_DISPLAY=<name>` shows up in `list_windows()` and
+  is capturable per window; the desktop-entry authorisation applies unchanged.
+* **THE GOTCHA THAT MAKES OR BREAK IT: `dbus-run-session` is mandatory.** ScreenShot2 is reached
+  over the session bus as part of `org.kde.KWin`, and the desktop KWin owns that name. Measured on
+  the *desktop* bus with a nested KWin at 1024x640: `list_monitors()` → the nested `Virtual-0
+  (1024,640)` (that follows `WAYLAND_DISPLAY`), but `list_windows()` → the **desktop's** 5 windows
+  and `grab()` → **2560x1440**, the real screen. Silent split-brain: a test would assert against
+  the developer's desktop. On a private bus the nested KWin owns the name and every answer is its
+  own. `nested_kwin.py` asserts the frame size for exactly this reason.
+* Interpreting a failure: **all-black frame of the right size** = the nested session is empty (start
+  a client in it) — `kwcapture doctor` calls that `FAIL: capture returned an all-black frame`, a
+  **false alarm on an empty nested session**; **frame at the other size** = you captured the other
+  compositor (missing private bus).
+* Benign noise, not bugs: KWin logs `kwin_screenshot: ... pipe is broken` when the helper exits with
+  a request queued; `qt.qpa.services: Failed to register with host portal`, `kf.globalaccel…`,
+  `fusermount3: failed to access mountpoint /run/user/1000/gvfs: Permission denied` and the
+  `dbus-daemon` portal activation spam all appear under `dbus-run-session` and mean nothing.
+* ⚠️ **`pkill -f "kwcapture/bin/kwcapture"` kills your own shell** (the pattern matches the `sh -c`
+  command line that contains it) — the command dies with no output and the heredoc after it never
+  runs. Resolve pids first and `kill` them, or split the pattern (`"kwcapture/bin/kw""capture"`).
+  Same trap as `pgrep -c -f "kwin_wayland --virtual"`, which counts itself.
+
 ## FRESH STATUS — 2026-10-07 ~12:45 — **v0.5.0 IS OUT** (PyPI + GitHub release, verified)
 
 * **PyPI `kwcapture 0.5.0` is live**: sdist + the CI `manylinux_2_28` wheel, taken from the
@@ -796,6 +863,17 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
    what shipped and what was verified, and commit + push that too.
 
 ## Ideas not done yet
+* **CI integration test against a real (headless) KWin — now that `probe/nested_kwin_test.sh`
+  proves it works, this is the highest-value unclaimed thing in the repo.** A job that
+  `apt-get install -y kwin-wayland kcalc` and runs `dbus-run-session -- bash
+  probe/nested_kwin_test.sh` would exercise the *actual* `org.kde.KWin.ScreenShot2` path — the
+  part the 37 ring-reader checks cannot reach — including per-window capture, and it would give a
+  place to finally test BUG-1 (minimised → stale frame: minimise the KCalc from the test) and
+  `scale=` handling (KWin's `--scale` option exists). Unknowns to check before promising it:
+  whether KWin starts in a GitHub runner with no DRM and no X (it did here with
+  `QT_QPA_PLATFORM=offscreen --virtual`, on a machine that *has* a GPU — CI needs the same flags
+  without a real session), and whether the desktop-entry authorisation works when
+  `kbuildsycoca6`/KService has no cache yet.
 * ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
   (`Window.active`, `active_window_id()`, `--active-window-id`).
 * `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.
