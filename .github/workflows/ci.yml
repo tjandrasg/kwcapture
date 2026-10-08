@@ -89,6 +89,10 @@ jobs:
       image: debian:trixie-slim
     env:
       XDG_RUNTIME_DIR: /tmp/xdg-run
+      # No GPU on a runner: make sure a software GL exists and is chosen, rather than letting
+      # KWin discover that its "configured compositor" (OpenGL) is unavailable.
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      EGL_PLATFORM: surfaceless
     steps:
       - uses: actions/checkout@v4
 
@@ -98,9 +102,10 @@ jobs:
           apt-get install -y --no-install-recommends \
             ca-certificates \
             build-essential pkg-config libsystemd-dev libwayland-dev libcap2-bin \
+            libgl1-mesa-dri qt6-qpa-plugins \
             python3 python3-venv python3-pip \
             dbus dbus-x11 xkb-data \
-            kwin-wayland kcalc
+            kwin-wayland kwin-common kcalc
           # Debian's postinst grants CAP_SYS_NICE to kwin_wayland so it can raise its scheduling
           # priority. A binary with file capabilities cannot be exec'd in a container running
           # with no-new-privileges -- which is how GitHub runs container jobs -- and every attempt
@@ -108,6 +113,12 @@ jobs:
           setcap -r /usr/bin/kwin_wayland
           echo "capabilities after setcap -r: '$(getcap /usr/bin/kwin_wayland)'"
           kwin_wayland --version 2>&1 | head -2
+          # What the probe depends on, printed so a failure is not a mystery: /WindowsRunner comes
+          # from kwin's krunnerintegration plugin, kcalc needs the wayland QPA plugin, and --virtual
+          # needs some GL driver (llvmpipe here).
+          echo "kwin plugins: $(ls /usr/lib/x86_64-linux-gnu/qt6/plugins/kwin/plugins/ 2>/dev/null | tr '\n' ' ')"
+          echo "qt platforms: $(ls /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/ 2>/dev/null | tr '\n' ' ')"
+          echo "dri drivers: $(ls /usr/lib/x86_64-linux-gnu/dri/ 2>/dev/null | tr '\n' ' ')"
 
       - name: Environment
         run: |
@@ -131,4 +142,10 @@ jobs:
         # is up, or if `doctor` regresses to failing an empty session
         run: |
           mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
-          dbus-run-session -- env PYTHON=/tmp/venv/bin/python bash probe/nested_kwin_test.sh
+          # NOT from the checkout: a cwd inside the tree puts ./kwcapture on sys.path ahead of
+          # the installed package, and the source tree has no compiled helper -- doctor then
+          # reports "helper not found" for a perfectly good install.
+          cd /tmp
+          dbus-run-session -- env PYTHON=/tmp/venv/bin/python \
+            KWCAPTURE_NESTED_REQUIRE_WINDOW=1 \
+            bash "$GITHUB_WORKSPACE/probe/nested_kwin_test.sh"

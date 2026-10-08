@@ -105,10 +105,19 @@ run_doctor "empty session"
 run_doctor "empty session, --allow-black" --allow-black
 
 if command -v "$CLIENT" >/dev/null 2>&1; then
-    QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY="$SOCK" "$CLIENT" >/dev/null 2>&1 &
+    # Keep the client's output: when a Qt app dies inside a bare session its own message is the
+    # whole diagnosis (missing wayland QPA plugin, no GL, ...), and swallowing it costs a debug
+    # cycle -- that is exactly what happened on the first CI run.
+    CLIENT_LOG="$(mktemp "${TMPDIR:-/tmp}/kwcapture-nested-client.XXXXXX.log")"
+    QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY="$SOCK" "$CLIENT" >"$CLIENT_LOG" 2>&1 &
     CLIENT_PID=$!
     sleep 4
-    echo "client: $CLIENT alive: $(kill -0 "$CLIENT_PID" 2>/dev/null && echo yes || echo no)"
+    if kill -0 "$CLIENT_PID" 2>/dev/null; then
+        echo "client: $CLIENT alive (log: $CLIENT_LOG)"
+    else
+        echo "client: $CLIENT DIED, its output was:"
+        tail -8 "$CLIENT_LOG" | sed 's/^/    /'
+    fi
 else
     echo "client: $CLIENT not found -- the screen path is still tested, the window path is not"
 fi

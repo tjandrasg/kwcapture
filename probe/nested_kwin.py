@@ -47,8 +47,19 @@ def main() -> int:
         failures.append(f"expected the nested {W}x{H} output, got {monitors[0].name} "
                         f"{monitors[0].width}x{monitors[0].height}")
 
-    windows = K.list_windows()
-    print("windows:", len(windows), [(w.name, w.geometry) for w in windows[:4]])
+    # Listing windows goes through KWin's krunner integration plugin (/WindowsRunner). A stripped
+    # KWin install can lack it, and then the capture path still works -- so a failure here is a
+    # note unless the caller insists (CI does, because losing window coverage silently is worse).
+    require_window = os.environ.get("KWCAPTURE_NESTED_REQUIRE_WINDOW") == "1"
+    windows = []
+    try:
+        windows = K.list_windows()
+        print("windows:", len(windows), [(w.name, w.geometry) for w in windows[:4]])
+    except Exception as e:
+        print("windows: listing FAILED:", type(e).__name__, e)
+        if require_window:
+            failures.append(f"window listing failed: {e} "
+                            "(KWin's krunnerintegration plugin provides /WindowsRunner)")
 
     with K.Capture(shm=K.unique_shm_path("nested")) as cap:
         frame = cap.grab(copy=True, timeout=20)
@@ -72,6 +83,8 @@ def main() -> int:
                 failures.append(f"window frame for {windows[0].name!r} is black")
     else:
         print("NOTE: no window in the nested session, only the screen path was checked")
+        if require_window:
+            failures.append("no capturable window in the nested session: did the client start?")
 
     for f in failures:
         print("FAIL:", f, file=sys.stderr)
