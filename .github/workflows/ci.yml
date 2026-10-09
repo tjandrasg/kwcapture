@@ -18,9 +18,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -108,7 +108,7 @@ jobs:
       # instead of letting KWin discover that its configured compositor is unavailable.
       LIBGL_ALWAYS_SOFTWARE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Give the runner a DRM render node
         # What decides everything here is whether KWin's findRenderDevice() would find a *render*
