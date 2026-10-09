@@ -2,10 +2,11 @@
 
 > **Archive:** `AGENTS.old.md` holds the superseded detail — the original three-key-findings
 > investigation log, the v0.1/v0.2 file map and benchmark tables, old packaging/CI notes, the
-> forensics write-up, and (moved 2026-10-08, see the *ARCHIVED* section below) the 2026-10-07
-> session logs of the v0.4.0/v0.5.0 work, the original nested-`--virtual` discovery write-up, BUG-4's
-> three-session hunt and the closed BUG-3. Consult it when something here is too terse or you want
-> the reasoning behind a rule; it is history, **not to-do**.
+> forensics write-up, the 2026-10-07 session logs of the v0.4.0/v0.5.0 work, the original
+> nested-`--virtual` discovery, and (moved 2026-10-09) the 2026-10-08 headless-CI and
+> non-normal-window day-logs plus the long BUG-1 / BUG-2 / BUG-4 forensics. See *ARCHIVED* below for
+> the map. Consult it when something here is too terse or you want the reasoning behind a rule; it is
+> history, **not to-do**.
 >
 > **Size discipline:** this file is the working set, so finished work gets distilled into a few
 > bullets here and its long form goes to the archive. If you catch yourself writing a third
@@ -23,8 +24,9 @@
 > mention it, stop and fix that before continuing.
 >
 > **Also: never let `/tmp` hold the only copy.** Reproducers belong in `probe/` (see
-> `probe/stale_window.py`) or their content goes into this file. See *Forensics* below for
-> what can and cannot be recovered after the fact.
+> `probe/stale_window.py`) or their content goes into this file. See *Forensics* in `AGENTS.old.md`
+> (*FORENSICS — recovering a lost finding after a session died*) for what can and cannot be recovered
+> after the fact.
 
 Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`; releases `v0.1.0` … **`v0.6.0`**,
 every one from `v0.3.0` on carrying a CI-built `manylinux` wheel plus a prebuilt
@@ -83,144 +85,44 @@ docs; this file is the investigation log + gotchas.
 > there — a new root `.md` never ships automatically. Fixed and verified by rebuilding the sdist;
 > the published 0.6.0 files are immutable, so this lands at the next release. Worth doing because
 > the people who run `pip install --no-binary` are exactly the ones who read `SECURITY.md`.
-> **Size note:** this file is ~77 KB, up from 66 KB at the start of the session, and there are two
-> FRESH STATUS sections — the rule says distil rather than add a third. The obvious candidate is the
-> 2026-10-08 headless-CI log below: its conclusions now live in README → *How this is tested*, in
-> the CI job's own comments, and in `probe/ci_headless_kwin.sh`, so nothing would lose its only copy.
+> **Size note — trimmed the same day, 77 KB → 53 KB.** It had grown ~11 KB during this session, so the
+> superseded detail went to `AGENTS.old.md` **verbatim** (nothing deleted; every move listed under
+> *ARCHIVED* below): both 2026-10-08 day-logs, BUG-1's original analysis, BUG-2's full analysis,
+> BUG-4's bisect record, the completed `~~done~~` ideas, and a shorter community-files section — each
+> replaced by the distilled bullets that stay here. **What made this safe: the archive was written
+> first, and the script asserted every moved line was present in it before a summary replaced it.**
+> If you add a third FRESH STATUS, distil one out the same way rather than growing the file again.
 
-## FRESH STATUS — 2026-10-08 ~19:20 — **headless CI is GREEN, and honest about what it covers: KWin only owns `ScreenShot2` while it is OpenGL-compositing, and that needs a DRM device GitHub's runners do not have**
+## HEADLESS / NESTED KWin — what is settled (full day-log archived 2026-10-09)
 
-> Outcome: `build` + `headless KWin capture (Plasma 6, no GPU)` both pass on PR #1 (run 39). The
-> job starts a real nested KWin 6.3 in a Debian trixie container, authorises the helper over the
-> desktop-entry mechanism, lists the nested output and the client window, and reports the capture
-> path as an `ENVIRONMENT LIMITATION` because that runner cannot give KWin a render node — with the
-> whole reason below, so nobody has to rediscover it. On a machine that *can* composite (this
-> desktop, any KDE self-hosted runner, a GPU runner) the same job runs strict and fails on anything.
+> Long form: the `FRESH STATUS — 2026-10-08 ~19:20` day-log in `AGENTS.old.md` (under
+> *ARCHIVED 2026-10-09*). The durable part, and it is now also in README → *How this is tested* and in
+> the comments of `probe/ci_headless_kwin.sh`:
 
-> **MERGED 2026-10-08 ~19:50**: PR #1 → `main` as `a575828` (merge commit, all 7 commits kept),
-> branch `ci/headless-kwin` deleted (the repo has `delete_branch_on_merge`, and the local branch is
-> gone too). `README.md` now has a **How this is tested** section + a CI badge, so the DRM-node
-> limitation is documented where users and distributors will look at it rather than only here.
-> Runs on `main` now, on every push and PR.
+* **`org.kde.KWin.ScreenShot2` exists only while KWin is OpenGL-compositing** — its sole owner is
+  the screenshot effect, and `ScreenShotEffect::supported()` is `effects->isOpenGLCompositing()`.
+  No GL compositing ⇒ the bus name never appears ⇒ `was not provided by any .service files`.
+* **OpenGL compositing needs a DRM render node.** The virtual backend offers it only if
+  `findRenderDevice()`/`drmGetDevices2()` found one; otherwise KWin silently falls back to QPainter.
+  So no Mesa env tinkering helps — `LIBGL_ALWAYS_SOFTWARE`, `EGL_PLATFORM=surfaceless`, installing
+  `libgl1-mesa-dri` change nothing, because the decision is made before Mesa is asked.
+* **A GitHub-hosted runner can never provide one** (measured on the runner: `/dev/dri/card1` exists
+  as `hyperv_drm` with **no `renderD*` node**, and `vgem`/`vkms` are not built for the azure kernel
+  even after installing `linux-modules-extra-*`). Window *listing* works there; frames cannot.
+  What would work: a GPU runner, or a self-hosted KDE runner — with a render node present the job
+  silently switches back to strict and tolerates nothing.
+* **The tolerant path is deliberate, not a hidden failure:** `KWCAPTURE_NESTED_ALLOW_NO_SCREENSHOT2=1`
+  converts *only* missing-ScreenShot2 failures into a printed `ENVIRONMENT LIMITATION`; socket,
+  authorisation, output/window listing and every other `doctor` check still fail the job.
+* **Run the harness by hand** (no GitHub involved, ~6 s on a Plasma box):
+  `dbus-run-session -- bash probe/nested_kwin_test.sh`, or
+  `docker run --rm --device /dev/dri -v "$PWD:/w" debian:trixie-slim bash /w/probe/ci_headless_kwin.sh`.
+* Two unrelated traps from that session, still true: the Qt **Wayland** QPA plugin is the Debian
+  package **`qt6-wayland`**, not `qt6-qpa-plugins`; and `QT_LOGGING_RULES="kwin_core.debug=true"`
+  makes KWin say *why* it is not compositing instead of one vague warning.
+* Not the problem, then or now: **PipeWire**. `ScreenShot2` needs none — we hand KWin a pipe fd and
+  `ScreenShotWriter2` writes the QImage into it. Don't add a `pipewire` package chasing that log line.
 
-> Last verified state of this tree: run **41** green (`build` + `headless KWin capture`), `PROBE OK` locally
-> on Plasma 6.6, ring-reader suite green, functional suite **165/165** — **152 before the
-> non-normal-window work below, +13 checks** — after one flake that is now FLAKE-1 below. The desk is
-> **one output at x1** since today, not the 75 %/125 % pair the v0.5.0 notes describe, which is why
-> the count is 165 and why the fractional-scaling tests are running in their degenerate branches.
-> `probe/nested_kwin_test.sh` also says **PROBE OK** with the new code, and inside a nested KWin
-> `--list-windows --require-full` exits 0 — the scripting route works in the CI harness too, not
-> only on a real desk (a bare nested session has no panel/desktop, so full == filtered there).
-
-The `headless-kwin` job gets a nested KWin up inside `debian:trixie-slim` (`nested KWin: pid 8033,
-socket kwcapture-test, output 1024x640`, and `list_monitors()` even answers `Virtual-0 (1024,640)`
-over Wayland) and then *every* capture dies with
-
-```
-kwcapture: The name org.kde.KWin.ScreenShot2 was not provided by any .service files
-         ; kwcapture: initial grab failed: No route to host
-```
-
-That is **not** an authorisation bug and not a kwcapture bug. Read out of the upstream source
-(kwin 6.3.6 = what trixie ships; identical in 6.4 / 6.5 / 6.6 and master):
-
-* `src/plugins/screenshot/screenshot.cpp` → `bool ScreenShotEffect::supported() { return
-effects->isOpenGLCompositing(); }`. That effect is the **only** owner of the bus name: its
-constructor makes a `ScreenShotDBusInterface2`, which is what calls
-`registerService("org.kde.KWin.ScreenShot2")` (`screenshotdbusinterface2.cpp`). No OpenGL
-compositing ⇒ effect not loaded ⇒ **name never appears** ⇒ exactly the error above. The same
-code also explains why an unauthorised call *raises* instead of returning black: different layer.
-* `src/backends/virtual/virtual_backend.cpp` → `supportedCompositors()` adds `OpenGLCompositing`
-**only if `findRenderDevice()`/`drmGetDevices2()` found a DRM node**; otherwise it offers
-`QPainterCompositing` alone. A container has no `/dev/dri`, so `WaylandCompositor::createRenderer()`
-logs `kwin_core: Configured compositor not supported by Platform. Falling back to defaults` —
-which we now see in the CI log, and which is the *smoking gun* — and quietly composites with
-QPainter. `kwin_wayland --x11` is no escape: `X11WindowedBackend` likewise only offers OpenGL when
-DRI3 hands it a DRM fd (Xvfb has none).
-* **Therefore the headless recipe needs a DRM render node, and no amount of Mesa env tinkering
-can substitute for it** — the decision is taken on `drmGetDevices2()` before Mesa is asked
-anything, so `LIBGL_ALWAYS_SOFTWARE=1` / `EGL_PLATFORM=surfaceless` / installing `libgl1-mesa-dri`
-change nothing. (`--virtual`'s EGL backend in ≤ 6.6 is `EGL_PLATFORM_GBM_KHR` on that device,
-see `virtual_egl_backend.cpp` — it genuinely cannot work without one.) Upstream even special-cases
-**vgem** in `findRenderDevice()` ("prefer the primary node because gbm will attempt to allocate
-dumb buffers"), i.e. KWin's own CI uses a *virtual* DRM node — that is the thing to get in CI.
-Master (post-6.6) changed `supportedCompositors()` to `{OpenGLCompositing}` unconditionally with
-the new `RenderDevice` abstraction, so a future KWin may do surfaceless llvmpipe with no DRM at
-all; nothing released does today.
-* **Measured on the runner itself (run 38, the first job that printed it):**
-  `/dev/dri/card1` **exists** — driver **`hyperv_drm`**, `root:video`, and **no `renderD*` node**.
-  A card node alone does not count for KWin (`nodeType = DRM_NODE_RENDER`, primary only for vgem),
-  so even passing it in with `--device /dev/dri` does not buy the capture path. `vgem` and `vkms`
-  are **not loadable** on the runner kernel (`6.17.0-1022-azure`): "Module … not found in directory
-  /lib/modules/…" — they ship in `linux-modules-extra-<version>`, which the runner image does not
-  install. The job now installs that package (if the archive still has the exact version) and
-  retries `modprobe vgem`; KWin special-cases vgem precisely because dumb buffers need the primary
-  node, so a vgem render/primary node is the thing that would make this work.
-* **Run 39 answered that experiment too, and the answer is no:**
-  `apt-get install linux-modules-extra-6.17.0-1022-azure` **works** (51 MB from
-  azure.archive.ubuntu.com) and still `modprobe vgem → FATAL: Module vgem not found` — Ubuntu does
-  not build `vgem`/`vkms` for the azure flavour at all. **Conclusion: a GitHub-hosted runner can
-  never give KWin a render node**, so the ScreenShot2 frames are not testable there, period. What
-  would work: a runner image/label with a real GPU, or a **self-hosted runner** on any KDE machine
-  (that is the plan for the frames; the job needs nothing special — with a render node present it
-  silently switches back to strict and tolerates nothing).
-* **The CI proof, verbatim from the log** (`QT_LOGGING_RULES=kwin_core.debug=true`):
-  `Configured compositor not supported by Platform. Falling back to defaults` → `Attempting to load
-  the QPainter scene` → `QPainter compositing has been successfully initialized` → …
-  `Effect is not supported:  "screenshot"`. Everything else in the job works with that compositor:
-  the socket, `monitors: [('Virtual-0', (1024, 640))]`, `windows: 1 [('KCalc', (648, 513))]` — so
-  window *listing* is not GL-dependent, only the frames are.
-* **Upstream's own CI shortcut exists but is not usable for us:** since 6.5 (and in 6.6/6.7)
-  `findRenderDevice()` starts with `if (qEnvironmentVariableIsSet("CI")) return
-  RenderDevice::open("/dev/dri/card1");` — GitHub sets `CI=true`, so that would hand KWin the
-  renderless hyperv node… but it is inside `#if !HAVE_LIBDRM_FAUX`, i.e. compiled out on any distro
-  with libdrm ≥ the faux-bus release, and trixie's 6.3 does not have it at all. Do not build a plan
-  on it.
-* **So the CI job now states its own coverage honestly:** `probe/ci_headless_kwin.sh` asks "would
-  KWin's `findRenderDevice()` find anything?" (render node, or a vgem primary via
-  `/sys/class/drm/card*/device/driver`). Yes → strict, nothing tolerated. No →
-  `KWCAPTURE_NESTED_ALLOW_NO_SCREENSHOT2=1`, which turns *only* the missing-ScreenShot2 failures
-  into a printed `ENVIRONMENT LIMITATION` (socket, authorisation, output listing, window listing,
-  client startup and every other `doctor` check still fail the job). A runner with a GPU — or a
-  self-hosted KDE runner — automatically gets the strict job back.
-* **Not the problem: PipeWire.** KWin logs `kwin_screencast: Failed to create PipeWire context`
-in that container, and `screencast.so` is the *portal* screen-cast plugin. ScreenShot2 needs no
-PipeWire: we hand KWin a **pipe** fd and `ScreenShotWriter2` writes the raw QImage into it from a
-QThreadPool (that writer is also the origin of the benign `pipe is broken` line and of the
-"KWin replies before the pixels arrive" fact). Do not add a `pipewire` package to the job chasing
-that log line.
-* **Second, independent bug in the same run:** the Qt **Wayland** QPA plugin is *not* in
-`qt6-qpa-plugins`. Debian ships it as **`qt6-wayland`** (`.../qt6/plugins/platforms/
-libqwayland-egl.so` + `libqwayland-generic.so`), so `QT_QPA_PLATFORM=wayland kcalc` aborted with
-`Could not find the Qt platform plugin "wayland" ... Available platform plugins are: linuxfb,
-vkkhrdisplay, eglfs, vnc, xcb, minimal, offscreen, minimalegl` — and note that `list_windows()`
-returning `0 []` (not an error!) was the *correct* answer for a session whose only client died.
-* Debugging lever for next time, cheap and decisive: `QT_LOGGING_RULES="kwin_core.debug=true"`
-makes KWin say *why* (`Attempting to load the OpenGL scene` / `Driver does not recommend OpenGL
-compositing` / `QPainter compositing has been successfully initialized`) instead of the one-line
-warning. The probe now passes it when `KWCAPTURE_NESTED_KWIN_DEBUG=1`.
-* Verified after reworking the probe: strict path still **PROBE OK** on this desktop (KCalc
-  (640,508), 1024x640 screen frame, 640x480 window frame, doctor rc=0 ×3), and the tolerant path
-  was exercised with `kwcapture` stubbed to raise exactly the CI error — exit 0 with
-  `ENVIRONMENT LIMITATION` when allowed, exit 1 when not.
-
-### How to run the headless job by hand (it is not GitHub-specific)
-
-```
-docker run --rm --device /dev/dri -v "$PWD:/w" debian:trixie-slim bash /w/probe/ci_headless_kwin.sh
-```
-
-That is the whole CI job (KWin 6.3 + kcalc in trixie, kwcapture pip-installed, probe run with the
-strict window requirement). On a Plasma box no container is needed at all:
-`dbus-run-session -- bash probe/nested_kwin_test.sh`.
-
-
-**Cost, measured (so nobody quotes "six seconds" without the rest of the sentence):** the probe's
-own wall clock is **7.52 s** here, including its three `doctor` runs — but that is the *probe*, on a
-machine that already has Plasma 6 and a render node. On a bare Debian trixie, Plasma 6 is
-**248 MB of archives → 986 MB on disk → 437 packages** even with `--no-install-recommends`
-(**36.1 s** of `apt` on a runner). No KDE *session*, no monitor and no GPU are needed — Plasma 6's
-packages and any DRM render node are, and the six seconds starts after `apt` finishes.
 
 ## DOWNSTREAM — nagadomi/nunif#746 is MERGED (this is the compatibility list for future releases)
 
@@ -253,24 +155,23 @@ though "ultimately it comes down to whether the binary is trusted". The facts th
   pkg-config, so `pip install --no-binary=kwcapture kwcapture` needs no trust in us at all;
 * the PyPI files for a release are the artefacts of that tag's public `release.yml` run.
 
-## ARCHIVED into AGENTS.old.md (2026-10-08 — this file had grown to 81 KB)
+## ARCHIVED into AGENTS.old.md (2026-10-08, and again 2026-10-09)
 
-Moved out **verbatim**, because they are session logs of *released* work whose conclusions are
-already above, in `CHANGELOG.md` and in `README.md`. Nothing was deleted — the archive keeps the
-reasoning and the dead ends — but this file is what a fresh session has to be able to hold in its
-head, so read the two sections below (*SCALES*, *MONITORS & RESILIENCE*) instead of the nine that
-used to be here:
+Moved out **verbatim** — session logs of *released* work whose conclusions already live in
+`CHANGELOG.md`, `README.md`, `SECURITY.md` or the CI job's own comments. Nothing is ever deleted; the
+archive keeps the reasoning and the dead ends, and this file is what a fresh session can hold in its
+head. If you are about to add a third `FRESH STATUS`, distil one out instead.
 
-* the nine `FRESH STATUS — 2026-10-07 …` sections (monitors, fractional scaling, resilience, and
-  publishing 0.4.0 / 0.5.0). Durable conclusions distilled into **SCALES** and **MONITORS &
-  RESILIENCE**; the publishing procedure itself is the *Release checklist*, which stayed.
-* `NEW: kwcapture captures a KWin nobody is looking at (nested, headless, ~6 s)` — superseded by the
-  headless-CI status at the top, which also carries the retraction of its "no DRM" claim (`0ce6feb`)
-  and the measured costs.
-* BUG-4's original three-session hunt. The conclusion, the fault rate, the decisive next experiment,
-  the guardrails and BUG-4b **stay** in BUG-4; only the hunt moved.
-* BUG-3 (two leaks on start/restart) — fixed and regression-tested in v0.3.x / v0.4.0. Its lesson is
-  kept, as a Gotcha: *a fix with no test is a guess*.
+**2026-10-09** (file had grown back to 77 KB): the 2026-10-08 headless-CI day-log → distilled into
+**HEADLESS / NESTED KWin**; the 2026-10-08 non-normal-window day-log → distilled into the
+**SESSION STATUS → released as v0.6.0** section; BUG-1's original analysis, BUG-2's full analysis and
+BUG-4's bisect record → each bug keeps its conclusion, rate, next experiment and guardrails; the
+completed `~~done~~` bullets from *Ideas not done yet*; and a shorter *Community files* section.
+**2026-10-08** (from 81 KB): the nine `FRESH STATUS — 2026-10-07 …` day-logs → **SCALES** and
+**MONITORS & RESILIENCE**; the original nested-`--virtual` discovery write-up; BUG-4's three-session
+hunt; BUG-3 (fixed, lesson kept as a Gotcha); the v0.1/v0.2 file map, benchmark tables, packaging/CI
+notes and the forensics write-up.
+
 
 ## REPOSITORY HYGIENE — `private/` is the only place for non-source files
 
@@ -307,89 +208,35 @@ that request). Assume a force-push does not un-publish anything.
 * Never `git add -f`/`git add private/...` — `-f` overrides the ignore rules that protect
   this folder.
 
-## SESSION STATUS — 2026-10-08 ~23:50 — **DONE, PUSHED (`eb0bcae` on `main`) and CI GREEN: non-normal windows are visible and capturable (the Winamp case)**
+## SESSION STATUS — 2026-10-08 ~23:50 → **released as v0.6.0** (log archived)
 
-> **Pushed 2026-10-09**: `e714acb..eb0bcae main -> main`; run 37866299569 — `build` and
-> `headless KWin capture (Plasma 6, no GPU)` both **success**. **RELEASED as v0.6.0 on 2026-10-09**
-> — see the FRESH STATUS at the top. The helper did change, so the wheel was rebuilt rather than
-> reused, and both the GitHub assets and the PyPI files were re-verified after publishing.
+> Full session log: the `SESSION STATUS — 2026-10-08 ~23:50` day-log in `AGENTS.old.md` (under
+> *ARCHIVED 2026-10-09*). Feature list in
+> `CHANGELOG.md` 0.6.0, user docs in README → *Per-window capture*, security treatment in
+> `SECURITY.md`. What a future session must not have to re-derive:
 
-> **Acceptance, on the user's own window:** `list_windows()` reports the 1041x662 Winamp dialog
-> (`krunner_listed=False`, `window_type_name="dialog"`), `Capture(window=…)` streams it at ~7 ms a
-> frame, the PNG is the window from the screenshot, and `active_window_id()` is unchanged before
-> and after — nothing was raised, focused or moved. 165/165 functional + 37 ring-reader checks
-> green, `PROBE OK` in the nested KWin, no script or file left behind in either session.
->
-> Task: the last functional TODO below ("expose non-normal windows"). Repro on the desk right now:
-> Winamp (wine, `winamp.exe`) has **two** X11 windows — `0x01e00001` 275x116
-> `_NET_WM_WINDOW_TYPE_NORMAL` and `0x01e0000e` 1041x662 `_NET_WM_WINDOW_TYPE_DIALOG` (the big
-> skinned one in the user's screenshot, `WM_TRANSIENT_FOR` set). `kwcapture --list-windows` shows
-> only the NORMAL one.
->
-> **Root cause, read out of the kwin v6.6.6 source** (fetched from
-> `invent.kde.org/plasma/kwin/-/archive/v6.6.6/kwin-v6.6.6.tar.gz` — keep a copy under `/tmp`, it is
-> the reference for every "does KWin expose X?" question):
-> * `src/plugins/krunner-integration/windowsrunnerinterface.cpp` — every loop over
->   `Workspace::self()->windows()` skips `window->isUnmanaged()` **and** `!window->isNormalWindow()`.
-> * `src/window.h:796` — `isNormalWindow()` is "NET::Normal or NET::Unknown non-transient". Dialog /
->   utility / dock / splash / desktop are all excluded, in every branch of `Match()`, so no query
->   string can reach them.
-> * `src/plugins/screenshot/screenshotdbusinterface2.cpp:296` — `CaptureWindow` resolves its
->   argument with `workspace()->findWindow(QUuid(handle))`: **a uuid or nothing**, and `handle` is
->   `Window::internalId()`, which is `QUuid::createUuid()` (`src/window.cpp:62`) — random, so it
->   cannot be derived from the X11 window id.
-> * `src/dbusinterface.cpp` — `getWindowInfo(uuid)` (uuid only; `getWindowInfo("0x…")`,
->   `getWindowInfo("winamp.exe")` and `getWindowInfo(caption)` all return an empty map — measured)
->   and `queryWindowInfo()`, which is the **interactive** "click a window" picker, not a query.
-> * `supportInformation` again lists no windows (re-verified on 6.6.6), and there is no `/Tasks`,
->   no `windowIds` on `/VirtualDesktopManager`, nothing window-shaped on `org.kde.plasmashell`.
->   **Conclusion: the only API in Plasma 6 that reaches the full window list is the scripting one.**
->
-> **The route (matches what the TODO guessed):** `org.kde.kwin.Scripting` at `/Scripting`
-> (`src/scripting/scripting.{h,cpp}`) exposes `loadScript(filePath, pluginName) -> i`,
-> `loadDeclarativeScript`, `isScriptLoaded`, `unloadScript` — **unauthenticated**, and `filePath` is
-> a plain path, so nothing has to be installed under `~/.local/share`. The JS global `workspace` is
-> `QtScriptWorkspaceWrapper`, and `windowList()` is literally `workspace()->windows()` — every
-> window, unfiltered (`src/scripting/workspace_wrapper.cpp:477`). Plasma 6 has **no**
-> `registerDBusAdaptor` anymore (grepped: zero hits), so a script cannot export a method — but
-> `Script::callDBus(service, path, interface, method, args…, callback)` is **async** and can post
-> the list back to us on *our own unique bus name* (`:1.NNN`, so nobody else can impersonate the
-> reply). `Script::run()` early-returns while running, so re-triggering is load-once-per-query +
-> `unloadScript`, not `run()` in a loop. `config()` is the script's own kwinrc group and JS only has
-> `readConfig` — no accidental config writes.
->
-> Probes: **`probe/kwin_script_enumerate.py`** (dbus_fast; owns a bus object, writes the JS to
-> `$XDG_RUNTIME_DIR`, loads it, waits for the `callDBus` callback, unloads). **It works** — and
-> so does the C port: `kwcapture --list-windows` now reports 9 windows instead of 6 (the Winamp
-> dialog, the plasmashell desktop and the panel), and `kwcapture --window '{c5de347d-…}'
-> --decoration` returns a 1041x662 frame of the Winamp window **while it is still behind
-> Konsole** — checked by eye, not just by pixel statistics (98.5 % non-black).
->
-> Implemented in `kwcapture/native/kwcapture.c` (the "full window enumeration" section):
-> `collect_windows(bus, wins, max, all_types, why, whysz)` = the krunner pass plus
-> `collect_windows_script()`, which writes a private 0600 script into `$XDG_RUNTIME_DIR`,
-> listens on our own unique bus name (`sd_bus_add_object_vtable`, nonce-guarded),
-> `loadScript(path, plugin)` → `run()` on `/Scripting/Script<id>` → waits ≤1500 ms →
-> `unloadScript(plugin)` → `unlink()`. Measured: **load+run+reply ≈ 0.5 ms**, and any failure is
-> a stderr note plus the old krunner list — never a failed call. New flags: `--normal-only`
-> (skip the script route entirely) and `--require-full` (exit 3 when the full enumeration was
-> unavailable — what `doctor` will use). `--window HANDLE` now also accepts a handle the runner
-> list does not mention, validated with `getWindowInfo` (`window_handle_exists`): that alone
-> fixes "cannot capture a window whose handle I already know". JSON gains `window_type_name`
-> + `krunner_listed`; the table flags non-listed windows with `not-in-app-list,<type>`.
->
-> **`probe/non_normal_windows.py`** is the user-facing reproducer for the original complaint: it
-> lists the full and filtered lists side by side, captures **every** window KWin's own list hides,
-> writes a PNG per capture, and asserts that focus never moved and nothing was left behind
-> (`kwcapture-winlist-*.js` in `$XDG_RUNTIME_DIR`, or a `/Scripting/Script<N>` object still
-> exported). On this desk: desktop + dock + the Winamp dialog, all captured, PROBE OK.
-> **`probe/kwin_script_failure_path.py`** loads a deliberately broken script and checks the
-> `Failed(nonce, reason)` channel reports the JS error instead of timing out.
->
-> **Behaviour change to document:** with desktop/dock/dialog windows included, a *name* lookup
-> can be ambiguous where it used to be unique (`--window winamp` matches both Winamp windows).
-> That is the honest answer — the message lists the candidates and their handles, and
-> `--normal-only` / `all_types=False` restores the old list.
+* **Why krunner was not enough:** `windowsrunnerinterface.cpp` skips `!window->isNormalWindow()` in
+  every branch of `Match()`, and `CaptureWindow` resolves only `QUuid` handles that come from
+  `Window::internalId()` = `QUuid::createUuid()` — random, so not derivable from an X11 window id.
+  `getWindowInfo` takes a uuid only; `queryWindowInfo` is the interactive picker. **Conclusion: the
+  scripting interface is the only API in Plasma 6 that reaches the full window list.**
+  KWin source reference: `invent.kde.org/plasma/kwin/-/archive/v6.6.6/...` (fetch it before
+  answering any "does KWin expose X?" question).
+* **The mechanism:** `org.kde.kwin.Scripting.loadScript(path, plugin)` is unauthenticated and takes
+  a plain path — nothing has to be installed under `~/.local/share`. JS `workspace.windowList()` is
+  `workspace()->windows()`, unfiltered. Plasma 6 has no `registerDBusAdaptor`, so the reply comes
+  back through `Script::callDBus` **to our own unique bus name**, nonce-guarded. `Script::run()`
+  early-returns while running ⇒ load once per query + `unloadScript`, never `run()` in a loop.
+  Measured load+run+reply ≈ **0.5 ms**.
+* **Implemented in** `kwcapture/native/kwcapture.c` ("full window enumeration"): `collect_windows()`
+  = krunner pass + `collect_windows_script()`; failures are a stderr note plus the old list, never a
+  failed call. Flags `--normal-only`, `--require-full` (exit 3); JSON gains `window_type_name` +
+  `krunner_listed`. Probes: `non_normal_windows.py`, `kwin_script_enumerate.py`,
+  `kwin_script_failure_path.py`.
+* **Behaviour change that will generate reports:** a *name* can now match its own dialog too, so a
+  lookup that used to resolve can raise `AmbiguousWindow`. That is the honest answer; `--normal-only`
+  / `all_types=False` restores the old list.
+
 
 ## OPEN BUGS — found, not yet fixed
 
@@ -438,187 +285,72 @@ that request). Assume a force-push does not un-publish anything.
 >   **surfacing** works and exits 0 when it does — the underlying KWin staleness is expected
 >   to remain forever, so that is no longer a failure condition.
 >
-> Everything below is the original analysis, kept because the reasoning is the useful part.
+> The original 2026-10-06 analysis is archived; what it concluded is above.
 
 
-`AGENTS.md` has long said "a minimised window still captures — KWin keeps its buffer".
-That is true only in the sense that you get **pixels back**: they are an **old snapshot**.
-KWin stops rendering a minimised window's scene item, so the buffer holds whatever it last
-held and **every grab returns identical bytes forever** — no exception, no `status`, no
-flag, nothing in `stats()` to tell you the frame is dead. A caller polling a background
-window gets a frozen image and believes it is live. This is the worst kind of bug: it is
-silent, and "it returned a frame" looks like success.
+The original analysis — how it was reproduced with a self-repainting `konsole`, the three fix options
+considered before the one that shipped, and the fact that the repro script lived in `/tmp` (so it is
+gone; `probe/stale_window.py` is the durable version) — is in `AGENTS.old.md` (*BUG-1: the original
+analysis*). Two things from it are still worth knowing: **the stale buffer is not the last frame before minimising** (it is whatever KWin
+rendered last, possibly mid-animation), and the fix deliberately avoided a per-frame D-Bus round
+trip — a `KWC_ERR_STALE` frame status would need `KWC_VERSION` bumped to 3.
 
-* Reproduced 2026-10-06 with a self-repainting window (`konsole --hold -e sh -c
-  'while :; do date; sleep 0.3; done'`) and `Capture(window=…)`, grabbing 1.8 s apart:
-  `1 VISIBLE live repaint differs : True` / `2 MINIMISED two grabs identical : True` /
-  `3 RESTORED live repaint differs : True`. Script was `/tmp/probe_stale.py`; rerun it with
-  `PYTHONPATH=$PWD .venv/bin/python /tmp/probe_stale.py` (needs `busctl` to minimise).
-* Note the stale buffer is **not** the last frame seen before minimising either
-  (`changed vs pre-minimise: True`) — it is whatever KWin rendered last, possibly an
-  animation frame. So it is not even a reliable thumbnail.
-* **Fix direction** (nothing implemented yet): `getWindowInfo` reports `minimized`, so we
-  *can* know. Cheapest honest options:
-  1. a property `Capture.window_minimized` that does one `getWindowInfo` call on demand
-     (do **not** do it per frame — that would add a D-Bus round trip to every grab);
-  2. surface it as a frame status, e.g. a new `KWC_ERR_STALE`/`KWC_FLAG_STALE`, only when
-     the daemon is told to check (`--check-minimised`), so the default fast path is
-     untouched — this needs `KWC_VERSION` bumped to 3 (see the ring-geometry gotcha);
-  3. at minimum, document it in the README's per-window section, which currently implies
-     minimised capture gives you the window's current contents.
+
 * **Also unverified, same family — test these next** (same silent-staleness shape):
   window on **another desktop** (switch with `/KWin setCurrentDesktop`), window on another
-  **activity**, and a window that is fully **occluded** (the "occlusion does not crop"
-  claim below was verified only for *geometry*, never for *liveness*).
+  **activity**, and a window that is fully **occluded** — README → *Per-window capture* claims
+  "no cropping by whatever is on top of it", and that was verified for **geometry** only, never for
+  **liveness** (an occluded window's buffer could in principle be as stale as a minimised one).
 
-### BUG-2 (latent fatal crash in the grab hot path, only partly explained): `sched_yield()`
+### BUG-2 (`sched_yield()` in the grab hot path) — fixed in v0.4.0; kept here for the hunt, not because it is open
 
-`kwcapture/__init__.py` (~line 1103) has a lazy ctypes init, and it is called from
-**`Capture.grab()`'s busy-wait loop** (the `sched_yield()` call inside `grab`, during the
-first 200 spins — i.e. on essentially every fresh grab). So anything that breaks here is
-fatal for *all* capture, not for one code path.
+A lazy ctypes init inside `grab()`'s busy-wait caught only `OSError`, but a missing libc symbol
+raises **`AttributeError`** — so on musl or odd SONAMEs every capture died, not one code path.
+Fixed in v0.4.0: catch both, keep the fallback a real named function, and guard the cache with
+`callable()` rather than `is None`, with a regression test (`regression: BUG-2 sched_yield`).
 
-```python
-_sched_yield = None
+The author's remembered `TypeError: 'int' object is not callable` was **never reproduced and is not
+in the tree or its history**; `libc.sched_yield()` returns int 0, so a stray paren
+(`= libc.sched_yield()`) caches 0 and produces exactly that message from far away — a hypothesis,
+not a finding, and the same family is covered by BUG-4 (environmental). If it reappears:
+`grep -rn "sched_yield" kwcapture/`, rerun under `python -X dev -X faulthandler` for a full
+traceback, and remember the *frame above* is where an int came from. Full analysis, the AST scan
+that came up empty, and the three verified branches: `AGENTS.old.md` (*BUG-2: sched_yield*).
 
-def sched_yield() -> None:
-    global _sched_yield
-    if _sched_yield is None:
-        try:
-            libc = ctypes.CDLL("libc.so.6", use_errno=True)
-            _sched_yield = libc.sched_yield
-        except OSError:            # <-- TOO NARROW
-            _sched_yield = lambda: time.sleep(0)
-    _sched_yield()
-```
 
-* **Verified defect**: if `CDLL("libc.so.6")` succeeds but the `dlsym` for `sched_yield`
-fails, ctypes raises **`AttributeError`, not `OSError`**, which escapes the `except` and
-propagates out of `grab()`. Proven by monkeypatching: `CRASH: AttributeError: sched_yield`.
-Relevant on non-glibc/musl or odd SONAMEs. Unchanged since the initial release
-(`git log -S sched_yield` shows exactly one commit).
-* **The `'int' object is not callable' symptom the author remembers was NOT reproduced and
-  is NOT in the tree or its history.** What is known for certain, and it is what makes this
-  hard to pin down:
-  - **`libc.sched_yield()` RETURNS AN INT (0). Verified.** So this is the one place in the
-    package where the callable and an int sit side by side: a single stray paren —
-    `_sched_yield = libc.sched_yield()` — caches **0**, and from then on every `grab()` dies
-    with exactly `TypeError: 'int' object is not callable`, deep inside the wait loop, far
-    from the line that caused it. That matches the remembered symptom, the fatality, and
-    the difficulty; it is a **hypothesis, not a finding**.
-  - An exhaustive AST scan (all 47 ctypes int fields of `_Hdr`/`_Slot` + every int/bool
-    `Window` field, looking for `field(...)` call sites) found **no** such call in the
-    committed tree. `h.ready()`, `h.frame_seq()`, `w.width()` etc. would all give the same
-    error, so if the earlier session hit one of those it happened **in a scratch script in
-    `/tmp`, which is gone** — the most likely reason it cannot be found again.
-* **How to find it again** (do this, in order):
-  1. `grep -rn "sched_yield" kwcapture/` and check the cache is assigned the function, never
-     the call result (`= libc.sched_yield`, NOT `= libc.sched_yield()`).
-  2. Reproduce any crash with `python -X dev -X faulthandler` and a **full traceback**; the
-     `int` in the message is a ctypes field or a call result, so the *frame above* is where
-     the int came from, not the frame that raised.
-  3. Run the AST scan (kept below in this section's git history / re-create: parse each file,
-     collect int-ish attribute names, look for `ast.Call` whose `func` is an `Attribute` with
-     one of those names). It takes seconds and finds the whole family statically.
-* **Fix — APPLIED and now covered by tests** (see `regression: BUG-2 sched_yield` in the suite):
-  catch `(OSError, AttributeError)`, keep the fallback a real named function (`_sleep0`), and
-  guard the cache with `if not callable(_sched_yield)` instead of `is None`. **APPLIED** (commit after this one): all three branches verified —
-  normal `_FuncPtr`, `AttributeError` → `_sleep0`, and forcibly setting `_sched_yield = 0`
-  now *re-initialises* instead of raising, with a real `grab()` still working. The
-  `'int' object is not callable` origin story above is still unconfirmed; the guard only
-  makes that whole family uninvokable. **If the crash ever reappears, read this section.**
+### BUG-4 (ROOT-CAUSED 2026-10-07 — NOT OURS): corruption while reading shared memory zero-copy
 
-### BUG-4 (ROOT-CAUSED 2026-10-07, NOT OURS): corruption while reading shared memory zero-copy
+> **Not a kwcapture bug, and probably not a software bug.** Never write "BUG-4 fixed" — write
+> **"not ours, guardrails added, fault rate unchanged."**
 
-> **STATUS — 2026-10-07 ~02:30: not a kwcapture bug, and most likely not a software bug at
-> all — see the "memory faults on this box" block below this quote. What follows is the
-> bisect record; the conclusion in it ("numpy/CPython bug") was written before the machine
-> itself was checked and is too strong.** It is **not a race in kwcapture** and never was. `probe/race_bisect.py` and `probe/corruption_rate.py` in
-> this repo reproduce the exact historic symptoms with **no kwcapture, no daemon, no
-> second writer, no thread** — a tight loop that builds numpy views over an `mmap`:
->
-> ```
-> probe/race_bisect.py  MODE=both   TypeError: 'int' object is not callable  @ iter 326,533
->                     MODE=numpy    Segmentation fault   <-- no ctypes involved at all
->                     MODE=ctypes   clean (3.9M it/s)
-> probe/corruption_rate.py  MODE=A  IndexError: only integers, slices … @ iter 2,492,225
->                           MODE=C  double free or corruption (out) → abort in numpy's
->                                   array dealloc (_Py_Dealloc → _multiarray_umath → free)
-> ```
-> Other things observed on the same box while hunting it: `arr.ctypes` evaluated to a
-> **`str`**; a module-level **int** `HDR` raised `AttributeError: module 'numpy' has no
-> attribute 'HDR'` (i.e. the interpreter resolved a global against the wrong object); a
-> `ValueError: cannot reshape array of size 1` when the geometry was a fixed 640×480×2560.
-> Those are mis-executed bytecode / a corrupted heap inside **CPython 3.14.4
-> (`/usr/bin/python3.14`, GCC 15.2) + numpy (venv 2.5.3 *and* system 2.3.5 both crashed)**,
-> not a logic error in this package.
->
-> **Rate: ~1 event per 10^5–10^7 view constructions**, and it is not deterministic: a
-> 240M-iteration matrix run came back completely clean, and the same script crashes on one
-> run and not the next. That is the whole reason three sessions could not pin it — and why
-> "I ran it once and it was fine" was never evidence. At a real ~40 fps capture rate the
-> expected time to one event is **days**, which is why nobody hits this in normal use.
->
-> **HEAD-TO-HEAD, 2026-10-07 ~02:00 — rewriting the read path does not change anything.**
-> `probe/fault_rate.py` (40M `latest(rgb=True)` reads per round, ~480k reads/s, `-X dev`),
-> old = `git worktree` of HEAD, new = the hardened path. Full table in
-> `probe/FAULT_RATE_RESULTS.txt`:
->
-> ```
-> old: faulted in 4/4 rounds   (~13M, ~1M, 0 reads, early)   '_Hdr' has no attribute '_hdr',
->                                                                      shape=(1, 3, 2560, 4)
-> new: faulted in 4/4 rounds   (<1M, <1M, ~24M, ~?)            'Capture' - int,
->                                                        'int' % 'mmap.mmap', SIGSEGV
-> ```
->
-> Caching one numpy array per slot instead of building a view per frame (removing ~6 orders
-> of magnitude of buffer-export churn) **also faulted 3/3** — so it is not the export churn
-> either. That variant was reverted; the read path stays simple.
->
-> **MEMORY FAULTS ON THIS BOX — the likeliest explanation.** While measuring, the fault
-> rate rose until even `tests/test_ring_reader.py` — synthetic ring, no daemon, no
-> threads — faulted, with `'int' + 'Capture'` in code that never creates a `Capture`. The
-> machine's state at the time: `MemFree` ≈ 1 GB of 131 GB, **`SwapTotal` = 0**,
-> `Shmem` = 79 GB, `pgscan_direct` 331k / `allocstall_movable` 318 (direct reclaim live),
-> `pgmajfault` 57k — because **`llama-server` (the model these agent sessions run on)
-> holds 103 GB RSS, including a 72 GB shared mapping**. Non-ECC RAM
-> (`EDAC ie31200: No ECC support`). The kernel has already oopsed here once today:
-> `BUG: kernel NULL pointer dereference … Oops: [#1] SMP NOPTI` in
-> `free_pages_and_swap_cache+0x50` (page reclaim), PID `nvidia-smi`, tainted
-> (`[P]ROPRIETARY [O]OT [E]UNSIGNED`) kernel `7.0.0-2018-nvidia-bos` + NVIDIA 610.57.04,
-> ASRock Z790 Steel Legend. And `/var/crash/_usr_bin_python3.14.1000.crash` records
-> **`Signal: 7` / `SIGBUS`** for `.venv/bin/python tests/test_kwcapture.py quick` — a page
-> of the ring that could not be materialised, which is exactly the failure mode that looks
-> like "flaky, GC/timing-dependent, impossible values".
->
-> **Decisive next experiment (run it before touching this code again):**
-> `KWC_ITERS=40000000 .venv/bin/python -X dev probe/fault_rate.py` on another machine, or
-> with `llama-server` stopped. Clean there ⇒ BUG-4 is environmental, closes, and nothing
-> here needs changing. Faults there too on the same numpy/CPython ⇒ then and only then it
-> is worth reporting upstream, with `probe/corruption_rate.py`'s ~20-line core and the
-> `double free or corruption (out)` dealloc trace.
->
-> **What v0.4.0 changed** — real correctness fixes in the read path, *not* a mitigation of
-> the fault (measured unchanged, above). See the `_view()`/`_descriptor()` comments:
-> one contiguous read of the slot descriptor instead of a ctypes shadow object plus
-> repeated field reads (two fields could previously come from two different frames); ring
-> geometry validated once per generation; every value bounds-checked before it becomes an
-> offset/count/shape (nonsense used to be able to hand numpy the header bytes as pixels);
-> the client's data mapping is now **read-only**, so views are read-only for free and no
-> client can write into the ring; `grab()` takes the newest published frame instead of the
-> exact one it asked for (a slot the daemon had already recycled is no longer read);
-> a torn `copy=True` read is retaken once; and a generation counter refuses to return a
-> frame that spans a `restart()`/`close()`.
-> **Never write "BUG-4 fixed" — write "not ours, guardrails added, fault rate unchanged".**
-> Repros and measurement: `probe/race_bisect.py`, `probe/corruption_rate.py`,
-> `probe/fault_rate.py`, `probe/FAULT_RATE_RESULTS.txt`. Deterministic guardrail tests:
-> `tests/test_ring_reader.py` (no compositor needed, so they run in CI).
+* **Reproduces with no kwcapture at all:** `probe/race_bisect.py` / `probe/corruption_rate.py` hit
+  the historic symptoms — `TypeError: 'int' object is not callable`, `IndexError: only integers…`,
+  SIGSEGV, `double free or corruption (out)` in numpy's array dealloc — in a tight loop of numpy
+  views over an `mmap`, no daemon, no writer, no thread.
+* **Rewriting the read path changed nothing:** `probe/fault_rate.py` faulted 4/4 rounds on the old
+  path and 4/4 on the hardened one (table in `probe/FAULT_RATE_RESULTS.txt`), and a
+  cache-views-per-slot variant faulted 3/3 — so not the view-churn either. **Rate ≈ 1 event per
+  10⁵–10⁷ view constructions**, non-deterministic; at ~40 fps that is days between events.
+* **Likeliest cause was the box**: `llama-server` at ~103 GB RSS (72 GB shared), `MemFree` ≈ 1 GB of
+  131 GB, `SwapTotal = 0`, direct reclaim live, **non-ECC** RAM, a kernel oops in page reclaim the
+  same day, and a `.crash` record showing **SIGBUS** for the test suite — a ring page that could not
+  be materialised looks exactly like "flaky, impossible values". RAM was later taken off XMP
+  (5200 → 4800 MT/s); `probe/fault_rate.py` still faulted on the live ring afterwards, while the
+  no-writer probes stayed clean for ~144M iterations — which is what `probe/writer_reader_repro.py`
+  was built to test (raw shm + one concurrent writer, no kwcapture).
+* **Decisive experiment, still the right one:** run it on another machine, or with `llama-server`
+  stopped — `KWC_ITERS=40000000 .venv/bin/python -X dev probe/fault_rate.py`. Clean there ⇒
+  environmental, closes. Faults there too on the same numpy/CPython ⇒ report upstream with
+  `probe/corruption_rate.py`'s ~20-line core and the dealloc trace.
+* **v0.4.0's read-path work stands on its own** (see `CHANGELOG.md` 0.4.0): single contiguous
+  descriptor read, geometry validated once per generation, bounds-checking before any value becomes
+  an offset/count/shape, **read-only** client mapping, newest-published-frame semantics, one retry
+  of a torn `copy=True` read, and a generation counter that refuses a frame spanning
+  `restart()`/`close()`. Correctness fixes — **not** a mitigation of this fault.
+* Guardrails that run in CI without a compositor: `tests/test_ring_reader.py`.
+  Full bisect record, the mis-executed-bytecode observations, the memory forensics and the
+  head-to-head table: `AGENTS.old.md` (*BUG-4: the bisect record, 2026-10-09 archive*).
 
-The original three-session hunt — the symptom list, why every static search for it comes up empty,
-the rejected fix attempts, and why we believed it was a race in our own zero-copy path — is archived
-in `AGENTS.old.md` (*BUG-4: the original hunt*). It stays out of here deliberately: it is 6 KB of
-reasoning about a fault now attributed to this box / numpy, and re-reading it misdirects anyone who
-starts from the live conclusion above.
 
 #### BUG-4b: `CaptureError: daemon error: Success` — double read of `hdr.error`
 
@@ -828,75 +560,54 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 * `PIL.ImageGrab` can leave a `spectacle` process holding your stdout pipe open (looks like
   a hang); `bench.py` reaps the ones it started.
 
-## COMMUNITY FILES — what is in `.github/` and why (deliberately incomplete)
+## Community files — what is in `.github/` and why it is incomplete
 
-`SECURITY.md`, `ISSUE_TEMPLATE/{bug_report,feature_request}.yml`, `ISSUE_TEMPLATE/config.yml`,
-`PULL_REQUEST_TEMPLATE.md`, `dependabot.yml`. All of it written for *this* repo rather than from
-stock templates, because the useful content is project-specific: the bug form leads with
-`kwcapture doctor` + Plasma/KWin version + session type (the domain's three real failure layers),
-and the PR template states the two traps CI structurally cannot catch — **green CI ≠ capture
-works** (no DRM node on hosted runners) and **helper changed ⇒ the release wheel must be
-rebuilt** — plus the nunif constraint (import must stay cheap, no new hard dep) and the `private/`
-rule.
-* **Dependabot covers `github-actions` only, by design.** The release workflow is the reason:
-  a stale cibuildwheel pin broke the v0.1.0 *and* v0.2.0 release runs (dated manylinux images get
-  deleted from quay.io). No `pip` section — `numpy`/extras are deliberately unpinned, so bot PRs
-  against open ranges are pure noise for a solo maintainer. There is an explicit `ignore` keeping
-  cibuildwheel below 5 so a bot cannot "help" past a breaking major without a human reading
-  `release.yml`'s comments first.
->
-> **First cycle, banked (2026-10-09).** Dependabot opened PR #2 — checkout v4→v7,
-> setup-python v5→v7, upload-artifact v4→v6, download-artifact v4→**v7**, one grouped PR, and
-> **cibuildwheel correctly left alone** by the `ignore` rule. Squash-merged as `2ec83eb`, CI green
-> on `main`. Then the part that matters: **a PR cannot run `release.yml`, so its own bumps were
-> unverified by that green check** — rehearsed instead with `workflow_dispatch` at
-> `publish: false` (run 37881396351): sdist + manylinux wheel built, ring-reader tests ran,
-> `upload-artifact@v6` produced the `dist` artefact, the wheel smoke test printed `wheel ok 0.6.0`
-> and `kwcapture 0.6.0`, while "Attach to the GitHub release" and the whole `publish` job were
-> *skipped* — they are gated on `refs/tags/v*` and on the `publish` input, which is exactly why
-> this dry run is safe to fire at any time. Keep the recipe, it needs no `gh`:
-> `curl -X POST -H "Authorization: Bearer $TOK" -d '{"ref":"main","inputs":{"publish":false}}'`
-> `…/actions/workflows/release.yml/dispatches`.
-> **Still the one line with no coverage: `download-artifact@v7`**, which exists only in the
-> `publish` job — the job this release process does not use (PyPI upload is local `twine` against
-> the release assets, checklist step 5). Dormant, not proven: if trusted publishing is ever turned
-> on, verify that step against TestPyPI first, never mid-release.
-* **`CODE_OF_CONDUCT.md` was added on 2026-10-09, and the reason is not "the GitHub checklist".**
-  What moved it is the same argument that made `SECURITY.md` worth writing: distributors read this
-  checklist as evidence about how a project is run — nunif's maintainer said outright that the CI
-  build counted as responsibility evidence and that shipping came down to trust (see DOWNSTREAM
-  above). The objection that *survived* is that a code of conduct needs a real enforcement contact,
-  because an unfilled `user@example.com` advertises a promise nobody keeps; that is satisfied by the
-  maintainer's main email, published with his explicit consent, and it is the same address
-  `SECURITY.md` carries.
-  The file is **Contributor Covenant 2.1 fetched from contributor-covenant.org** and assembled by a
-  script that *asserted* the body is byte-identical to the published text apart from the single
-  contact substitution — so **do not hand-edit the covenant section**; regenerate it if upstream ever
-  revises. It is preceded by a project-specific note that says the quiet parts out loud rather than
-  hiding them: one maintainer is both contact and decision-maker, there is no committee and the file
-  does not pretend there is one, and **a report about the maintainer himself goes to GitHub Support**,
-  since he cannot adjudicate a complaint against himself. Enforcement is scoped to this project's
-  spaces; nothing is retroactive. Consistency note: its "acknowledge within 5 working days" matches
-  `SECURITY.md` — change one, change the other.
-* **Still deliberately absent: Discussions, wiki, FUNDING, coverage/lint badges, and
-  `ACCESSIBILITY.md`.** The first three are premature with no contributor traffic; a coverage or lint
-  badge would point at a step that does not exist (the functional suite needs real hardware — a
-  documented limitation, not a gap to paper over); and `ACCESSIBILITY.md`, which GitHub lists as an
-  *optional* extra, would be theatre: no UI, no docs site, no interactive surface beyond Python and
-  stdout, so the only honest content is "captured screen content inherits whatever accessibility the
-  source application has" — a sentence, not a policy. Leaving that box unchecked is the accurate
-  state.
-* **Private vulnerability reporting is ENABLED** (2026-10-09, by hand: Settings → Code security and
-  privacy → *Privately report a security vulnerability*), confirmed by a logged-out account seeing
-  the "Report a vulnerability" button. Do not try to switch it on over the API — the
-  `PATCH …/repos` call *accepts* a `private_vulnerability_reporting` key and silently does nothing
-  with it, and `GET` never returns that key either, so the API cannot confirm or deny it here. The
-  only reliable checks are the Security tab as an outsider, or filing a report. `SECURITY.md` links
-  the form and also gives the maintainer's email as a fallback contact (his decision, 2026-10-09).
-* **Validate the forms before pushing**: `yaml.safe_load` is not enough — every body item needs
-  `type` ∈ {markdown,textarea,input,dropdown,checkboxes}, markdown items need `attributes.value`,
-  the rest `attributes.label`, dropdowns ≥2 options, and `validations.required` must never appear
-  on `checkboxes`.
+`SECURITY.md` · `ISSUE_TEMPLATE/{bug_report,feature_request}.yml` + `config.yml` ·
+`PULL_REQUEST_TEMPLATE.md` · `dependabot.yml` · `CODE_OF_CONDUCT.md` · `CONTRIBUTING.md`.
+Written for this repo, not from stock templates; the useful content is the part a generator cannot
+know.
+
+* **Bug form** leads with the three things that decide most reports here — `kwcapture doctor` output,
+  Plasma/KWin version, session type — and says up front that CI cannot test capture, so nobody treats
+  a green pipeline as evidence. Blank issues stay enabled on purpose.
+* **PR template** carries the two traps CI structurally cannot catch: **green CI ≠ capture works**
+  (no DRM node on hosted runners) and **helper changed ⇒ the release wheel must be rebuilt**; plus the
+  nunif API-compat list and the `private/` rule.
+* **Dependabot covers `github-actions` only.** Versions rot there, not in the package: a stale
+  cibuildwheel pin broke the v0.1.0 *and* v0.2.0 release runs when its dated manylinux image left
+  quay.io. No `pip` section — `numpy` and the extras are deliberately unpinned, so bot PRs against
+  open ranges are pure noise for one maintainer. An explicit `ignore` holds **cibuildwheel below 5**
+  so a bot cannot step over a breaking major without a human reading `release.yml`'s comments.
+* **First cycle (2026-10-09):** PR #2 grouped checkout v4→v7, setup-python v5→v7,
+  upload-artifact v4→v6, download-artifact v4→v7, cibuildwheel untouched ✓. Squash-merged
+  (`2ec83eb`), CI green — but **a PR runs `ci.yml`, which never touches the artefact actions**, so
+  `release.yml` was rehearsed with `workflow_dispatch` at `publish: false` (run 37881396351): sdist +
+  manylinux wheel built, ring-reader tests ran, `upload-artifact@v6` produced `dist`, smoke test said
+  `wheel ok 0.6.0`, and the release-attach + publish steps were *skipped* as designed. **That
+  dispatch is the way to verify release tooling without a release** — no `gh` needed:
+  `curl -X POST -H "Authorization: Bearer $TOK" -d '{"ref":"main","inputs":{"publish":false}}'
+  …/actions/workflows/release.yml/dispatches`. **Still untested by anything: `download-artifact@v7`**
+  — it lives only in the `publish` job, which this process does not use (PyPI upload is local `twine`
+  against the release assets). Dormant, not proven: if trusted publishing is ever turned on, verify
+  it against TestPyPI first, never mid-release.
+* **`CODE_OF_CONDUCT.md` = Contributor Covenant 2.1**, fetched from contributor-covenant.org rather
+  than typed, assembled by a script that *asserted* the body is byte-identical apart from the one
+  contact substitution — **do not hand-edit the covenant section, regenerate it**. Its preamble says
+  the quiet parts out loud: one maintainer is contact **and** decision-maker, there is no committee,
+  enforcement reaches this project's spaces only, nothing is retroactive, and **a report about the
+  maintainer himself goes to GitHub Support**. "Acknowledge within 5 working days" deliberately
+  matches `SECURITY.md` — change one, change the other. Added because distributors read this checklist
+  as trust evidence (the nunif precedent), not for the badge; the objection that survived — a CoC
+  needs a real contact — is answered by the maintainer's published email.
+* **Deliberately absent:** Discussions, wiki, FUNDING, coverage/lint badges, `ACCESSIBILITY.md`.
+  No coverage/lint badge because no such step exists, and the functional suite needs real hardware —
+  a documented limitation, not a gap to paper over. No accessibility statement because there is no UI,
+  docs site or interactive surface beyond Python and stdout: the only honest content would be
+  "captured content inherits the source app's accessibility", which is a sentence, not a policy.
+* **Validating issue forms:** `yaml.safe_load` is not enough — every body item needs
+  `type` ∈ {markdown, textarea, input, dropdown, checkboxes}, markdown items `attributes.value` and
+  the rest `attributes.label`, dropdowns ≥ 2 options, and `validations.required` never on checkboxes.
+
 
 ## README badges — chosen deliberately (do **not** add a download badge)
 
@@ -953,54 +664,29 @@ every candidate badge — it returns the message shields would render).
    what shipped and what was verified, and commit + push that too.
 
 ## Ideas not done yet
-* **CI integration test against a real (headless) KWin — DONE in `.github/workflows/ci.yml`
-  (`headless-kwin`, branch `ci/headless-kwin` + PR #1), with one hard limit: GitHub's runners have
-  no DRM render node, so the job covers the nested session (KWin starts, Wayland socket, private
-  D-Bus, desktop-entry authorisation, output listing, per-window listing, the Qt client) but not
-  the frames themselves — see the FRESH STATUS at the top for why that is a hardware fact, not a
-  bug.** Still open, and now cheap because the harness exists:
-  * run the strict job somewhere with a render node: a **self-hosted runner** on this desktop, or a
-    GPU-labelled runner. `docker run --rm --device /dev/dri -v "$PWD:/w" debian:trixie-slim
-    bash /w/probe/ci_headless_kwin.sh` already does it on any KDE machine without a runner.
-  * test BUG-1 (minimised → stale frame) inside the nested session — minimise the KCalc from the
-    probe and assert what comes back; nothing else in the repo can reach that state on demand.
-  * test `scale=` handling: `kwin_wayland --scale` exists, so `KWCAPTURE_NESTED_SIZE` plus a scale
-    knob in `probe/nested_kwin_test.sh` would re-verify the fractional-scaling conclusions on a
-    compositor whose scale is known instead of whatever the desk happens to be set to.
-* ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
-  (`Window.active`, `active_window_id()`, `--active-window-id`).
+
+**Open:**
+* **Run the strict headless job somewhere with a render node** — a self-hosted KDE runner or a
+  GPU-labelled runner; with a render node present `probe/ci_headless_kwin.sh` switches back to
+  strict and tolerates nothing. Still open and now cheap, because the harness exists.
+* **Test BUG-1 (minimised → stale frame) inside the nested session** — minimise the KCalc from the
+  probe and assert what comes back; nothing else in the repo can reach that state on demand.
+* **Test `scale=` handling** — `kwin_wayland --scale` exists, so `KWCAPTURE_NESTED_SIZE` plus a scale
+  knob in `probe/nested_kwin_test.sh` would re-verify the fractional-scaling conclusions on a
+  compositor whose scale is *known* instead of whatever the desk happens to be set to.
 * `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.
-* ~~Expose non-normal windows — panels, desktop, overlays~~ **done, released in v0.6.0.** The
-  guess in the old wording was right: a throwaway KWin script hands out the handles the
-  krunner interface filters out (see the SESSION STATUS section and KEY FACTS → *Window
-  enumeration*). `list_windows()` now returns them by default with `krunner_listed=False`
-  and a `window_type_name`, `--normal-only`/`all_types=False` gives the old list, and
-  `--window HANDLE` no longer insists that the handle came from krunner. What is *not*
-  done, on purpose: no script is installed under `~/.local/share`, nothing is kept loaded
-  in KWin between calls, and there is no event/streaming API for window changes — every
-  query pays its ~0.5 ms and leaves nothing behind.
-* ~~Window resize handling~~ **done** — frames follow the resized window automatically (the
-  per-frame geometry in the slot descriptor was already correct; what was missing was the
-  recovery when it outgrows the ring). See `Capture.resized`, `last_geometry`.
-* ~~Auto-restart the daemon inside `grab()` on `DaemonDead`~~ **done** — `auto_restart=True`
-  is now the default; `restart_limit` bounds the streak. See the resilience notes below.
-* ~~Re-size the ring in place on resolution change instead of erroring out~~ **done,
-  deliberately NOT in place** — the client has the ring mapped at the old length, so growing
-  the file under it would SIGBUS whoever read past the old end. Instead `ENOSPC` →
-  `RingTooSmall` → the daemon is restarted and the ring is *rebuilt* at the new size. Same
-  outcome for the caller, no window where a mapping and a file disagree.
-* ~~Multi-monitor~~ **done** — `list_monitors()` + `Capture(monitor=name|id|index)`,
-  monitor-relative `area=`, `active_monitor()`, CLI `monitors` / `grab --monitor`. A
-  combined helper for *all* outputs at once is still not there: `workspace=True` gives the
-  whole virtual desktop in one frame.
-* ~~Fractional scaling~~ **done** — `Monitor.effective_scale` / `measure_output_scale()`
-  measure it from KWin (integer `wl_output.scale` cannot express 1.25/1.5), with
-  `to_physical`/`to_logical`, `Capture.pixel_scale` and `area_in="physical"`. Frames are
-  device-resolution as before. **Not exercised on a real fractional display** — this box
-  runs 1x; verified via the ratio mechanism, 1.0 exactly, and the math is unit-tested.
-* Fractional scaling: `native-resolution` is set; behaviour with scale≠1 untested.
-* ~~If a non-KDE compositor is ever needed~~ **out of scope, deliberately.** The name is
-  the promise: this project targets KDE Plasma, and `org.kde.KWin.ScreenShot2` is the only
-  capture interface it will speak. `ext-image-copy-capture-v1`/`wlr-screencopy` are not on
-  the roadmap — on a non-KDE compositor kwcapture should fail loudly, not grow a second
-  backend.
+* Fractional scaling: `native-resolution` is set; behaviour with a scaled *window* (not output) is
+  untested.
+* **Non-KDE compositors stay out of scope, deliberately** — the `kw` in the name is the promise.
+  `probe/globals.c` dumps what any compositor advertises if the question ever needs re-answering;
+  the honest failure mode is a clear "cannot reach the compositor" error, never black frames.
+
+**Done — recorded in `CHANGELOG.md`, not re-explained here:** window `active` flag (v0.3.0) ·
+non-normal windows (v0.6.0) · following a resized window (`Capture.resized`, `last_geometry`) ·
+auto-restart on `DaemonDead` with `restart_limit` · multi-monitor (`list_monitors()`,
+`Capture(monitor=…)`, monitor-relative `area=`) · fractional scaling (`effective_scale`,
+`measure_output_scale()`, `area_in="physical"`).
+One design fact worth keeping from the ring-resize work: the ring is **never grown in place** — a
+client has it mapped at the old length, so growing it under a reader would SIGBUS whoever read past
+the old end. Instead `ENOSPC` → `RingTooSmall` → the daemon restarts and the ring is *rebuilt* at
+the new size: same outcome for the caller, no window where a mapping and a file disagree.
