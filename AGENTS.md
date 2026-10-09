@@ -827,15 +827,35 @@ rule.
   against open ranges are pure noise for a solo maintainer. There is an explicit `ignore` keeping
   cibuildwheel below 5 so a bot cannot "help" past a breaking major without a human reading
   `release.yml`'s comments first.
+>
+> **First cycle, banked (2026-10-09).** Dependabot opened PR #2 — checkout v4→v7,
+> setup-python v5→v7, upload-artifact v4→v6, download-artifact v4→**v7**, one grouped PR, and
+> **cibuildwheel correctly left alone** by the `ignore` rule. Squash-merged as `2ec83eb`, CI green
+> on `main`. Then the part that matters: **a PR cannot run `release.yml`, so its own bumps were
+> unverified by that green check** — rehearsed instead with `workflow_dispatch` at
+> `publish: false` (run 37881396351): sdist + manylinux wheel built, ring-reader tests ran,
+> `upload-artifact@v6` produced the `dist` artefact, the wheel smoke test printed `wheel ok 0.6.0`
+> and `kwcapture 0.6.0`, while "Attach to the GitHub release" and the whole `publish` job were
+> *skipped* — they are gated on `refs/tags/v*` and on the `publish` input, which is exactly why
+> this dry run is safe to fire at any time. Keep the recipe, it needs no `gh`:
+> `curl -X POST -H "Authorization: Bearer $TOK" -d '{"ref":"main","inputs":{"publish":false}}'`
+> `…/actions/workflows/release.yml/dispatches`.
+> **Still the one line with no coverage: `download-artifact@v7`**, which exists only in the
+> `publish` job — the job this release process does not use (PyPI upload is local `twine` against
+> the release assets, checklist step 5). Dormant, not proven: if trusted publishing is ever turned
+> on, verify that step against TestPyPI first, never mid-release.
 * **No `CODE_OF_CONDUCT.md`, on purpose** — zero contributors so far, and a CoC needs an
   enforcement contact, which on a one-person project means the maintainer personally, forever.
   Add it if a distro or curated list actually requires it, with a contact address that gets read.
   Also absent: Discussions, wiki, FUNDING, and any coverage/lint badge (no such step exists, and
   the functional suite needs real hardware — an honest limitation, already documented).
-* **Private vulnerability reporting is NOT enabled** — the REST `PATCH …/repos` call accepted the
-  key but did not report it, so it has to be switched on by hand: Settings → Code security and
-  privacy → *Privately report a security vulnerability*. `SECURITY.md` links the form either way
-  and gives an email fallback.
+* **Private vulnerability reporting is ENABLED** (2026-10-09, by hand: Settings → Code security and
+  privacy → *Privately report a security vulnerability*), confirmed by a logged-out account seeing
+  the "Report a vulnerability" button. Do not try to switch it on over the API — the
+  `PATCH …/repos` call *accepts* a `private_vulnerability_reporting` key and silently does nothing
+  with it, and `GET` never returns that key either, so the API cannot confirm or deny it here. The
+  only reliable checks are the Security tab as an outsider, or filing a report. `SECURITY.md` links
+  the form and also gives the maintainer's email as a fallback contact (his decision, 2026-10-09).
 * **Validate the forms before pushing**: `yaml.safe_load` is not enough — every body item needs
   `type` ∈ {markdown,textarea,input,dropdown,checkboxes}, markdown items need `attributes.value`,
   the rest `attributes.label`, dropdowns ≥2 options, and `validations.required` must never appear
