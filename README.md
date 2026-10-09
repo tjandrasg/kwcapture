@@ -654,7 +654,10 @@ desk, 165 on a single output at 100 %.
 
 Non-KDE compositors need `ext-image-copy-capture-v1` / `wlr-screencopy-unstable-v1`
 instead (kwcapture does not implement those; `probe/globals.c` shows how to check what a
-compositor advertises).
+compositor advertises). Checked on kwin 6.6.6: it advertises neither and has neither compiled
+in, so `ScreenShot2` is the only capture route on Plasma short of the portal + PipeWire path —
+which means adding image-copy would buy Sway/Hyprland/river while KDE still needed `ScreenShot2`.
+The two protocols would coexist rather than one replacing the other.
 
 ## Used by
 

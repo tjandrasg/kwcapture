@@ -692,6 +692,14 @@ every candidate badge — it returns the message shields would render).
 * **Non-KDE compositors stay out of scope, deliberately** — the `kw` in the name is the promise.
   `probe/globals.c` dumps what any compositor advertises if the question ever needs re-answering;
   the honest failure mode is a clear "cannot reach the compositor" error, never black frames.
+  **Answered 2026-10-09, do not re-investigate:** kwin 6.6.6 implements neither protocol — 66 globals
+  in the live registry with no `ext-image-copy-capture-v1`/`wlr-screencopy-unstable-v1`, and 0 string
+  hits across 104 `kwin*`/`kwayland*` `.so` files (control `ScreenShot2` = 5). It is "never
+  implemented", not refused: KWin does ship other wlroots-origin protocols (`zwlr_data_control_*`,
+  `ext_idle_notifier_v1`, `ext_data_control_*`). Consequence: a portable protocol is additive, never a
+  replacement for ScreenShot2. **Method note — my first attempt was wrong:** `strings` on
+  `/usr/bin/kwin_wayland` alone reports 0 for `ScreenShot2` too, because the capture code is a plugin;
+  always run the control before believing a negative.
 
 **Done — recorded in `CHANGELOG.md`, not re-explained here:** window `active` flag (v0.3.0) ·
 non-normal windows (v0.6.0) · following a resized window (`Capture.resized`, `last_geometry`) ·
