@@ -1,0 +1,132 @@
+name: 🐞 Bug report
+description: Capture, listing, CLI, resilience or packaging does not do what it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Scope check first — it saves everybody a round trip.** `kwcapture` speaks exactly one
+        compositor interface: `org.kde.KWin.ScreenShot2`, which means **KDE Plasma's KWin on
+        Wayland**. On GNOME, Sway, Hyprland or any other compositor — and on an X11 session — it
+        cannot work by design, and it fails with a "cannot reach the compositor" error rather than
+        returning black frames. If that is your setup, the README's scope note explains why; it is
+        not a bug and no fix is coming.
+
+        Also worth knowing before you file: **CI cannot test capture at all.** GitHub's runners
+        have no DRM render node, so KWin there never composites with OpenGL and never offers
+        `ScreenShot2`. So "it works in CI" is not a claim this project can make, and a bug that
+        only appears on real hardware is entirely expected to reach you.
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`kwcapture doctor` output"
+      description: >-
+        Run `kwcapture doctor` in your graphical session and paste the **whole** output. It reports
+        the session type, which helper binary is in use, the KWin authorisation, which window
+        enumeration route worked, whether a real non-black frame came back, and which optional
+        extras are installed — that is most of a diagnosis before you type anything else. If it
+        suggests `--fix`, run `kwcapture doctor --fix --build` once and paste both.
+      render: text
+      placeholder: |
+        ok   Wayland session (wayland-0)
+        ok   helper: /home/you/venv/lib/python3.12/site-packages/kwcapture/bin/kwcapture
+        ok   KWin authorisation: ...
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect instead?
+      description: >-
+        Actual versus expected, in those words. Paste the exception text exactly as printed — the
+        wording here is deliberate and usually identifies the failing layer on its own.
+      placeholder: |
+        Expected: a 1920x1080 frame.
+        Got: CaptureError: The name org.kde.KWin.ScreenShot2 was not provided by any .service files
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        The shortest thing that shows it. Please do not link a whole application — a five-line
+        snippet is the difference between a report that gets fixed and one that sits open. If you
+        cannot reduce it, say what the app does (window types, GPU, video, Electron…) instead.
+      render: python
+      value: |
+        import kwcapture as K
+
+        print(K.__version__)
+        cap = K.Capture()            # or Capture(window="Kate") / Capture(monitor="DP-1")
+        print(cap.grab().shape)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Where does it go wrong?
+      options:
+        - "capture itself (first frame, black frame, timeout)"
+        - "window listing or lookup (list_windows / find_window / a handle that will not capture)"
+        - "monitor listing or per-monitor capture"
+        - "fractional scaling / coordinates / wrong size"
+        - "CLI (kwcapture ...)"
+        - "install or packaging (pip, wheel, building the helper, authorisation)"
+        - "resilience (daemon died, resolution or window size changed, RingTooSmall)"
+        - "performance (much slower than documented)"
+        - "not sure"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: kwcapture version, and how it was installed
+      description: >-
+        `kwcapture --version`, plus: PyPI wheel, built from source (`--no-binary=kwcapture`), or
+        from git. The wheel ships a prebuilt helper, so "broken here, fine there" is often this line.
+      placeholder: "0.6.0, PyPI manylinux wheel"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: KDE Plasma / KWin version, distro, GPU
+      description: >-
+        `kwin_wayland --version` (or `kinfo`, or System Settings → About this System), distro, and
+        GPU/driver if you know it. Version matters a great deal here: what KWin exposes over D-Bus
+        has changed between 6.3 and 6.6, and whether it composites with OpenGL at all decides
+        several failure modes.
+      placeholder: "Plasma 6.6.0 / kwin 6.6.6, Kubuntu 26.04, NVIDIA 565"
+    validations:
+      required: true
+
+  - type: textarea
+    id: outputs
+    attributes:
+      label: Your outputs (monitors, resolution, scale)
+      description: "`kwcapture monitors --measure-scale` prints the lot. Fractional scaling and multi-monitor bugs are geometry bugs, so this is the bug report."
+      render: text
+      placeholder: |
+        DP-1       2560x1440 @164.69Hz pos 0,0 scale 1  effective 1.25
+      value: ""
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: triage
+    attributes:
+      label: Three checks that usually locate the problem
+      options:
+        - label: "KDE Spectacle screenshots my screen fine — so KWin is compositing and authorisation is possible for other binaries"
+        - label: "I am on a Wayland session, not X11 (`echo $XDG_SESSION_TYPE` says `wayland`)"
+        - label: "`--normal-only` (CLI) or `list_windows(all_types=False)` changes the result — that isolates the KWin scripting route from the capture path"
+        - label: "It worked on an earlier kwcapture version (say which, and the gap, in the description above)"
+        - label: "It is intermittent (say roughly how often, and whether anything else was happening on the machine — memory pressure included)"

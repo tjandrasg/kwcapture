@@ -1,0 +1,99 @@
+name: 💡 Feature request
+description: Propose new behaviour, API, or CLI
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Is it in scope?** Two questions that decide most feature requests here:
+
+        1. **Does it need another compositor's interface?** `kwcapture` deliberately speaks only
+           `org.kde.KWin.ScreenShot2`. Anything that requires `wlr-screencopy`,
+           `ext-image-copy-capture-v1`, a portal, or X11 is out of scope — not because it is hard,
+           but because "kw" is the promise the name makes, and a package that half-works on four
+           compositors is worse than one that fully works on one.
+        2. **Can it live *on top of* kwcapture instead of inside it?** Cropping, tiling, stitching,
+           diffing frames, feeding a model, streaming over a socket — those are fine as separate
+           packages and keep this one reviewable. The helper is one C file on purpose; every line
+           added to it is code that runs with your desktop's screenshot privileges.
+
+        Things that are usually in scope: making capture faster or more honest about what it got,
+        exposing something KWin already offers, fixing a sharp edge in the API, and anything that
+        makes a silent failure visible.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do, and what gets in the way?
+      description: >-
+        The use case comes first — several of this project's better features came from a real
+        problem rather than a proposed API, and one of them turned out to be solvable with a flag
+        that already existed.
+      placeholder: |
+        I capture one window at ~30 fps for a vision pipeline. When the app reopens, the handle
+        changes and my Capture object raises WindowGone, so I have to re-resolve by name and
+        rebuild the capture myself...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like the API / CLI to look like?
+      description: A code block beats a paragraph. Show the call as you wish it existed.
+      render: python
+      placeholder: |
+        import kwcapture as K
+        cap = K.Capture(window="Kate", on_reopen="follow")
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead, and why is that not enough?
+      description: >-
+        If the workaround is two lines, say so — that is genuinely useful information, and it tells
+        us whether this belongs in kwcapture or in your project.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Does this need anything outside KWin?
+      description: Decides whether this can be implemented here at all.
+      options:
+        - "No — org.kde.KWin.ScreenShot2 / KWin D-Bus is enough"
+        - "It needs another compositor protocol (wlr-screencopy, ext-image-copy-capture, portal)"
+        - "It needs no compositor at all — pure Python / packaging / CLI"
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - label: "It would change existing behaviour (an API, a default, or what a name/handle/`area=` resolves to) — please describe the breakage below"
+        - label: "It would add a dependency (runtime, build, or optional)"
+        - label: "It needs the C helper changed (which means the release wheel is rebuilt)"
+        - label: "It is purely additive — existing behaviour untouched"
+
+  - type: dropdown
+    id: implementation
+    attributes:
+      label: Would you implement it?
+      description: >-
+        No pressure either way — but a request with a PR behind it moves faster than one without,
+        and if you are going to write it, say so first so we can agree the shape before you invest
+        the time. Note that a contribution needs a real Plasma desktop to test on: CI cannot check
+        capture at all.
+      options:
+        - "Yes, I'll send a PR"
+        - "I could, with guidance on where it belongs"
+        - "No — hoping someone else picks it up"
+        - "I can help test on a Plasma desktop"
+    validations:
+      required: true

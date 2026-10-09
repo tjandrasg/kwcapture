@@ -222,8 +222,12 @@ he had not tested KDE capture but it "won't affect other environments", and on t
 the GitHub Actions build "provides some evidence that the project is being handled responsibly",
 though "ultimately it comes down to whether the binary is trusted". The facts that answer that
 (verified in this tree, do not restate them without re-checking):
-* the helper is one C file (`kwcapture/native/kwcapture.c`, 1749 lines) + `kwcapture_shm.h` (103),
-  a ~54 KB dynamically linked ELF; `ldd` = libc, glib/gio, libsystemd, libwayland-client;
+* the helper is one C file (`kwcapture/native/kwcapture.c`, 2141 lines) + `kwcapture_shm.h` (103),
+  and its **direct** dependencies are exactly three — `libc`, `libsystemd` (sd-bus),
+  `libwayland-client` — with no RPATH (`readelf -d`, not `ldd`: ldd also lists whatever the
+  desktop session put in `LD_PRELOAD`, which on this desk adds a GTK CSD shim that the binary
+  does not need). The sdist carries **no compiled artefact at all**: 5 `.py` files + the `.c` +
+  the header. All of this is spelled out, with runnable checks, in `SECURITY.md`;
 * the only outbound connection in the source is `wl_display_connect(NULL)` — no sockets, no network
   code, no root, no portal; frames come from the shm ring KWin fills;
 * KWin's authorisation is a plain `.desktop` file in `~/.local/share/applications` the user can read
@@ -806,6 +810,36 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   (~30 s) still exist, or background it with `nohup … > /tmp/x.log 2>&1 &` and read the log.
 * `PIL.ImageGrab` can leave a `spectacle` process holding your stdout pipe open (looks like
   a hang); `bench.py` reaps the ones it started.
+
+## COMMUNITY FILES — what is in `.github/` and why (deliberately incomplete)
+
+`SECURITY.md`, `ISSUE_TEMPLATE/{bug_report,feature_request}.yml`, `ISSUE_TEMPLATE/config.yml`,
+`PULL_REQUEST_TEMPLATE.md`, `dependabot.yml`. All of it written for *this* repo rather than from
+stock templates, because the useful content is project-specific: the bug form leads with
+`kwcapture doctor` + Plasma/KWin version + session type (the domain's three real failure layers),
+and the PR template states the two traps CI structurally cannot catch — **green CI ≠ capture
+works** (no DRM node on hosted runners) and **helper changed ⇒ the release wheel must be
+rebuilt** — plus the nunif constraint (import must stay cheap, no new hard dep) and the `private/`
+rule.
+* **Dependabot covers `github-actions` only, by design.** The release workflow is the reason:
+  a stale cibuildwheel pin broke the v0.1.0 *and* v0.2.0 release runs (dated manylinux images get
+  deleted from quay.io). No `pip` section — `numpy`/extras are deliberately unpinned, so bot PRs
+  against open ranges are pure noise for a solo maintainer. There is an explicit `ignore` keeping
+  cibuildwheel below 5 so a bot cannot "help" past a breaking major without a human reading
+  `release.yml`'s comments first.
+* **No `CODE_OF_CONDUCT.md`, on purpose** — zero contributors so far, and a CoC needs an
+  enforcement contact, which on a one-person project means the maintainer personally, forever.
+  Add it if a distro or curated list actually requires it, with a contact address that gets read.
+  Also absent: Discussions, wiki, FUNDING, and any coverage/lint badge (no such step exists, and
+  the functional suite needs real hardware — an honest limitation, already documented).
+* **Private vulnerability reporting is NOT enabled** — the REST `PATCH …/repos` call accepted the
+  key but did not report it, so it has to be switched on by hand: Settings → Code security and
+  privacy → *Privately report a security vulnerability*. `SECURITY.md` links the form either way
+  and gives an email fallback.
+* **Validate the forms before pushing**: `yaml.safe_load` is not enough — every body item needs
+  `type` ∈ {markdown,textarea,input,dropdown,checkboxes}, markdown items need `attributes.value`,
+  the rest `attributes.label`, dropdowns ≥2 options, and `validations.required` must never appear
+  on `checkboxes`.
 
 ## README badges — chosen deliberately (do **not** add a download badge)
 

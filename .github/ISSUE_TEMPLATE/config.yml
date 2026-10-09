@@ -1,0 +1,28 @@
+# Contact links shown instead of (and alongside) the issue forms.
+#
+# Blank issues stay enabled on purpose: a form that demands five fields before anyone can
+# say "it segfaults on startup" loses the reports that turn out to be the important ones.
+
+blank_issues_enabled: true
+
+contact_links:
+  - name: README — scope, install, API
+    url: https://github.com/tjandrasg/kwcapture#readme
+    about: >-
+      Read the scope box first. kwcapture targets org.kde.KWin.ScreenShot2 only — KDE Plasma's
+      KWin on Wayland. GNOME, Sway, Hyprland and other compositors are out of scope, and the
+      project fails with a clear error on them rather than half-working.
+
+  - name: Troubleshooting (start here for "it does not work")
+    url: https://github.com/tjandrasg/kwcapture#troubleshooting
+    about: Most reports are a non-KWin compositor, an X11 session, or the KWin authorisation entry.
+
+  - name: How this is tested — what CI does and cannot prove
+    url: https://github.com/tjandrasg/kwcapture#how-this-is-tested
+    about: >-
+      Hosted runners have no DRM render node, so KWin there never composites with OpenGL and the
+      frame path is not covered by CI. Green CI does not mean capture works.
+
+  - name: Report a security vulnerability (privately, please)
+    url: https://github.com/tjandrasg/kwcapture/security/advisories/new
+    about: Do not open a public issue for anything exploitable. SECURITY.md has the details.

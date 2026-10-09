@@ -1,0 +1,54 @@
+# Dependabot for this repository.
+#
+# Deliberately scoped to GitHub Actions and *nothing else*:
+#
+#  * The release workflow's history is exactly the failure Dependabot catches here. The
+#    v0.1.0 and v0.2.0 release runs both failed because cibuildwheel was pinned to an old
+#    version whose *dated* manylinux image tag had since been removed from quay.io
+#    ("No such image: quay.io/pypa/manylinux_2_28_x86_64:<old-date>"), and the same pair of
+#    runs was broken by a `{dest}` placeholder that cibuildwheel 4 no longer substitutes.
+#    Action and builder versions rot here; they do not rot quietly either — they rot at
+#    release time, which is the worst moment to find out.
+#
+#  * No `pip` section, on purpose. The package has one runtime dependency (`numpy`) and it
+#    is deliberately unpinned, the optional extras (opencv-python-headless, pillow) are
+#    too, and there is no lockfile to update. A pip ecosystem entry here would open
+#    speculative PRs against ranges that are intentionally open — noise that costs a
+#    solo maintainer review time and buys nothing.
+#
+#  * Nothing to do about vendored code: the native helper links only libc, libsystemd
+#    (for sd-bus) and libwayland-client, all dynamically, all from the user's own system —
+#    see SECURITY.md.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "03:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "ci"
+      - "dependencies"
+    # One grouped PR per week rather than one per action; each individual bump of
+    # checkout / setup-python / upload-artifact is not worth a separate review cycle.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    ignore:
+      # Not a dependency, just documentation of a decision: do NOT let a bot "fix" the
+      # cibuildwheel version without reading the comment in release.yml first. A newer
+      # cibuildwheel is fine; an *older pin* is what broke two releases. Anything at or
+      # above the current 4.x line is acceptable, so this line only needs attention when
+      # cibuildwheel 5 ships (breaking changes expected — re-verify the repair command
+      # and the {dest_dir} placeholder, then update the pin and this ignore rule).
+      - dependency-name: "pypa/cibuildwheel"
+        versions:
+          - "< 5"
