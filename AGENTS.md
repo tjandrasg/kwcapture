@@ -256,7 +256,13 @@ that request). Assume a force-push does not un-publish anything.
 * Never `git add -f`/`git add private/...` — `-f` overrides the ignore rules that protect
   this folder.
 
-## SESSION STATUS — 2026-10-08 ~23:50 — **DONE: non-normal windows are visible and capturable (the Winamp case)**
+## SESSION STATUS — 2026-10-08 ~23:50 — **DONE, PUSHED (`eb0bcae` on `main`) and CI GREEN: non-normal windows are visible and capturable (the Winamp case)**
+
+> **Pushed 2026-10-09**: `e714acb..eb0bcae main -> main`; run 37866299569 — `build` and
+> `headless KWin capture (Plasma 6, no GPU)` both **success**. **Not released**: the CHANGELOG entry
+> sits under *Unreleased*, so `pyproject.toml` and `__version__` are still 0.5.0 — publish it with
+> the *Release checklist* further down when you decide to (the wheel has to be rebuilt, since the
+> helper changed).
 
 > **Acceptance, on the user's own window:** `list_windows()` reports the 1041x662 Winamp dialog
 > (`krunner_listed=False`, `window_type_name="dialog"`), `Capture(window=…)` streams it at ~7 ms a
