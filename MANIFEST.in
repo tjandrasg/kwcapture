@@ -2,6 +2,13 @@ include README.md
 include LICENSE
 include CHANGELOG.md
 include AGENTS.md
+# The trust documents go in the sdist too: the people who run `pip install --no-binary`
+# are exactly the people who read them, and an auditor inspecting the tarball should see
+# the same SECURITY.md the repo advertises. Docs are included by explicit name here, so a
+# new root .md is invisible to packaging until it is added to this list.
+include SECURITY.md
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md
 include pyproject.toml
 include setup.py
 include kwcapture/native/*.c

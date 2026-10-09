@@ -503,6 +503,9 @@ probe/                   experiments: nested-KWin headless test, Wayland global 
                          non-normal-window enumeration (probe/non_normal_windows.py), etc.
 .github/workflows/       ci.yml (build + headless KWin), release.yml (wheels + release + PyPI)
 AGENTS.md                investigation log — how the KWin API and its auth really work
+SECURITY.md              what the helper does in security terms, and how to check it yourself
+CONTRIBUTING.md          setup, test modes, contributing without a KDE desktop, house rules
+CODE_OF_CONDUCT.md       Contributor Covenant 2.1 + how one maintainer applies it
 ```
 
 Development:

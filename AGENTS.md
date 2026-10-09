@@ -71,6 +71,23 @@ docs; this file is the investigation log + gotchas.
 > `AmbiguousWindow`. Nothing in this tree shows that breaking anything, but it is the first thing to
 > ask about if a downstream report arrives.
 
+> **Post-release housekeeping, same day (`main` = `d57c837`, CI `build` green).** No library code
+> changed — this was repo/docs work: the README badge row (PyPI version + status + license + CI, and
+> two static badges *KDE Plasma: 6.x tested* / *Wayland: ScreenShot2*; **no download badge**, measured
+> reason below), the community files (`SECURITY.md`, the two issue forms + `config.yml`,
+> `PULL_REQUEST_TEMPLATE.md`, `dependabot.yml`), Dependabot's first PR merged (`2ec83eb`) **with the
+> release workflow rehearsed against it** (run 37881396351 — recipe in the community-files section),
+> then `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`. GitHub's community checklist: 7/7.
+> **Packaging gotcha found while doing it:** `MANIFEST.in` lists docs **by explicit name**, so
+> `SECURITY.md`, `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` were absent from the sdist until added
+> there — a new root `.md` never ships automatically. Fixed and verified by rebuilding the sdist;
+> the published 0.6.0 files are immutable, so this lands at the next release. Worth doing because
+> the people who run `pip install --no-binary` are exactly the ones who read `SECURITY.md`.
+> **Size note:** this file is ~77 KB, up from 66 KB at the start of the session, and there are two
+> FRESH STATUS sections — the rule says distil rather than add a third. The obvious candidate is the
+> 2026-10-08 headless-CI log below: its conclusions now live in README → *How this is tested*, in
+> the CI job's own comments, and in `probe/ci_headless_kwin.sh`, so nothing would lose its only copy.
+
 ## FRESH STATUS — 2026-10-08 ~19:20 — **headless CI is GREEN, and honest about what it covers: KWin only owns `ScreenShot2` while it is OpenGL-compositing, and that needs a DRM device GitHub's runners do not have**
 
 > Outcome: `build` + `headless KWin capture (Plasma 6, no GPU)` both pass on PR #1 (run 39). The
