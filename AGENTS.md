@@ -26,8 +26,9 @@
 > `probe/stale_window.py`) or their content goes into this file. See *Forensics* below for
 > what can and cannot be recovered after the fact.
 
-Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`; releases `v0.1.0`,
-`v0.2.0` each with a prebuilt `linux_x86_64` wheel attached) and on PyPI as
+Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`; releases `v0.1.0` … **`v0.6.0`**,
+every one from `v0.3.0` on carrying a CI-built `manylinux` wheel plus a prebuilt
+`linux_x86_64` wheel attached) and on PyPI as
 **`kwcapture`** (https://pypi.org/project/kwcapture/) — publish new versions with
 `.venv/bin/python -m twine upload -r pypi dist/<sdist and manylinux wheels>` (credentials
 in `~/.pypirc`; never commit or print them). Author: Tjandra Satria Gunawan
@@ -38,8 +39,37 @@ configured for github.com (it is in `~/.git-credentials`) — never commit or pr
 
 Working dir: `~/way_scr_cap`. **Read this first if you are a fresh session.**
 Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayland capture,
-Python API + CLI + 159 functional + 37 ring-reader checks. See `README.md` for user-facing
+Python API + CLI + 165 functional + 37 ring-reader checks. See `README.md` for user-facing
 docs; this file is the investigation log + gotchas.
+
+## FRESH STATUS — 2026-10-09 ~08:20 — **v0.6.0 RELEASED to GitHub + PyPI: the hidden-window enumeration is out**
+
+> **What shipped**: tag `v0.6.0` → `cdb0458` on `main` = the non-normal-window work of the session
+> below (dialogs/docks/desktop via the KWin scripting route) plus the headless-CI work already on
+> `main`. `ci.yml` `build` and `release.yml` both **success** (runs 37868257712 / 37868258136).
+> GitHub release 407395393 carries the CI sdist, the CI `manylinux_2_28` wheel and the locally built
+> `linux_x86_64` wheel — same three assets as v0.3.0–v0.5.0. PyPI 0.6.0 carries **two** files: the
+> sdist and the manylinux wheel, taken **off the GitHub release** first, so PyPI's sha256
+> (`b2683129743983c3…` whl / `610205d2bc3ef1c0…` tar.gz) are byte-identical to the release assets.
+> The `linux_x86_64` wheel is a GitHub asset only — PyPI rejects that tag, as the checklist says.
+
+> **Verified, in the order done**: 165/165 functional + 37/37 ring-reader under `-X dev` on this
+> desk (one output at 100 %, so the fractional-scaling checks sit in their degenerate branches —
+> see FLAKE-1 for why 165 here vs 172 on the two-output desk); the locally built wheel installed in
+> a throwaway venv **from `/tmp`** really captures (2560x1440, 99.7 % non-black) and lists
+> desktop + dock + the Winamp dialog; the sdist carries no `private/`, no `*.jsonl`, no credential
+> — **a loose `ghp_`/`pypi-AgEIcHlwaS` grep hits this very file's checklist text**, so re-grep for a
+> long token-shaped run (`ghp_[A-Za-z0-9]{20,}`) before believing a hit; `pip install --no-cache-dir
+> kwcapture` in a clean venv outside the checkout gives 0.6.0 and `kwcapture doctor` answers *"full
+> window enumeration works via KWin scripting: 3 window(s) outside KWin's own app-window list
+> (desktop, dialog, dock)"*. Release notes were PATCHed into the body (CI leaves only the
+> `**Full Changelog**` stub — a body with just that stub means the run is unfinished).
+
+> **Worth watching, unverified**: the wider default list is a behaviour change for downstream —
+> `iw3-desktop` (nagadomi/nunif, see DOWNSTREAM above) calls `list_windows()` without `all_types=`,
+> so it now sees panels and the desktop as well, and a name that used to resolve uniquely can raise
+> `AmbiguousWindow`. Nothing in this tree shows that breaking anything, but it is the first thing to
+> ask about if a downstream report arrives.
 
 ## FRESH STATUS — 2026-10-08 ~19:20 — **headless CI is GREEN, and honest about what it covers: KWin only owns `ScreenShot2` while it is OpenGL-compositing, and that needs a DRM device GitHub's runners do not have**
 
@@ -259,10 +289,9 @@ that request). Assume a force-push does not un-publish anything.
 ## SESSION STATUS — 2026-10-08 ~23:50 — **DONE, PUSHED (`eb0bcae` on `main`) and CI GREEN: non-normal windows are visible and capturable (the Winamp case)**
 
 > **Pushed 2026-10-09**: `e714acb..eb0bcae main -> main`; run 37866299569 — `build` and
-> `headless KWin capture (Plasma 6, no GPU)` both **success**. **Not released**: the CHANGELOG entry
-> sits under *Unreleased*, so `pyproject.toml` and `__version__` are still 0.5.0 — publish it with
-> the *Release checklist* further down when you decide to (the wheel has to be rebuilt, since the
-> helper changed).
+> `headless KWin capture (Plasma 6, no GPU)` both **success**. **RELEASED as v0.6.0 on 2026-10-09**
+> — see the FRESH STATUS at the top. The helper did change, so the wheel was rebuilt rather than
+> reused, and both the GitHub assets and the PyPI files were re-verified after publishing.
 
 > **Acceptance, on the user's own window:** `list_windows()` reports the 1041x662 Winamp dialog
 > (`krunner_listed=False`, `window_type_name="dialog"`), `Capture(window=…)` streams it at ~7 ms a
@@ -832,7 +861,7 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 * ~~Mark which listed window is *active*~~ **done in v0.3.0** — see finding #3
   (`Window.active`, `active_window_id()`, `--active-window-id`).
 * `getWindowInfo` gives no pid — a `Window.pid` would need `/proc` matching by app id.
-* ~~Expose non-normal windows — panels, desktop, overlays~~ **done (unreleased).** The
+* ~~Expose non-normal windows — panels, desktop, overlays~~ **done, released in v0.6.0.** The
   guess in the old wording was right: a throwaway KWin script hands out the handles the
   krunner interface filters out (see the SESSION STATUS section and KEY FACTS → *Window
   enumeration*). `list_windows()` now returns them by default with `krunner_listed=False`
