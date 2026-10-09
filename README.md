@@ -1,6 +1,11 @@
 # kwcapture — fast screen capture on Wayland (KDE Plasma)
 
+[![PyPI version](https://img.shields.io/pypi/v/kwcapture)](https://pypi.org/project/kwcapture/)
+[![PyPI status](https://img.shields.io/pypi/status/kwcapture)](https://pypi.org/project/kwcapture/)
+[![License](https://img.shields.io/pypi/l/kwcapture)](LICENSE)
 [![CI: build](https://github.com/tjandrasg/kwcapture/actions/workflows/ci.yml/badge.svg)](https://github.com/tjandrasg/kwcapture/actions/workflows/ci.yml)
+[![KDE Plasma 6.x tested](https://img.shields.io/badge/KDE_Plasma-6.x_tested-1477EB?logo=kde&logoColor=white)](#how-this-is-tested)
+[![Wayland ScreenShot2](https://img.shields.io/badge/Wayland-ScreenShot2-000000?logo=wayland&logoColor=white)](#why-a-native-helper-the-interesting-bit)
 
 **`PIL.ImageGrab` runs at ~2 fps on Wayland** (it shells out to `spectacle`) and **`mss`
 captures XWayland**, which is black for native Wayland windows. `kwcapture` talks to the

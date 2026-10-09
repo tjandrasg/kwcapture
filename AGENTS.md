@@ -807,6 +807,24 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 * `PIL.ImageGrab` can leave a `spectacle` process holding your stdout pipe open (looks like
   a hang); `bench.py` reaps the ones it started.
 
+## README badges — chosen deliberately (do **not** add a download badge)
+
+Top row: PyPI version, PyPI status (`beta`), license (`MIT`), CI `build`, and two **static**
+shields.io badges — `KDE Plasma: 6.x tested` and `Wayland: ScreenShot2`. Static ones carry no
+upstream data that can go stale, and the Plasma badge says *tested*, not *required*: Plasma 5
+has never been tried here, so a version **requirement** would be a claim this tree cannot back
+up. Deliberately absent: **downloads** (`pypi/dm`), stars/forks (vanity), coverage and lint
+(there is no coverage or lint step — a badge for a thing that does not run is worse than no
+badge), and a per-job CI badge for `headless KWin capture` (it passes *tolerantly* on runners
+with no DRM node, so a green badge there overstates what was proven — the **How this is tested**
+section carries that nuance instead).
+**Measured, not assumed** (2026-10-09, three identical calls to `pypistats`): kwcapture
+reported `last_day 8 / last_week 398 / last_month 0` — the monthly rollup is broken upstream, so
+the standard download badge renders **red "0/month"** on a package that is being installed and
+ships as nunif's optional KDE backend. Check before believing any badge:
+`curl -s https://img.shields.io/pypi/dm/kwcapture.json` (and the same `.json` trick works for
+every candidate badge — it returns the message shields would render).
+
 ## Release checklist (do this in order; v0.2.0 was published this way)
 
 1. Bump the version in **both** `pyproject.toml` and `kwcapture/__init__.py`, update
