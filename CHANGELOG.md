@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-09
+
+The windows a taskbar would not show are now findable, not just capturable: `list_windows()`
+asks KWin's scripting interface in addition to its application-window list, so dialogs, tool
+windows, the panel and the desktop itself come back with a handle you can capture — and a
+handle you got somewhere else is always accepted. Nothing is installed, nothing stays loaded
+in KWin, and no window is raised or focused along the way.
 
 - **`list_windows()` now returns every window KWin can capture, not only the ones KWin
   calls *normal*.** KWin's krunner interface (`/WindowsRunner`) — the only unrestricted

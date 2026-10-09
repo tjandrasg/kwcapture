@@ -52,7 +52,7 @@ from . import _desktop, _native
 from ._desktop import install_desktop_file
 from ._native import NativeBuildError, ensure_binary, find_binary
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "Capture",

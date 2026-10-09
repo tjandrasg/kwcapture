@@ -86,7 +86,7 @@ pip install "kwcapture[fast]"             # + OpenCV: ~8x faster resize/encode
 pip install "kwcapture @ git+https://github.com/tjandrasg/kwcapture.git"
 
 # or the prebuilt wheel straight from the release page:
-pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.5.0/kwcapture-0.5.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+pip install https://github.com/tjandrasg/kwcapture/releases/download/v0.6.0/kwcapture-0.6.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
 ```
 
 Needs **KDE Plasma with KWin on Wayland**. The PyPI wheel ships the small native helper
