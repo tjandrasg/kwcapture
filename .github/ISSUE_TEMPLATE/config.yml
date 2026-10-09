@@ -23,6 +23,13 @@ contact_links:
       Hosted runners have no DRM render node, so KWin there never composites with OpenGL and the
       frame path is not covered by CI. Green CI does not mean capture works.
 
+  - name: Contributing guide (setup, tests, what you can do without KDE)
+    url: https://github.com/tjandrasg/kwcapture/blob/main/CONTRIBUTING.md
+    about: >-
+      Ten-minute setup, the three test-suite modes, the nested-KWin harness for machines with no
+      KDE desktop, the file map, and the house rules (import must stay cheap, a fix without a test
+      is a guess, non-source files go in private/).
+
   - name: Report a security vulnerability (privately, please)
     url: https://github.com/tjandrasg/kwcapture/security/advisories/new
     about: Do not open a public issue for anything exploitable. SECURITY.md has the details.

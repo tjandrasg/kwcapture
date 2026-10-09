@@ -13,6 +13,9 @@ either of them, and getting them wrong is the usual way a PR goes sideways:
      ever shows up after a release.
 -->
 
+First time here? [CONTRIBUTING.md](../CONTRIBUTING.md) covers setup, what you can do without a KDE
+machine, and the house rules. Everything below is the part CI cannot check for you.
+
 ## What this PR changes
 
 <!-- One paragraph. User-visible behaviour, API, CLI, or the helper<->client protocol? -->
