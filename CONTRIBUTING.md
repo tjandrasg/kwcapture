@@ -110,6 +110,10 @@ These are the ones that have actually caused rework, not a style guide:
 * **`CHANGELOG.md` gets an entry under *Unreleased***. Version numbers are bumped at release time,
   not per PR.
 * **Python ≥ 3.9** (`requires-python`), so no `match` statements or 3.10+-only syntax.
+* **Participation in this project's spaces is covered by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).**
+  Contributor Covenant 2.1, with a note at the top saying how it is actually applied here: the
+  maintainer is both the contact and the decision-maker, reports go to the address in that file, and
+  enforcement reaches this project's spaces only.
 * Please don't reformat or rename unrelated code — it buries the change that is the point.
 
 Contributing implies licensing your contribution under the project's MIT license; say so if that

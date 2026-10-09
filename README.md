@@ -597,8 +597,10 @@ Built something on top of kwcapture? Open an issue or a PR and it goes in this l
 [CONTRIBUTING.md](CONTRIBUTING.md) has the ten-minute setup, the three test-suite modes, and
 **what you can contribute without a KDE desktop** — the 37 shared-memory protocol checks need no
 compositor, and there is a nested-KWin harness for everything else. It also lists the house rules
-that have actually caused rework. Security issues go privately, per
-[SECURITY.md](SECURITY.md).
+that have actually caused rework. Participation in the project's spaces is covered by
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1, preceded by a short note on
+how one maintainer actually handles it, including where a report goes if it is *about* the
+maintainer. Security issues go privately, per [SECURITY.md](SECURITY.md).
 
 ## License
 

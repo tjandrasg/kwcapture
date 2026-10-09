@@ -844,11 +844,31 @@ rule.
 > `publish` job — the job this release process does not use (PyPI upload is local `twine` against
 > the release assets, checklist step 5). Dormant, not proven: if trusted publishing is ever turned
 > on, verify that step against TestPyPI first, never mid-release.
-* **No `CODE_OF_CONDUCT.md`, on purpose** — zero contributors so far, and a CoC needs an
-  enforcement contact, which on a one-person project means the maintainer personally, forever.
-  Add it if a distro or curated list actually requires it, with a contact address that gets read.
-  Also absent: Discussions, wiki, FUNDING, and any coverage/lint badge (no such step exists, and
-  the functional suite needs real hardware — an honest limitation, already documented).
+* **`CODE_OF_CONDUCT.md` was added on 2026-10-09, and the reason is not "the GitHub checklist".**
+  What moved it is the same argument that made `SECURITY.md` worth writing: distributors read this
+  checklist as evidence about how a project is run — nunif's maintainer said outright that the CI
+  build counted as responsibility evidence and that shipping came down to trust (see DOWNSTREAM
+  above). The objection that *survived* is that a code of conduct needs a real enforcement contact,
+  because an unfilled `user@example.com` advertises a promise nobody keeps; that is satisfied by the
+  maintainer's main email, published with his explicit consent, and it is the same address
+  `SECURITY.md` carries.
+  The file is **Contributor Covenant 2.1 fetched from contributor-covenant.org** and assembled by a
+  script that *asserted* the body is byte-identical to the published text apart from the single
+  contact substitution — so **do not hand-edit the covenant section**; regenerate it if upstream ever
+  revises. It is preceded by a project-specific note that says the quiet parts out loud rather than
+  hiding them: one maintainer is both contact and decision-maker, there is no committee and the file
+  does not pretend there is one, and **a report about the maintainer himself goes to GitHub Support**,
+  since he cannot adjudicate a complaint against himself. Enforcement is scoped to this project's
+  spaces; nothing is retroactive. Consistency note: its "acknowledge within 5 working days" matches
+  `SECURITY.md` — change one, change the other.
+* **Still deliberately absent: Discussions, wiki, FUNDING, coverage/lint badges, and
+  `ACCESSIBILITY.md`.** The first three are premature with no contributor traffic; a coverage or lint
+  badge would point at a step that does not exist (the functional suite needs real hardware — a
+  documented limitation, not a gap to paper over); and `ACCESSIBILITY.md`, which GitHub lists as an
+  *optional* extra, would be theatre: no UI, no docs site, no interactive surface beyond Python and
+  stdout, so the only honest content is "captured screen content inherits whatever accessibility the
+  source application has" — a sentence, not a policy. Leaving that box unchecked is the accurate
+  state.
 * **Private vulnerability reporting is ENABLED** (2026-10-09, by hand: Settings → Code security and
   privacy → *Privately report a security vulnerability*), confirmed by a logged-out account seeing
   the "Report a vulnerability" button. Do not try to switch it on over the API — the
