@@ -11,8 +11,8 @@
 captures XWayland**, which is black for native Wayland windows. `kwcapture` talks to the
 KWin compositor directly: **~40 fps at 2560×1440**, real pixels, ~26 ms from "give me a
 frame" to a JPEG ready for a vision model. Whole screen, a region, **one window by
-name or id**, or **one monitor by name or id** — `list_windows()` and `list_monitors()`
-give you both.
+name or id**, **one monitor by name or id**, or **every monitor at once** —
+`list_windows()` and `list_monitors()` tell you what there is to name.
 
 > **Scope: KDE Plasma only.** The `kw` in the name is the design. kwcapture speaks
 > `org.kde.KWin.ScreenShot2` and nothing else; compositors that only offer
@@ -39,6 +39,41 @@ blob = cap.shot_jpeg(1280, quality=85)  # bytes for a vision API
 cap.stats()                             # {'grab_ms': 20.1, 'total_ms': 27.8, ...}
 cap.close()
 ```
+
+**One monitor, or all of them at once** — `list_monitors()` is the window list for outputs, and
+`monitor=` takes a connector name, the compositor's own id, a `list_monitors()` index, or the
+`Monitor` itself:
+
+```python
+for m in K.list_monitors():               # index, name, geometry, position, refresh_hz, scale
+    print(m.index, m.name, m.geometry, m.position)
+# 0 DP-1     (2560, 1440) (0, 0)
+# 1 HDMI-A-1 (3840, 2160) (2560, 0)
+
+dp  = K.Capture(monitor="DP-1")           # by connector name (substrings ok) …
+tv  = K.Capture(monitor="HDMI-A-1")       # … or by id, index, or the Monitor object
+dp.grab()                                 # that output only, at its device resolution
+
+desk = K.Capture(workspace=True)          # the whole virtual desktop in ONE frame: every
+desk.geometry()                           # output at its real position, black where no
+                                          # monitor reaches — 6400x2160 for the pair above
+                                          # (this is KWin's CaptureWorkspace)
+```
+
+**Fractional scaling is measured, not assumed** — a 125 % panel still advertises the *integer* `1`
+over `wl_output`, so ask KWin instead (one small grab per output, then cached):
+
+```python
+m = K.list_monitors(measure_scale=True)[0]
+m.effective_scale          # 1.25 on a 125 % display (m.scale is the useless integer 1)
+m.logical_geometry         # … and m.geometry is device pixels; they differ when scale != 1
+K.Capture(monitor=m, area=(0, 0, 400, 200))                       # logical rectangle
+K.Capture(monitor=m, area=(0, 0, 400, 200), area_in="physical")   # device pixels
+```
+
+There are **three** different scales and they are not interchangeable — conflating them was a real
+bug, so the [Fractional scaling](#fractional-scaling-75-125-150-) section is the one part of this
+README worth reading twice.
 
 **Per-window capture** — the window handle is KWin's own id, so no geometry juggling and
 no cropping by whatever is on top of it:
@@ -176,7 +211,7 @@ each tagged with its window type — capturable, just not something a taskbar wo
 |---|---|
 | `screen="DP-1"` | which output (default: active screen) |
 | `area=(x, y, w, h)` | capture a region instead of a whole output |
-| `workspace=True` | capture the entire virtual desktop |
+| `workspace=True` | capture the entire virtual desktop in one frame — see [Every monitor at once](#monitors-list-them-capture-one-by-name-or-id) |
 | `window="Kate"` | capture **one window**: a handle from `list_windows()`, or its caption / app id |
 | `active_window=True` | capture the window that has focus |
 | `cursor=True` | include the hardware cursor |
@@ -346,6 +381,48 @@ K.Capture(area=(0, 0, 800, 600))                       # unchanged: global scene
 
 Only **enabled** outputs are listed — a connected-but-disabled monitor has no image to
 capture (`kscreen-doctor -o` shows those and switches them on).
+
+### Every monitor at once — `Capture(workspace=True)`
+
+`monitor=` gives you one output. **`workspace=True` asks KWin for its `CaptureWorkspace`: the whole
+virtual desktop in a single frame**, every output at its real scene position.
+
+```python
+desk  = K.Capture(workspace=True)
+desk.geometry()      # (6400, 2160) — DP-1 2560x1440 @ (0,0) + HDMI-A-1 3840x2160 @ (2560,0)
+frame = desk.grab()  # (2160, 6400, 4)
+```
+
+CLI: `kwcapture grab --workspace -o desk.png`
+
+The frame is the **bounding box of the scene**, so:
+
+* **where no monitor reaches it is pure black** — beside a 2160-tall panel, the 720 rows under a
+  1440-tall one read exactly 0. Nothing was dropped; there is no screen there.
+* each output lands at the `position` `list_monitors()` reported, so slicing one back out is plain
+  numpy:
+
+  ```python
+  m = K.find_monitor("DP-1")
+  x, y = m.position; w, h = m.geometry
+  left = frame[y:y + h, x:x + w]          # exactly DP-1, taken from the one workspace frame
+  ```
+
+* it is **one compositor request**, so every output comes from the same composition of the scene —
+  N separate per-monitor requests can straddle a repaint and show the monitors disagreeing with
+  each other.
+
+The cost is proportional to that area. Measured on this 6400×2160 desk (i9-13900K, Plasma 6.6):
+**76.5 ms** per workspace grab, against 26.0 ms for the 2560×1440 output and 50.5 ms for the 4K one —
+and the ring it needs is **442 MB** of tmpfs (4 slots × ~110 MB), which is shared memory, i.e. real
+RAM. `Capture(workspace=True, slots=2)` halves that to 221 MB. Good for an occasional overview or a
+layout sanity-check; not what you want driving a 40 fps loop.
+
+**Deliberately not implemented:** a helper that returns one array *per output*, keyed by name — you
+get either one output or one combined frame, and slicing is the three lines above. Whether the frame
+also spans KWin's **virtual desktops** rather than just the physical outputs is untested here,
+because this desk runs a single one — print `geometry()` the first time you use it on a new machine
+instead of assuming it is the union of the monitors.
 
 ## Fractional scaling (75 %, 125 %, 150 %, ...)
 

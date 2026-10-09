@@ -261,13 +261,15 @@ that request). Assume a force-push does not un-publish anything.
   that differs between them, then choose the detailed-and-stable patch. Do not just loosen the
   20.0 threshold — a threshold that has to cover a moving picture protects nothing.
 * **Also note**: the suite's check **count depends on how many outputs the desk has** — 172 on the
-  two-output desk (DP-1 75 % + HDMI-A-1 125 %) that the v0.5.0 notes describe — **165 now** that the
-  desk has one output at 100 %, the +13 non-normal-window checks do not multiply with outputs, so
-  172 there is arithmetic, not a measurement. `kwcapture monitors --measure-scale` before quoting a
-  number; the
-  per-output checks (`area_in="physical"` especially) are only meaningful with both a display scale
-  and a scene scale that differ, and today's desk has neither (x1/x1 → the degenerate
-  "one mapping only" branch).
+  two-output desk (DP-1 75 % + HDMI-A-1 125 %) that the v0.5.0 notes describe; **165 measured on
+  2026-10-09 ~08:20**, when the desk had a single output at 100 %. The +13 non-normal-window checks do
+  not multiply with outputs, so 172 there is arithmetic, not a measurement.
+  **The desk changed again later the same day**: HDMI-A-1 (3840×2160) is back at 100 % beside DP-1
+  (2560×1440 at 100 %), so the number in README/CHANGELOG (165) is the *single-output* figure and the
+  current two-output count has **not** been measured. Re-run and count the `[PASS]` lines before
+  quoting anything, and `kwcapture monitors --measure-scale` first: the per-output checks
+  (`area_in="physical"` especially) only mean something when a display scale and the scene scale
+  differ, and this desk has neither right now (x1/x1 → the degenerate "one mapping only" branch).
 
 ### BUG-1 (surfaced in v0.4.0; KWin's behaviour itself is unfixable): a **minimised window captures a STALE frame**
 
@@ -474,6 +476,16 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
 * **`kscreen-doctor` and KWin can disagree**: kscreen reported an output `disabled` while KWin
   advertised it on the registry *and* happily served 3840×2160 from it. `list_monitors()` is the
   truth about what is capturable — never kscreen's enabled flag.
+* **`Capture(workspace=True)` is ScreenShot2 `CaptureWorkspace` = the bounding box of the scene**, not
+  "the primary screen". Measured on the 2026-10-09 two-output desk (DP-1 2560×1440 @ 0,0 + HDMI-A-1
+  3840×2160 @ 2560,0): geometry **6400×2160**; the band under the shorter output reads **exactly 0**
+  (pure black, not garbage); and each output slices back out with the `position`/`geometry` that
+  `list_monitors()` reports — `frame[y:y+h, x:x+w]` is shape-identical to a per-monitor capture,
+  verified for both. Median cost on that desk: **76.5 ms** workspace vs 26.0 ms (1440p) and 50.5 ms
+  (4K) for one output, and the ring it allocates is **442 MB** of tmpfs at the default 4 slots
+  (221 MB at `slots=2`) — a workspace `Capture` is a RAM decision, not a free one. **Untested: whether
+  it also spans KWin's virtual desktops**, since this desk runs a single one; "workspace" is verified
+  here only as "union of the enabled outputs".
 * `PIL.ImageGrab.grab()` returns the **whole X11 root** (both outputs, 6400×2160), not the primary
   output. A colour reference must compare against a `Capture(workspace=True)` frame: cropping a
   per-output frame onto it made the MAD nearly identical for correct and swapped channels, i.e. a
