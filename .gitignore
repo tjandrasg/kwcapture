@@ -32,3 +32,9 @@ probe/globals
 private/*
 !private/.gitignore
 chat_his*.jsonl
+
+# Chat transcripts dropped in logo/ (multi-MB, contain screenshots of this
+# desktop). AGENTS.md: never commit them; the root chat_his*.jsonl rule below
+# only matches that one name, and a transcript lands here every session under a
+# new one (logo_talk.jsonl, logo_chat.jsonl, prev_logo.jsonl...).
+logo/*.jsonl

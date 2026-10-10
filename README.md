@@ -1,3 +1,13 @@
+<p align="center">
+  <!-- the official kwcapture mark: the KW monogram whose junction is the C, a mouse pointer
+       as the A, and PTURE in type. Absolute URL on purpose: PyPI renders this same README and
+       does not resolve repo-relative image paths. Assets, formats and generators: logo/ -->
+  <a href="https://github.com/tjandrasg/kwcapture">
+    <img src="https://raw.githubusercontent.com/tjandrasg/kwcapture/main/logo/icon/kwcapture-mark-256.png"
+         width="240" alt="kwcapture — official logo">
+  </a>
+</p>
+
 # kwcapture — fast screen capture on Wayland (KDE Plasma)
 
 [![PyPI version](https://img.shields.io/pypi/v/kwcapture)](https://pypi.org/project/kwcapture/)
@@ -579,6 +589,9 @@ bench.py                 comparison against mss and PIL.ImageGrab
 probe/                   experiments: nested-KWin headless test, Wayland global dumper,
                          non-normal-window enumeration (probe/non_normal_windows.py), etc.
 .github/workflows/       ci.yml (build + headless KWin), release.yml (wheels + release + PyPI)
+logo/                    the identity: 2 sketches -> 3 SVGs -> the shipped icon/ set, with
+                         gen_logo.py / validate_logo.py / render_agreement.py and its own
+                         AGENTS.md + README.md + LICENSE.md (see logo/README.md before editing)
 AGENTS.md                investigation log — how the KWin API and its auth really work
 SECURITY.md              what the helper does in security terms, and how to check it yourself
 CONTRIBUTING.md          setup, test modes, contributing without a KDE desktop, house rules
@@ -687,4 +700,17 @@ maintainer. Security issues go privately, per [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT — see `LICENSE`. `AGENTS.md` documents the reverse engineering behind it.
+**The software** is MIT — see [`LICENSE`](LICENSE). `AGENTS.md` documents the reverse engineering
+behind it.
+
+**The logo** is licensed separately, in [`logo/LICENSE.md`](logo/LICENSE.md): the artwork
+(SVGs, sketches, every PNG/ICO in `logo/icon/`) is **CC BY 4.0** — copy and adapt it, even
+commercially, with attribution — while the generators in `logo/` are **MIT** so they stay
+compatible with this package. The Inter face used to draw the word is **OFL-1.1** and is not
+shipped here. CC BY does **not** grant trademark rights: the artwork is free, presenting a
+modified mark as if it were `kwcapture` is not.
+
+The mark at the top of this file is `logo/kwcapture-mark.svg`: a K and a W sharing a stroke, whose
+junction is the **C**, a mouse pointer standing in for the **A**, and `PTURE` in type —
+**CAPTURE**, spelled out of three parts. Every format on this page and on GitHub comes out of
+`bash logo/icon/build.sh`.

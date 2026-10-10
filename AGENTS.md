@@ -93,6 +93,46 @@ docs; this file is the investigation log + gotchas.
 > first, and the script asserted every moved line was present in it before a summary replaced it.**
 > If you add a third FRESH STATUS, distil one out the same way rather than growing the file again.
 
+## LOGO — `logo/` is committed, and `kwcapture-mark.svg` is the official mark (2026-10-11)
+
+> **The owner decided it, on 2026-10-11:** [`logo/kwcapture-mark.svg`](logo/kwcapture-mark.svg)
+> — the geometric KW monogram whose junction is the **C**, the mouse pointer as the **A**, and
+> `PTURE` in type — is the project's logo. `logo/` had been untracked since it was started;
+> it is now in git: **55 files** — two Inkscape sketches (inputs, never written to), three
+> generated SVGs, three tools (`gen_logo.py`, `validate_logo.py`, `render_agreement.py`), the
+> shipped `icon/` set, the documentation `preview/` set, and `AGENTS.md` / `README.md` /
+> `LICENSE.md`. **Read [`logo/AGENTS.md`](logo/AGENTS.md) before touching anything in there**: it
+> carries THE RULE (`WORD = "PTURE"`, never `CAPTURE`), the knob table, the expected numbers and
+> 34 gotchas — several paid for by sessions that ran out of tokens.
+
+> **Licence, and why two:** artwork (SVGs, sketches, every PNG) **CC BY 4.0**; the tooling in
+> `logo/*.py` **MIT**, matching the package's own [`LICENSE`](LICENSE); the Inter face
+> **OFL-1.1**, referenced not shipped. Trademarks are **not** granted by CC BY — the artwork is
+> free to copy, the name and mark as a *brand* are not. See [`logo/LICENSE.md`](logo/LICENSE.md).
+
+> **The README header is the mark now**, embedded as an absolute
+> `raw.githubusercontent.com/tjandrasg/kwcapture/main/logo/icon/kwcapture-mark-256.png` URL —
+> absolute on purpose, because PyPI renders this same README and does not resolve repo-relative
+> image paths. Consequence worth knowing: **the header 404s on any branch that has not been
+> pushed to `main`**, so verify it after a push with
+> `curl -o /dev/null -w '%{http_code}\n' <that url>` and expect 200.
+
+> **Two uploads remain manual, and no script can do them** (`logo/AGENTS.md` gotcha 34, probed
+> with an admin token rather than assumed): GitHub exposes no REST or GraphQL field for a
+> repository's picture — `POST /repos/…/social_preview` answers **404**, GraphQL's 262 mutations
+> include no `avatar|social|preview|image|upload`, and the web app redirects a PAT to `/login`.
+> Click: *Settings → Social preview → Edit image* with `logo/icon/github-social-preview.png`
+> (1280×640), and the org/profile avatar with `logo/icon/github-avatar-400.png` if the mark is to
+> live there too. A **repository has no avatar** — its picture *is* the social preview.
+
+> **`logo/*.jsonl` is gitignored, name-agnostically** (`.gitignore` line 40). A design-session
+> transcript lands in that directory under a *different* filename every session; the old root rule
+> `chat_his*.jsonl` matched exactly one of them, which is how the 2026-10-06 incident happened.
+> Verified again on 2026-10-11 with `git check-ignore -v` **and** with `git add -A --dry-run`,
+> which staged 55 files and no transcript. Transcripts also contain screenshots of this desktop:
+> they are personal data, they are licensed by nobody (`logo/LICENSE.md` §6), and they are never
+> to be read whole — `logo/AGENTS.md` §*Reading the transcript*.
+
 ## HEADLESS / NESTED KWin — what is settled (full day-log archived 2026-10-09)
 
 > Long form: the `FRESH STATUS — 2026-10-08 ~19:20` day-log in `AGENTS.old.md` (under
