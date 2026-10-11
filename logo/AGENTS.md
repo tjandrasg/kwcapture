@@ -8,7 +8,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **87 630 bytes**
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **89 018 bytes**
 > — measured with `wc -c logo/AGENTS.md`, not remembered. It was **86 077** before Round 10's
 > archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
 > (every substantive line of the old file is present in one of the two files — checked, not
@@ -22,11 +22,11 @@ log, the falsified claims, the war story behind every gotcha.
 > payment was moving Round 11's narrative (3 019 bytes, verbatim) to
 > [`AGENTS.old.md` Part H](AGENTS.old.md) — asserted present in the archive *before* the summary
 > replaced it, the same way Round 10's pass was done. **A round that adds narrative also moves one
-> out.** **Round 13** (the one-artwork round) opened at **76 584** and closes at **87 630**, and it
+> out.** **Round 13** (the one-artwork round) opened at **76 584** and closes at **89 018**, and it
 > did *not* pay for itself: it moved Round 12's narrative out (4 070 bytes, verbatim — the moved
 > block's sha256 starts `cddb1ce7cb55b311`, and its presence in
 > [`AGENTS.old.md` Part I](AGENTS.old.md) was asserted by string search *before* the pointer
-> replaced it) and still grew by 11 046 bytes, because a round about *why a build script was not
+> replaced it) and still grew by 12 434 bytes, because a round about *why a build script was not
 > allowed to pick the artwork* spends its budget on reasoning: a verified block, gotchas 38 and 39,
 > the Files/Still-open corrections and its own log entry. The debt is the next round's, and the two
 > fattest candidates are the `icon/` expected-numbers block and Round 10's verification prose —
@@ -760,15 +760,18 @@ hicolor/512x512/apps/kwcapture.png   27 201 B  afe3da1c7e2dbb01
 hicolor/scalable/apps/kwcapture.svg   3 797 B  9663cec799efbbe7   (== logo/kwcapture-mark.svg,
                            the logo itself, copied verbatim -- asserted by tests/test_icons.py)
 sync_package_icons.py --check          "checked 9 icon files (0 written now)", exit 0
-tests/test_icons.py                    98 checks, 0 skipped here (89 + the 9 one-artwork
-                                       assertions). On CI exactly one of them skips -
-                                       desktop-file-validate, absent on ubuntu-latest, and it
-                                       PRINTS that it skipped rather than passing quietly - so
-                                       the runner reports 97 + 1. Read the run log; do not trust
-                                       this line for a number it has not measured.
+tests/test_icons.py                     98 checks, 0 skipped here (89 + the 9 one-artwork
+                                       assertions). CI, measured off the log of the push that
+                                       changed the suite (34432a8, run 38122958295): **97 passed +
+                                       1 skipped** - `RESULT: all icon tests passed (1 skipped)`,
+                                       the skip being `[SKIP] desktop-file-validate  tool not
+                                       installed`, printed rather than passed quietly. The
+                                       89-check version measured 88 + 1 on the same runner.
 probe/sabotage_icons.sh                10 sabotages, 10 detected, tree restored
-built wheel + sdist                    10 icon files each (8 png + 1 svg + COPYING.md);
-                                       `logo/` in neither — verified with unzip -l / tar tzf
+built wheel + sdist                    10 icon files each (8 png + 1 svg + COPYING.md) and CI
+                                       says so too (`wheel: 10 icon files`, `sdist:
+                                       kwcapture-0.6.0.tar.gz 10 icon files`); `logo/` in neither,
+                                       verified locally with unzip -l / tar tzf as well
 ```
 
 `validate_logo.py` exits non-zero on: a collision (< 1.5 px), ink outside the artboard,
@@ -1016,6 +1019,18 @@ sweep through nine documents, and it produced the most transferable gotcha in th
   rather than being deleted with the mistake. Round 11's and Round 12's **verified blocks were
   annotated, not rewritten** — they are dated claims, and that this project believed the other story
   for two rounds is part of the record (the archive's rule: move, never correct in place).
+* **Checked after the push, because "the tests pass" on the machine that wrote them is half a
+  claim.** Run 38122958295 on `34432a8`: `build` and `headless KWin capture (Plasma 6, no GPU)`
+  both **success**, and read off the log rather than inferred from the green tick — the icon suite
+  printed **97 passed + 1 skipped** (`[SKIP] desktop-file-validate  tool not installed`, announced,
+  not silently passed), and the artefact step printed **`wheel: 10 icon files`** and
+  **`sdist: kwcapture-0.6.0.tar.gz 10 icon files`**. One method note, because it cost a detour: the
+  `/actions/runs/<id>/jobs` endpoint gives conclusions but no output, `…/actions/jobs/<id>/logs`
+  answers **401 to urllib** where `curl -sL` gets 200 — the log lives behind a redirected signed URL
+  that urllib's redirect handling does not carry the credential across — and the per-suite count is
+  `grep -c '[PASS]'` inside the *step's own slice* of the log: the whole log had 134 PASS lines,
+  because the ring-reader suite ran first, and reporting that would have been a number that happens
+  to be wrong.
 * **Not done, and now correctly framed as asking rather than deciding:** the two GitHub uploads are
   still web-UI clicks (gotcha 34); `kwcapture-mono.svg` still exists and still needs an answer about
   what it is *for* now that nothing ships it (*Still open*); and whether the owner wants a word in a

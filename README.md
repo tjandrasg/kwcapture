@@ -692,9 +692,10 @@ The functional suite (`tests/test_kwcapture.py`) needs a live Plasma session and
 Its per-output checks multiply, so the count follows the hardware: 172 on a 75 % + 125 % two-monitor
 desk, 165 on a single output at 100 %. The other two suites do not depend on hardware: 37 and 98
 checks. The icon suite's one machine-dependent check is `desktop-file-validate`, which reports
-**SKIP** when the tool is absent, so the runner reports one fewer pass than this desktop's
-**98 + 0**; on the first CI run of the 89-check version that measured **88 passed + 1 skipped**.
-A skip is printed, never
+**SKIP** when the tool is absent. Measured off the CI log of the push that grew the suite to 98
+checks: **97 passed + 1 skipped** on `ubuntu-latest` (`[SKIP] desktop-file-validate  tool not
+installed`), against **98 + 0** on the KDE desktop it was written on; the earlier 89-check version
+measured 88 + 1 there. A skip is printed, never
 silent, because "a check that stops running without saying so" is the failure mode this project has
 been bitten by most often.
 

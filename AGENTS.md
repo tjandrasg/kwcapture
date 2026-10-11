@@ -51,11 +51,17 @@ and only that, resized or re-rendered, never substituted for a monogram (an earl
 the same work shipped the monogram at small sizes; reverted, and now asserted against). Under
 *LOGO* below, user-facing in README → *Brand icons*, and in `CHANGELOG.md` → *Unreleased*. Nothing
 about capture changed; all three suites green here (165 + 37 + 98, 0 skips) plus
-`probe/sabotage_icons.sh` at **10/10 sabotages detected**. CI `build` was green on the previous
-push (icon suite **88 passed + 1 skipped** then — the skip is `desktop-file-validate`, absent on
-`ubuntu-latest`, and it says so rather than passing quietly; the artefact step asserts 10 icon
-files in the wheel and 10 in the sdist). **The CI line above is a stale number for a newer suite:
-after this change the runner should report 97 + 1. Read the run log, not this sentence.**
+`probe/sabotage_icons.sh` at **10/10 sabotages detected**. **CI, measured off the run log of the
+push that changed the suite** (`34432a8`, run 38122958295, 2026-10-11): both jobs green —
+`build` and `headless KWin capture (Plasma 6, no GPU)` — and in `build`'s log the icon suite prints
+**97 passed + 1 skipped**, `RESULT: all icon tests passed (1 skipped)`, the skip being
+`[SKIP] desktop-file-validate  tool not installed` (announced, not silently passed), then
+**`wheel: 10 icon files`** and **`sdist: kwcapture-0.6.0.tar.gz 10 icon files`**. The previous
+suite's numbers were 88 + 1 on the same runner; the +9 is the one-artwork assertions.
+*Reading it: `GET /repos/…/actions/runs/<id>/jobs` gives job and step conclusions, and
+`…/actions/jobs/<id>/logs` follows a redirect to the log itself — `curl -sL` gets it where
+urllib's own redirect handling returns 401, and the per-suite count is `grep -c '\[PASS\]'` inside
+the step's own slice of the log, not a guess from the total.*
 
 ## FRESH STATUS — 2026-10-09 ~08:20 — **v0.6.0 RELEASED to GitHub + PyPI: the hidden-window enumeration is out**
 
