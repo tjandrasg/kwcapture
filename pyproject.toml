@@ -52,4 +52,7 @@ packages = ["kwcapture"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-kwcapture = ["native/*.c", "native/include/*.h", "bin/kwcapture", "py.typed"]
+# icons/** is the generated brand set (logo/sync_package_icons.py is the only writer);
+# `hicolor/*/apps/*` is one glob per theme directory because setuptools globs do not cross /
+kwcapture = ["native/*.c", "native/include/*.h", "bin/kwcapture", "py.typed",
+             "icons/*.md", "icons/hicolor/*/apps/*"]

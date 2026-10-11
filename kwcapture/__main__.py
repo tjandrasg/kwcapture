@@ -93,6 +93,17 @@ def cmd_doctor(argv: argparse.Namespace) -> int:
                   f"run: kwcapture install-desktop   (or: kwcapture doctor --fix)")
             problems += 1
 
+    # brand icons: cosmetic, so a missing set is a note and never a `problems += 1`.
+    # `--fix` installs them, because that is what --fix is for.
+    icons_ok, icons_text = _desktop.icon_status()
+    if icons_ok:
+        _ok(icons_text)
+    elif argv.fix:
+        _desktop.install_desktop_file(exe, with_icons=True)
+        _ok(_desktop.icon_status()[1])
+    else:
+        _warn(icons_text)
+
     stale = _desktop.prune()
     if stale:
         _warn("removed desktop entries for helper binaries that no longer exist: "
@@ -193,23 +204,34 @@ def cmd_setup(argv: argparse.Namespace) -> int:
     except _native.NativeBuildError as e:
         _bad(str(e))
         return 1
-    path = _desktop.install_desktop_file(exe, verbose=True)
+    path = _desktop.install_desktop_file(exe, verbose=True, with_icons=True)
     _ok(f"authorised via {path}")
+    icons_ok, icons_text = _desktop.icon_status()
+    if icons_ok:
+        _ok(icons_text)
+    else:
+        _warn(icons_text)
     return 0
 
 
 def cmd_install_desktop(argv: argparse.Namespace) -> int:
     exe = _native.ensure_binary()
+    icons = not getattr(argv, "no_icons", False)
     if argv.uninstall:
-        removed = _desktop.uninstall()
+        removed = _desktop.uninstall(with_icons=icons, verbose=icons)
         for p in removed:
             print(f"removed {p}")
         if not removed:
             print("nothing to remove")
         return 0
-    path = _desktop.install_desktop_file(exe, verbose=True)
+    path = _desktop.install_desktop_file(exe, verbose=True, with_icons=icons)
     print(f"KWin is now authorised to let {exe} take screenshots")
     print(f"wrote {path}")
+    # Entries are keyed per helper binary: a machine with three environments has three of them,
+    # and the other two would keep whatever Icon= they were written with. Refresh them all.
+    for other in _desktop.refresh_entries(verbose=True):
+        print(f"refreshed {other}")
+    print(_desktop.icon_status()[1])
     for stale in _desktop.prune(verbose=True):
         print(f"pruned {stale}")
     return 0
@@ -413,6 +435,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p = sub.add_parser("install-desktop", help="authorise the helper with KWin")
     p.add_argument("--uninstall", action="store_true", help="remove our desktop entries")
+    p.add_argument("--no-icons", action="store_true",
+                   help="skip the brand icons (they normally go to "
+                        "$XDG_DATA_HOME/icons/hicolor/*/apps/kwcapture.*); the desktop "
+                        "entry then falls back to the theme's own screenshot icon")
     p.set_defaults(func=cmd_install_desktop)
 
     p = sub.add_parser("screens", help="list outputs")

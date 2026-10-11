@@ -1,5 +1,78 @@
 # Changelog
 
+## Unreleased
+
+The desktop entry this package writes finally names an icon that **exists**, and the artwork
+behind it ships inside the package instead of being re-drawn by whoever packages it. No capture
+code changed, nothing here runs at import time, and nothing here can make a screenshot slower.
+
+- **New `kwcapture/_icons.py`; the icons now ship in the wheel.** The **glyph** form of
+  `logo/kwcapture-mark.svg` — the same drawing with `APTURE` dropped, because the word is mush
+  below ~64 px — at 16/24/32/48/64/128/256/512 plus a scalable SVG, laid out as the freedesktop
+  **hicolor** theme (`kwcapture/icons/hicolor/<size>/apps/kwcapture.png`), with a `COPYING.md`
+  beside them: the pictures are CC BY 4.0, the code MIT, and an installed tree now says which is
+  which where a reader will actually see it. Stdlib only — the PNG IHDR is read by hand — so no
+  Pillow and no import-time work. **10 files in the wheel and 10 in the sdist**, measured by
+  building both; `logo/` itself stays out — 1.5 MB on this checkout, 1.1 MB of it generated review
+  PNGs (`du -sb logo --exclude='*.jsonl'`; the first draft of that number said "~700 KB" and the
+  measurement corrected it).
+- **`install-desktop` and `setup` install them**, into `$XDG_DATA_HOME/icons/hicolor` and never
+  into a system directory: this runs as the user, into a tree that Wine and every other
+  installer also writes to. `--no-icons` opts out. Sources are validated *before* anything is
+  written (a PNG's IHDR against the size its directory promises, plus the presence of alpha),
+  each write goes through a temp name + `os.replace`, and the bytes are re-read afterwards — so a
+  corrupt package leaves the theme exactly as it was rather than half-branding it.
+- **The bug: `Icon=accessories-screenshot`, carried since the first release, resolves in no theme
+  on the desktop this project targets.** KDE ships `accessories-screenshot-tool`, HighContrast
+  ships `applets-screenshooter`; the name from the naming spec is a suggestion, not a file.
+  **A `;` fallback chain is not the fix** — measured on this machine: GLib's
+  `DesktopAppInfo.get_icon()` puts the whole value into a `GThemedIcon` as **one** name
+  (`Icon=kwcapture;x` → names `['kwcapture;x', …]`), and KService stores it verbatim
+  (`m_strIcon = entryMap.take("Icon")`), so a chain resolves to *neither* name on *both*
+  consumers, our own icon included. So the value is **resolved when the entry is written**
+  (`pick_icon_name()`), against the themes actually installed here, and the entry gets exactly
+  one name that exists on this machine — worst case the old spec name, i.e. never worse than
+  before.
+- **New `refresh_entries()`,** because entries are keyed per helper binary: three virtualenvs on
+  one machine means three entries, and installing from one refreshes one. Two of the three
+  entries on the developer's desktop were still pointing at the dangling name *after* the fix
+  existed. `install-desktop` now rewrites every entry it owns while preserving each file's own
+  `Exec=` (KWin's authorisation key is the sha1 of that path, so the auth survives — checked),
+  and `--uninstall` removes the icons too, but only those whose sha256 still matches what we
+  ship: a `kwcapture.png` somebody else drew is left where it is.
+- **`kwcapture doctor` reports them**, in a line that reads *brand icons: 9 files in
+  ~/.local/share/icons, entry uses `Icon=kwcapture`* — and `doctor --fix` installs them. A missing
+  set is a note, **never** a problem count: branding must not make a working capture look broken.
+  Verified on the target desktop: 9 files installed, all three entries `Icon=kwcapture`,
+  `desktop-file-validate` silent.
+- **`logo/sync_package_icons.py` is now the only sanctioned path from `logo/icon/` into the
+  package**: a byte-for-byte copy that never resamples, with `--check` for drift, reading the
+  size list out of `_icons.PNG_SIZES` so the two trees cannot disagree about which sizes exist.
+  `logo/icon/glyph-256.png` was added for it — hicolor declares a `256x256/apps` directory, and
+  every shipped size is one `/usr/share/icons/hicolor/index.theme` actually lists. The test suite
+  runs `--check`, so "the desktop icon is last month's render" fails a build, in CI as well as
+  on the machine that made the change.
+- **Packaging:** `MANIFEST.in` and `[tool.setuptools.package-data]` carry `kwcapture/icons/` into
+  sdist and wheel — **one glob per theme directory** (`icons/hicolor/*/apps/*`), because
+  setuptools globs do not cross `/`, which a `icons/**`-style pattern quietly fails to do.
+- **`tests/test_icons.py`: 89 checks, no compositor needed**, now a CI step next to the
+  ring-reader suite — and `probe/sabotage_icons.sh`, which breaks each guard in turn, restores it
+  and compares the outcome with what it expected: **10/10 detected** here, clean tree green. It
+  covers the awkward ones deliberately: a *stale* file counts as missing; uninstall cannot delete
+  a foreign `kwcapture.png`; the verify-after-write fires when a write lies (`_write_atomic` is
+  patched to flip a byte inside the IDAT, where nothing else in the module could notice — an
+  earlier revision corrupted the header instead and passed for the wrong reason); and
+  `theme_has_icon()` is graded against an independent `find`-based oracle, because its first
+  version assumed hicolor's `16x16/apps/` layout and therefore reported Breeze's own screenshot
+  icon — which lives in `apps/48/` — as missing **on a KDE desktop**.
+
+**Behaviour change, for anyone scripting it:** `kwcapture install-desktop` now also writes files
+under `$XDG_DATA_HOME/icons`, and `install-desktop --uninstall` removes them again (hash-checked,
+ours only). Pass `--no-icons` to either for the old exactly-one-file behaviour. The automatic
+first-`Capture()` path is unchanged and still writes one `.desktop` file and no icons — there is
+a check asserting that promise. What an entry's `Icon=` value says remains machine-specific and
+is not a stable interface.
+
 ## 0.6.0 — 2026-10-09
 
 The windows a taskbar would not show are now findable, not just capturable: `list_windows()`

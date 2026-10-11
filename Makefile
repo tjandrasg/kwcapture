@@ -27,6 +27,19 @@ doctor:                     ## what's wrong?
 test: $(BIN)
 	$(PY) tests/test_kwcapture.py
 
+test-icons:                 ## brand icons + the desktop entry's Icon= — no compositor needed
+	$(PY) tests/test_icons.py
+
+# The package copy of the artwork is generated, never hand-placed: logo/ is the source of
+# truth and `sync_package_icons.py` is the only sanctioned path out of it (logo/README.md §8).
+# Rebuilding the PNG/SVG set itself needs inkscape + ImageMagick + Pillow:
+# `bash logo/icon/build.sh`, then `make icons`.
+icons:                      ## kwcapture/icons/ <- logo/icon/ (byte-for-byte)
+	$(PY) logo/sync_package_icons.py
+
+icons-check:                ## drift only: fail if the shipped icons != logo/icon/
+	$(PY) logo/sync_package_icons.py --check
+
 bench: $(BIN)               ## kwcapture vs mss vs PIL
 	$(PY) bench.py 3
 
@@ -48,4 +61,5 @@ check-venv:
 clean:
 	rm -rf build dist *.egg-info kwcapture/bin __pycache__ kwcapture/__pycache__ tests/__pycache__
 
-.PHONY: all install-desktop setup doctor test bench demo wheel sdist dev-install clean
+.PHONY: all install-desktop setup doctor test test-icons icons icons-check bench demo wheel \
+        sdist dev-install clean

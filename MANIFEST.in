@@ -14,6 +14,12 @@ include setup.py
 include kwcapture/native/*.c
 include kwcapture/native/include/*.h
 include kwcapture/py.typed
+# The brand icons ship inside the package (artwork under CC BY 4.0, with COPYING.md next to
+# them saying so). The `logo/` directory that generates them is deliberately NOT in the
+# sdist — 1.5 MB on this checkout, 1.1 MB of it generated review PNGs (measured with
+# `du -sb logo --exclude='*.jsonl'`, not guessed) — but `--check` in the repo is what keeps this
+# copy honest, so a packager can always verify the shipped bytes against the real artwork.
+recursive-include kwcapture/icons *
 recursive-include tests *.py
 include bench.py
 include .github/workflows/*.yml

@@ -38,10 +38,47 @@ jobs:
           python -m pip install --quiet numpy
           python -X dev tests/test_ring_reader.py quick
 
+      - name: Brand-icon tests (no compositor needed)
+        # The only place two things ever get proved:
+        #   1. `logo/icon/` and `kwcapture/icons/` still agree -- sync_package_icons.py --check
+        #      runs inside this suite, so a re-rendered mark that was never re-synced into the
+        #      package fails a build instead of shipping last month's desktop icon;
+        #   2. the install/uninstall machinery works on a machine that is not the one it was
+        #      written on (everything writes into a scratch $XDG_DATA_HOME, so no KDE needed).
+        # A runner with no icon themes cannot fail for the wrong reason: the resolution checks
+        # skip themselves when there is nothing to resolve.
+        run: |
+          python -m pip install --quiet numpy
+          python -X dev tests/test_icons.py
+
       - name: Build sdist and wheel
         run: |
           python -m pip install --upgrade pip build
           python -m build
+
+      - name: Both artefacts carry the brand icons
+        # "the icons are package data" is a claim about pyproject.toml and MANIFEST.in, and its
+        # failure mode is silent: a wheel without them installs fine, `install-desktop` finds
+        # nothing to install and the desktop entry quietly keeps the theme's icon.
+        run: |
+          python - <<'PY'
+          import tarfile, zipfile, pathlib
+          whl = next(pathlib.Path("dist").glob("kwcapture-*-py3-none-*.whl"))
+          icons = [n for n in zipfile.ZipFile(whl).namelist()
+                   if n.startswith("kwcapture/icons/")]
+          print("wheel:", len(icons), "icon files")
+          assert len(icons) == 10, icons                     # 8 png + 1 svg + COPYING.md
+          assert any(n.endswith("hicolor/16x16/apps/kwcapture.png") for n in icons)
+          assert any(n.endswith("hicolor/scalable/apps/kwcapture.svg") for n in icons)
+          sd = next(pathlib.Path("dist").glob("*.tar.gz"))
+          with tarfile.open(sd) as t:
+              names = t.getnames()
+          shipped = [n for n in names if "/kwcapture/icons/" in n
+                     and n.endswith((".png", ".svg", ".md"))]
+          print("sdist:", sd.name, len(shipped), "icon files")
+          assert len(shipped) == 10, shipped
+          assert not any("/logo/" in n for n in names), "the sdist must not ship the generators"
+          PY
 
       - name: Check the built wheel
         run: |

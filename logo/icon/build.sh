@@ -9,7 +9,10 @@
 #       README headers, docs, og images. The word `APTURE` is legible down to ~64 px and
 #       mush below it (see the ladder in ../README.md) — so below 64 px nothing ships the
 #       word.
-#   glyph (kwcapture-mark-mono, transparent) 1024 512 400 192 180 128 64 48 32 24 16
+#   glyph (kwcapture-mark-mono, transparent) 1024 512 400 256 192 180 128 64 48 32 24 16
+#       (256 is here because hicolor has a 256x256/apps directory and the desktop entry
+#       ships into it — see logo/sync_package_icons.py; every size in that list is a
+#       directory the system /usr/share/icons/hicolor/index.theme actually declares)
 #       The SAME drawing without the word: the monogram of the mark sketch, produced by
 #       `gen_logo.py --monogram --sketch kwcapture-mark-sketch.svg`. Favicons, tab icons,
 #       list icons, and anything GitHub crops to a circle (avatars) — the wide lockup loses
@@ -44,7 +47,7 @@ for n in 1024 512 256 128; do
 done
 
 # ------------------------------------------------------------------------------- glyph
-for n in 1024 512 400 192 180 128 64 48 32 24 16; do
+for n in 1024 512 400 256 192 180 128 64 48 32 24 16; do
   inkx "kwcapture-mark-mono.svg" -o "glyph-$n.png" -w "$n" -h "$n"
 done
 
