@@ -138,12 +138,18 @@ here runs at import time, and nothing here can make a screenshot slower.
   version assumed hicolor's `16x16/apps/` layout and therefore reported Breeze's own screenshot
   icon — which lives in `apps/48/` — as missing **on a KDE desktop**.
 
-**Not in this repo's hands:** the GitHub **social preview** is a stored upload, not a render of the
-repository, so the live card is still the previous palette. Re-uploading
-`logo/icon/github-social-preview.png` (1280×640, now 84 871 B) from *Settings → Social preview* is
-an owner action — no API can do it, which was probed rather than assumed — and the re-upload should
-be verified by fetching the URL and comparing **pixels**, because `usesCustomOpenGraphImage: true`
-proves only that *an* image is set, not which palette it is in.
+**Not in this repo's hands, but done and verified:** the GitHub **social preview** is a stored
+upload, not a render of the repository, so palette P2 had to be re-uploaded by hand — no API can do
+it, which was probed rather than assumed. The owner did, and it now verifies off the pixels: the
+live `openGraphImageUrl` is a **new object id** (`5425fcdb-…`, where the previous palette's upload
+was `dc44cc05-…` — GitHub mints a fresh URL per upload) serving **1280×640 / 84 871 B** with **0 of
+819 200 pixels** differing from the committed `logo/icon/github-social-preview.png`, against **6.73 %**
+differing from the pre-P2 card. Between the upload and this verification there was a window in which
+`usesCustomOpenGraphImage` read `true` while the pixels were the old palette — which is exactly why
+the check is written in pixels and not in the flag: **after any change to that file, re-fetch the URL
+and compare pixels with the committed artwork.** The optional user profile picture is unrelated
+artwork, measured: `github.com/tjandrasg.png` differs from `icon/github-avatar-400.png` in 100 % of
+pixels in both palettes, so that asset exists and is unused rather than stale.
 
 **Behaviour change, for anyone scripting it:** `kwcapture install-desktop` now also writes files
 under `$XDG_DATA_HOME/icons`, and `install-desktop --uninstall` removes them again (hash-checked,

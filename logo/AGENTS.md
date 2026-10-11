@@ -8,7 +8,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **117 182** bytes
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **118 174** bytes
 > — measured with `wc -c logo/AGENTS.md`, not remembered. **Round 14** (the palette round) opened at
 > **96 404** and closes at the number above. It paid for itself once, by moving Round 13's
 > session-log narrative out **verbatim** — 7 327 bytes, presence in
@@ -1127,9 +1127,12 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   512 px and 20.5 % → 57.5 % at 16 px. It was measured rather than obeyed and sent back with the
   awkward half included (gotcha 38 working as intended); the owner then chose from six pairs, which
   is the correct order of operations.
-  **Still owed by this palette, and not by this round:** the GitHub social preview is a stored
-  **upload**, so the live one is still the *old* palette until the owner re-uploads
-  `icon/github-social-preview.png` — see the item below, and the root `AGENTS.md`.
+  **Owed by this palette, and now paid:** the GitHub social preview is a stored **upload**, so it
+  had to be re-uploaded for P2. The owner did, and it was verified off the pixels rather than off
+  the flag: the live URL — a **new object id**, `5425fcdb-…` where Round 13 recorded `dc44cc05-…`,
+  which is how you can tell an upload happened — serves 1280×640 / **84 871 B** with **0 of
+  819 200 pixels** differing from the committed P2 card and **6.73 %** differing from the old one.
+  See the item below and the root `AGENTS.md`.
 * **`--c-paint`'s `--help` text is wrong** (says `mask (default)`, claims mask ≡ solid). The
   default is `solid` and the matrix above is the truth. One-line fix in `gen_logo.py`; left
   alone in a documentation round so the code stays byte-stable while its docs are re-checked.
@@ -1198,19 +1201,27 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   explicitly-labelled check for the live-desktop case; (c) investigate whether KWin's BGRA grab
   alpha at rounded corners is expected, and write the answer down. (b) is the recommendation, and
   whichever way it goes belongs in a round that owns `tests/`, not in a recolour.
-* **GitHub social preview: the mechanism is DONE, the image is STALE — owner, re-upload it.**
-  Round 13 verified the whole loop end to end: *Settings → Social preview* was clicked,
-  `usesCustomOpenGraphImage` is `true`, `openGraphImageUrl` is a
-  `repository-images.githubusercontent.com/…` URL, and the bytes that URL served were 1280×640
-  and **0 of 51 681 sampled pixels differed** from `icon/github-social-preview.png`. That closed the
-  item gotcha 34 said no script could close — and palette P2 has just reopened it, because what
-  GitHub stores is the **upload**, not a render of the repo. The file in this folder is the P2 card
-  (**84 871 B**); the live card is still `#0000ff`-and-`#00ac4e`. **Action:** re-upload
-  `logo/icon/github-social-preview.png`, then re-run the query in `README.md` §8 *and* the pixel
-  comparison — the flag only proves *an* image is set, the pixels prove it is *this* one, and
-  right now a `true` flag would mislead exactly as a stale caption does (gotcha 39). Same story for
-  the optional user profile picture (`icon/github-avatar-400.png`, P2: 25 293 B): an account
-  setting, no check can reach it, and no script pretends to (gotcha 34).
+* **GitHub social preview: DONE, and now verified live in palette P2 — nothing owed.**
+  Re-measured 2026-10-12 after the owner's re-upload, off the URL rather than off the flag:
+  `usesCustomOpenGraphImage` is `true` and `openGraphImageUrl` is
+  `repository-images.githubusercontent.com/1406948211/**5425fcdb**-bcfa-4d50-b99e-30d4087c1849`.
+  That URL is a **different object id** from the one Round 13 recorded (`dc44cc05-…`), which is
+  itself the tell that a new upload happened — GitHub mints a new URL per upload. What it serves is
+  1280×640, **84 871 B**, and against the committed P2 card **0 of 819 200 pixels differ** by more
+  than 8/255; against the pre-P2 card (**84 565 B**) **55 119 px, 6.73 %**, differ. Same bytes as
+  this folder, right down to the file size. The loop gotcha 34 said no script could close has now
+  been closed twice from a shell: the click is outside the repo, the *proof* never was.
+  **Keep the method, not the conclusion:** the flag only proves *an* image is set. The check that
+  matters is pixels-against-`HEAD`, because a recolour silently reopens this — a `true` flag with
+  the old upload is exactly as misleading as a stale caption (gotcha 39), and between the two
+  uploads that is precisely what the repo's own docs had to say.
+* **The optional user profile picture is NOT the mark, measured — so nothing is owed there either.**
+  `https://github.com/tjandrasg.png` serves 460×460 / 48 875 B and differs from
+  `icon/github-avatar-400.png` in **100 %** of pixels — in *both* palettes — so the account picture
+  is unrelated artwork that the project never uploaded, not a stale copy of ours. Which means
+  `icon/github-avatar-400.png` (P2: 25 293 B) is an asset that exists and is unused: if the owner
+  ever wants it as the profile picture that is an account setting no script can reach (gotcha 34);
+  until then, no doc may describe it as live.
 * **The package wiring is done (Rounds 12–13); PyPI's display of it is not measured.** The mark
   set — nine renders plus the SVG itself — now ships inside the package (`../kwcapture/icons/`) and
   `kwcapture install-desktop` puts it in the user's hicolor theme, so the artwork has a consumer

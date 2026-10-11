@@ -868,12 +868,24 @@ Measured that way on 2026-10-11, against the palette in force when the click hap
 **1280×640, 84 565 B**, and **0 differing sampled pixels** — GitHub stored the artwork unchanged.
 That is the whole loop: click, query, fetch, compare.
 
-**And it needs doing again, because the palette changed the same day.** Palette P2 (see the table
-above) rewrote `icon/github-social-preview.png` — now **84 871 B** — while GitHub keeps serving the
-upload it was given, so the live card is still `#0000ff`-and-`#00ac4e`. Re-run the loop after the
-re-upload: a `true` flag with the old pixels is precisely the case the pixel comparison exists to
-catch. `icon/github-avatar-400.png` (P2: **25 293 B**) is the same story if it is used as the user
-profile picture.
+**And it needed doing again, because the palette changed the same day — it is done.** Palette P2
+rewrote `icon/github-social-preview.png` to **84 871 B**, and GitHub kept serving the old upload
+while `usesCustomOpenGraphImage` went on reading `true`. The owner re-uploaded it, and the same loop
+run a second time closes: `openGraphImageUrl` is now
+`https://repository-images.githubusercontent.com/1406948211/5425fcdb-…` — a **different object id**
+from `dc44cc05-…`, because GitHub mints one per upload, so the URL changing is itself the evidence
+that a new file went up — and it serves **1280×640, 84 871 B** with **0 of 819 200 pixels**
+differing from the committed card, where the pre-P2 card (**84 565 B**) differs from it in **6.73 %**.
+That gap is the size of the mistake the pixel check exists to catch: between the recolour and the
+re-upload, the flag said everything was fine.
+
+So the rule for the next palette, in one line: **change the card → re-upload → re-fetch the URL →
+diff pixels against the committed file.** The flag is not the check.
+
+`icon/github-avatar-400.png` (P2: **25 293 B**) was measured too, and the answer is not "stale":
+`https://github.com/tjandrasg.png` serves 460×460 / 48 875 B that differs from it in **100 %** of
+pixels in *both* palettes, so the account picture is unrelated personal artwork and the avatar asset
+is simply **unused**. Nothing to re-upload; nothing to claim.
 
 What *is* automatic is the README header: [`../README.md`](../README.md) opens with
 `logo/icon/kwcapture-mark-256.png`, written as an absolute `raw.githubusercontent.com` URL on

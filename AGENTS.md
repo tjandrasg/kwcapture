@@ -168,12 +168,25 @@ the step's own slice of the log, not a guess from the total.*
 > that URL returned **1280×640, 84 565 B** with **0 of 51 681 sampled pixels differing** from
 > `logo/icon/github-social-preview.png`. GitHub stores the upload rather than re-rendering it, so a
 > recolour of the mark means **re-uploading it** — not something the repo can do for you.
-> **And the recolour happened the same day**: palette P2 landed, `icon/github-social-preview.png` is
-> now **84 871 B** in the new paint, and the live preview is still the `#0000ff`/`#00ac4e` card.
-> `usesCustomOpenGraphImage: true` is therefore *misleading right now* — an image is set, and it is
-> the old one. **Owner action: re-upload** that file from *Settings → Social preview*, then re-run
-> the query **and** the pixel comparison (the flag alone proves nothing about which palette is
-> live). Same for the optional user profile picture (`icon/github-avatar-400.png`, 25 293 B).
+> **And the recolour happened the same day, then this item came round twice.** Palette P2 landed
+> and `icon/github-social-preview.png` became **84 871 B** in the new paint, which made the live
+> preview — the old upload, `#0000ff`/`#00ac4e` — stale while `usesCustomOpenGraphImage` still read
+> `true`. That combination is the reason the check is written in pixels: a flag that is technically
+> accurate and completely misleading. **The owner has since re-uploaded it, and it verifies**:
+> `openGraphImageUrl` is now a **different object id**,
+> `…/1406948211/5425fcdb-bcfa-4d50-b99e-30d4087c1849` where Round 13 recorded `dc44cc05-…` — GitHub
+> mints a fresh URL per upload, so the URL changing is itself evidence — and that URL serves
+> 1280×640 / **84 871 B** with **0 of 819 200 pixels** differing from the committed P2 card and
+> **55 119 px (6.73 %)** differing from the pre-P2 card. Nothing owed here any more.
+> The optional **user profile picture** is a separate question, and it was measured rather than
+> assumed: `https://github.com/tjandrasg.png` serves 460×460 / 48 875 B differing from
+> `icon/github-avatar-400.png` in **100 %** of pixels in *both* palettes — it is unrelated personal
+> artwork, not a stale copy of ours. So `github-avatar-400.png` (P2: 25 293 B) is an asset that
+> exists and is **unused**; no doc may describe it as live, and using it would be an account
+> setting no script can reach (gotcha 34).
+> **The standing rule, because a recolour reopens this every time:** after any change to
+> `icon/github-social-preview.png`, re-fetch `openGraphImageUrl` and diff **pixels against the
+> committed file**. `true` proves an image is set; only the pixels prove which palette is live.
 
 > **The mark is installed on the desktop now, not just displayed** (2026-10-11). `kwcapture
 > install-desktop` / `setup` copy the **mark itself** — `logo/kwcapture-mark.svg`, rendered at each
