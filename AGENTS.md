@@ -8,6 +8,39 @@
 > the map. Consult it when something here is too terse or you want the reasoning behind a rule; it is
 > history, **not to-do**.
 >
+> ## EVERY CLAIM MUST BE TRUE, INCLUDING WHO WROTE THE CODE (hard rule, owner's, 2026-10-11)
+> **This is not a rule against AI attribution. It is a rule against FALSE attribution.** The owner
+> has nothing against AI tools and would accept a truthful `Co-Authored-By:` naming the tool
+> actually in use. What is forbidden is writing an attribution that is **not fact** — naming some-
+> thing as author or co-author that is not what was used. Attribution in `git log` is a record of
+> what happened, like a measurement in a table, and it is held to the same standard as every other
+> claim in this repository: **verified, or not written.**
+> **The mistake this exists because of:** four commits on 2026-10-11 were pushed with a
+> `Co-Authored-By:` trailer naming a specific AI product — written out because it is the lesson, not
+> because the name has any standing here — and **nobody had established that identity and nothing
+> had checked it.** The runtime
+> was reporting `Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf`, readable in the session log the
+> entire time. So the trailer was not a policy violation first — it was a **false statement**, the
+> same category as the stale contrast ratios and the blind colour check this folder spends most of
+> its prose on; it just happened to be a false statement about the writer rather than about the
+> artwork, and it sat in a public append-only record. Gotcha 30 and gotcha 39 in human form.
+> **Concretely, for anyone or anything working here:**
+> - Do not name a model, product or assistant in a commit, tag, PR or branch name unless you have
+>   read that identity out of the runtime in front of you and the owner wants it recorded. "What am
+>   I running as?" is one command; answering it by habit is what produced the four commits.
+> - Do not invent attribution because a template, a convention or another project does it.
+> - Truthful attribution the owner asks for is fine, including naming the tool genuinely in use.
+> - Existing honest trailers are not to be touched — Dependabot's `Co-authored-by: dependabot[bot]`
+>   is Dependabot's. The rule is *never write something untrue*, not *remove names*.
+> **Why this is in a file rather than left as a promise: a session cannot remember it.** Every
+> session here starts blank; a guarantee given in a chat transcript is worth nothing in the next
+> one, so the only thing that survives is this file, which each round reads first. That is also the
+> honest answer to "will you remember?" — *no*, which is exactly why it went in here instead.
+> **And note the cost of getting it wrong late:** correcting it meant `filter-branch --msg-filter`
+> plus a force-push, four rewritten SHAs, and old objects still reachable by SHA on GitHub and
+> forever in any clone that had already fetched them. Cheap to check first; not fully undoable
+> after. Untrue claims in append-only media are worse than untrue claims in code.
+
 > **Size discipline:** this file is the working set, so finished work gets distilled into a few
 > bullets here and its long form goes to the archive. If you catch yourself writing a third
 > "FRESH STATUS" day-log into a file this size, distil the older ones instead.

@@ -2,13 +2,21 @@
 
 Work on `logo/` only after reading this. Everything here was paid for once already.
 
+> **Attribution rule (owner's, 2026-10-11): every claim must be true, including who wrote the
+> code.** Not a ban on AI attribution — a ban on **false** attribution. Never name a model,
+> product or assistant in a commit, tag or PR unless you read that identity out of the runtime and
+> the owner wants it recorded; truthful attribution the owner asks for is fine, and honest existing
+> trailers (Dependabot's) stay. Four commits that day claimed a name nothing had checked and had to
+> be rewritten with `filter-branch` + a force-push — the same error as a stale ratio, just in the
+> one place you cannot later re-render. Full rule: root `AGENTS.md`, *EVERY CLAIM MUST BE TRUE*.
+
 Three files, three jobs. **This one is the working set**: the rules, the knobs, the numbers
 and the open items. [`README.md`](README.md) is the user manual for the three programs and
 the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: the session
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **118 174** bytes
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **118 859** bytes
 > — measured with `wc -c logo/AGENTS.md`, not remembered. **Round 14** (the palette round) opened at
 > **96 404** and closes at the number above. It paid for itself once, by moving Round 13's
 > session-log narrative out **verbatim** — 7 327 bytes, presence in
