@@ -32,6 +32,15 @@
 > - Truthful attribution the owner asks for is fine, including naming the tool genuinely in use.
 > - Existing honest trailers are not to be touched — Dependabot's `Co-authored-by: dependabot[bot]`
 >   is Dependabot's. The rule is *never write something untrue*, not *remove names*.
+> **And the harm is not cosmetic, because GitHub resolves the trailer's *email* to a real account.**
+> The address in that trailer belongs to Anthropic's own GitHub account (`claude`, id 81847), so the
+> false trailer was not inert text in a log message: GitHub credited **that third party as a
+> contributor to this repository**, in the sidebar widget on the repo page. Even the correct-looking
+> endpoints stayed clean while the widget kept serving it — REST `/contributors`, `/stats/contributors`,
+> the atom feed and the page HTML all reported two contributors, because the widget is hydrated by a
+> separate, cached pipeline that lags a history rewrite. Lesson, twice over: **an untrue claim in a
+> commit does not stay in the commit** — it propagates into surfaces you do not control and cannot
+> clear, and the negative check you ran is only as good as the pipeline you actually queried.
 > **Why this is in a file rather than left as a promise: a session cannot remember it.** Every
 > session here starts blank; a guarantee given in a chat transcript is worth nothing in the next
 > one, so the only thing that survives is this file, which each round reads first. That is also the
