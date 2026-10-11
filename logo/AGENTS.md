@@ -8,7 +8,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **116 712** bytes
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **117 182** bytes
 > — measured with `wc -c logo/AGENTS.md`, not remembered. **Round 14** (the palette round) opened at
 > **96 404** and closes at the number above. It paid for itself once, by moving Round 13's
 > session-log narrative out **verbatim** — 7 327 bytes, presence in
@@ -869,7 +869,12 @@ byte reproducibility:    `build.sh` run twice back to back hashes **identical** 
                            25 293 B. Same pixels both ways (`ImageChops.difference().getbbox()`
                            empty), so nothing shipped was wrong; what was wrong was that the
                            numbers and the bytes disagreed. After making `--sweep` read-only the
-                           rebuild matches the committed bytes for every file in `icon/`.
+                           rebuild matches the committed bytes for every file in `icon/`, and CI on
+                           the fix push (933312c, run 38161050919) reads the same **97 passed + 1
+                           skipped + 0 failed** with `wheel: 10 icon files` / `sdist: … 10 icon
+                           files` -- the tiles are not shipped in the package, so CI could not have
+                           caught this, which is the second half of the lesson: an artefact check
+                           only covers the artefacts it looks at.
 FIT sweep (`python3 logo/icon/tiles.py --sweep`, run on both palettes with the same instrument;
   read-only since gotcha 41 -- it prints the margin and writes nothing):
   largest artwork that loses no ink: 322/400 (0.805), 413/512 (0.807), 143/180 (0.794) -> the
