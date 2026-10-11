@@ -8,7 +8,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **76 170 bytes**
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **76 584 bytes**
 > — measured with `wc -c logo/AGENTS.md`, not remembered. It was **86 077** before Round 10's
 > archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
 > (every substantive line of the old file is present in one of the two files — checked, not
@@ -17,7 +17,7 @@ log, the falsified claims, the war story behind every gotcha.
 > regenerate commands, five gotchas, a block of expected numbers — and paid part of it straight
 > back by moving Round 10's session-log narrative (2 029 bytes, verbatim) to
 > [`AGENTS.old.md` Part G](AGENTS.old.md). **Round 12** (the desktop-icon round) opened at
-> **69 298** and closes at **76 170**: ~5 KB went on `sync_package_icons.py` (a Files row, the
+> **69 298** and closes at **76 584**: ~5 KB went on `sync_package_icons.py` (a Files row, the
 > regenerate commands, gotchas 36–37, the package-set expected numbers) and its log entry, and the
 > payment was moving Round 11's narrative (3 019 bytes, verbatim) to
 > [`AGENTS.old.md` Part H](AGENTS.old.md) — asserted present in the archive *before* the summary
@@ -66,8 +66,10 @@ log, the falsified claims, the war story behind every gotcha.
 > `python3 logo/sync_package_icons.py` writes 9 icon files + `COPYING.md` into
 > `../kwcapture/icons/`, `--check` on the real trees is clean (*checked 9 icon files (0 written
 > now)*, exit 0), and a `python -m build` here puts those **10 files in the wheel and 10 in the
-> sdist**, with `logo/` in neither. `tests/test_icons.py`: **89 checks, 0 skipped**; that suite is
-> a CI step, as is the artefact assertion. `probe/sabotage_icons.sh`: **10/10 sabotages detected**,
+> sdist**, with `logo/` in neither. `tests/test_icons.py`: **89 checks, 0 skipped** on this
+> desktop; on its first CI run, **88 passed + 1 skipped** — the skip is `desktop-file-validate`,
+> which the runner does not have and which announces itself instead of passing quietly. That suite
+> is a CI step, as is the artefact assertion (*wheel: 10 icon files*, *sdist: … 10 icon files*). `probe/sabotage_icons.sh`: **10/10 sabotages detected**,
 > tree restored. On this desktop: 9 files installed, all three `.desktop` entries `Icon=kwcapture`,
 > `desktop-file-validate` silent, `kwcapture doctor` green. **This round touched no SVG, no sketch
 > and no knob**, so the Round 10 and Round 11 blocks above stand unchanged — both caveats included
@@ -673,7 +675,9 @@ hicolor/256x256/apps/kwcapture.png    7343 B   74f29cc277d995ea   (icon/glyph-25
 hicolor/512x512/apps/kwcapture.png   16111 B   46a9cddf7d54f458
 hicolor/scalable/apps/kwcapture.svg   1432 B   4eb2926d077078d9   (== icon/kwcapture-mark-mono.svg)
 sync_package_icons.py --check          "checked 9 icon files (0 written now)", exit 0
-tests/test_icons.py                    89 checks, 0 skipped  (no compositor; a CI step)
+tests/test_icons.py                    89 checks, 0 skipped here; on CI 88 + 1 skipped
+                                       (desktop-file-validate is not on the runner - the skip
+                                       prints, it does not pass silently)
 probe/sabotage_icons.sh                10 sabotages, 10 detected, tree restored
 built wheel + sdist                    10 icon files each (8 png + 1 svg + COPYING.md);
                                        `logo/` in neither — verified with unzip -l / tar tzf

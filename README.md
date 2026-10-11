@@ -686,8 +686,12 @@ dbus-run-session -- bash probe/nested_kwin_test.sh
 
 The functional suite (`tests/test_kwcapture.py`) needs a live Plasma session and is not run in CI.
 Its per-output checks multiply, so the count follows the hardware: 172 on a 75 % + 125 % two-monitor
-desk, 165 on a single output at 100 %. The other two suites are hardware-independent — 37 and 89
-checks, the same numbers everywhere.
+desk, 165 on a single output at 100 %. The other two suites do not depend on hardware: 37 and 89
+checks. The icon suite's one machine-dependent check is `desktop-file-validate`, which reports
+**SKIP** when the tool is absent — measured on this suite's first CI run: **88 passed + 1 skipped**
+on `ubuntu-latest`, **89 + 0** on the KDE desktop it was written on. A skip is printed, never
+silent, because "a check that stops running without saying so" is the failure mode this project has
+been bitten by most often.
 
 `probe/sabotage_icons.sh` is the second half of the icon suite: it breaks each rule the icon code
 enforces, one at a time, runs the suite, and requires it to notice — **10/10 detected** on this

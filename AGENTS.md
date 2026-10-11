@@ -48,7 +48,10 @@ user-facing docs; this file is the investigation log + gotchas.
 package, `kwcapture install-desktop` installing it into the user's hicolor theme, and the
 correction of the entry's `Icon=` name. Under *LOGO* below, user-facing in README → *Brand icons*,
 and in `CHANGELOG.md` → *Unreleased*. Nothing about capture changed; all three suites green here
-(165 + 37 + 89, 0 skips) plus `probe/sabotage_icons.sh` at 10/10.
+(165 + 37 + 89, 0 skips) plus `probe/sabotage_icons.sh` at **10/10 sabotages detected**, and CI
+`build` green on the push (icon suite **88 + 1 skipped** on `ubuntu-latest` — the skip is
+`desktop-file-validate`, not installed there — and the new artefact step reporting 10 icon files
+in the wheel and 10 in the sdist).
 
 ## FRESH STATUS — 2026-10-09 ~08:20 — **v0.6.0 RELEASED to GitHub + PyPI: the hidden-window enumeration is out**
 
@@ -225,7 +228,7 @@ archive keeps the reasoning and the dead ends, and this file is what a fresh ses
 head. If you are about to add a third `FRESH STATUS`, distil one out instead.
 
 **2026-10-11** (during the brand-icon work; `wc -c` was **58 859** at the moment of the move and
-**64 590** with the new material in it — measured, because a size note in a size note is exactly
+**64 846** with the new material in it — measured, because a size note in a size note is exactly
 the number that goes stale): the *post-release housekeeping* day-log
 of 2026-10-09 → distilled into the v0.6.0 FRESH STATUS block above. Nothing else moved; the two
 durable findings in it (`MANIFEST.in` lists docs **by name**; re-grep for token-shaped runs before
