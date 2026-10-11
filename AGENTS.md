@@ -132,13 +132,19 @@ the step's own slice of the log, not a guess from the total.*
 > repository's picture — `POST /repos/…/social_preview` answers **404**, GraphQL's 262 mutations
 > include no `avatar|social|preview|image|upload`, and the web app redirects a PAT to `/login`.
 > Click: *Settings → Social preview → Edit image* with `logo/icon/github-social-preview.png`
-> (1280×640), and the org/profile avatar with `logo/icon/github-avatar-400.png` if the mark is to
-> live there too. A **repository has no avatar** — its picture *is* the social preview.
+> (1280×640). **Done and verified 2026-10-11** — see the block below. A **repository has no
+> avatar** — its picture *is* the social preview — and `tjandrasg` is a **personal** account
+> (`owner { __typename }` → `User`), so there is no org avatar either: `github-avatar-400.png` is
+> only ever the *user's* profile picture, which is an account setting outside this repo.
 > The read side of that API works, so the click is checkable from a shell:
 > `repository(owner:"tjandrasg", name:"kwcapture"){ usesCustomOpenGraphImage openGraphImageUrl }`
-> — measured **`false`** on 2026-10-11 with the icon set already pushed, the URL still GitHub's
-> generated `opengraph.githubassets.com/…` placeholder. Ask again after the upload: `true` and a
-> `github-production-…` URL is what "done" looks like.
+> — measured **`false`** earlier on 2026-10-11, then **`true`** after the owner clicked, with
+> `openGraphImageUrl` → `https://repository-images.githubusercontent.com/1406948211/dc44cc05-…`.
+> And the check goes one step further than the flag, because `true` only proves *an* image: fetching
+> that URL returns **1280×640, 84 565 B** with **0 of 51 681 sampled pixels differing** from
+> `logo/icon/github-social-preview.png`. GitHub stores the upload rather than re-rendering it, so a
+> future recolour of the mark means **re-uploading it** — that is now a step in the recolour path,
+> not something the repo can do for you.
 
 > **The mark is installed on the desktop now, not just displayed** (2026-10-11). `kwcapture
 > install-desktop` / `setup` copy the **mark itself** — `logo/kwcapture-mark.svg`, rendered at each

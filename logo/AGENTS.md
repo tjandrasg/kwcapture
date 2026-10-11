@@ -8,7 +8,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **89 018 bytes**
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **94 543 bytes**
 > — measured with `wc -c logo/AGENTS.md`, not remembered. It was **86 077** before Round 10's
 > archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
 > (every substantive line of the old file is present in one of the two files — checked, not
@@ -22,11 +22,11 @@ log, the falsified claims, the war story behind every gotcha.
 > payment was moving Round 11's narrative (3 019 bytes, verbatim) to
 > [`AGENTS.old.md` Part H](AGENTS.old.md) — asserted present in the archive *before* the summary
 > replaced it, the same way Round 10's pass was done. **A round that adds narrative also moves one
-> out.** **Round 13** (the one-artwork round) opened at **76 584** and closes at **89 018**, and it
+> out.** **Round 13** (the one-artwork round) opened at **76 584** and closes at **94 543**, and it
 > did *not* pay for itself: it moved Round 12's narrative out (4 070 bytes, verbatim — the moved
 > block's sha256 starts `cddb1ce7cb55b311`, and its presence in
 > [`AGENTS.old.md` Part I](AGENTS.old.md) was asserted by string search *before* the pointer
-> replaced it) and still grew by 12 434 bytes, because a round about *why a build script was not
+> replaced it) and still grew by 17 959 bytes, because a round about *why a build script was not
 > allowed to pick the artwork* spends its budget on reasoning: a verified block, gotchas 38 and 39,
 > the Files/Still-open corrections and its own log entry. The debt is the next round's, and the two
 > fattest candidates are the `icon/` expected-numbers block and Round 10's verification prose —
@@ -883,22 +883,70 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   notice), `1.5`, and the shipped full fill — see `preview/variants-type.png`. Fold into the
   stranger test above: ask what the mark says **and** whether the third glyph is a letter or a
   mouse.
-* **The two monograms are still two different drawings, and neither of them is an icon.**
-  Round 11 had "resolved" this by shipping the **mark's** monogram (`--monogram --sketch
-  kwcapture-mark-sketch.svg`) as the small-size artwork; Round 13 deleted that file, so the
-  question is now smaller but not gone: `kwcapture-mono.svg` still exists as a `gen_logo.py
-  --monogram` artefact of the **original** sketch, still shows up in this folder, and still needs
-  a sentence explaining what it is for (a drawing, a measurement in the ladder figure — not an
-  icon). Unresolved, and it belongs to the owner: regenerate it from the mark sketch (one drawing,
-  two files) or keep it as the original's second voice (two drawings, and a user to explain them
-  to). What is no longer open is what ships: `icon/build.sh` renders the mark and nothing else,
-  compares every PNG with a fresh render of it, and `tests/test_icons.py` asserts the packaged SVG
-  is `kwcapture-mark.svg` — a monogram cannot get into the package without failing a build.
-* **Dark mode still fails.** `#0000ff` on transparent against GitHub-dark `#0d1117` is **2.20:1**
-  (better than the `#000000` it replaced, 1.11, still not usable) — see `preview/on-dark.png`.
-  It is now two recolours, since both colours are mid-tone, and `--blue`/`--green` make it a
-  one-line job (e.g. `--blue '#4d8dff' --green '#3ddc84'`), but re-check the C against *its own*
-  green if you do: today's pair is 2.87:1 and lighter blues collapse toward 1.2.
+* **The two monograms: ruled (2026-10-11) — `kwcapture-mono.svg` is unofficial and historical,
+  and it is going.** The owner's words: *"Unofficial variant and historical value only, safe to
+  delete if you prefer."* That settles the question Round 11 opened and Round 13 narrowed: the
+  monogram is not an icon, not a second voice to explain to users, and not a deliverable — it is a
+  generator mode (`--monogram`) plus a **control** in the legibility figures. So it is being
+  deleted with the next re-render rather than kept in `logo/` looking like an artefact: the
+  committed SVGs become `kwcapture.svg`, `kwcapture-mark.svg` and the two sketches, and
+  `preview/build.sh` / `render_agreement.py` will render the monogram into `$T` on the fly the way
+  the ladder already does (gotcha 38's lesson applied one folder up: **an artefact that sits next
+  to the approved artwork will eventually be mistaken for the approved artwork**). History is not
+  lost — `gen_logo.py --monogram --out /tmp/mono.svg` reproduces it byte for byte, and
+  `git log --diff-filter=D -- logo/kwcapture-mono.svg` recovers the file itself. Not done in the
+  same commit as the palette question below, because both mean re-rendering every image and the
+  round should re-render once.
+* **Small sizes: ruled, and closed (2026-10-11).** Asked whether the unreadable `APTURE` at 16 px
+  was worth anything, the owner's answer was *"Why bother? There's no way it would be readable at
+  that low resolution."* So: the mark ships at 16 px with the word mush, permanently, by decision.
+  The ladder stays as the measurement of what that means and nothing in the pipeline may "fix" it —
+  see gotcha 38. If a legible 16 px asset is ever wanted it is a **new mark from the owner**, not a
+  crop, not a monogram, not a build-script default.
+* **Dark mode: the owner proposed a palette on 2026-10-11, it was measured, and it is NOT applied.
+  One half is a win and one half has a problem — awaiting the owner's call.** Proposed: green
+  `#00ac4e → #00ff00`, blue `#0000ff → #7f7fff`. Measured with the WCAG formula, and rendered
+  (`gen_logo.py --mark --green … --blue … --out /tmp/…`, never into a shipped path — the guard in
+  `gen_logo.py` refuses that, and it held):
+
+  | pair | green/white | blue/white | green/dark | blue/dark | half-vs-half |
+  |---|---|---|---|---|---|
+  | current `#00ac4e` + `#0000ff` | **3.00** | 8.59 | 6.32 | **2.20** | 2.87 |
+  | proposed `#00ff00` + `#7f7fff` | **1.37** | 3.29 | 13.79 | 5.75 | 2.40 |
+
+  **The blue is right.** `#7f7fff` is the only single value here that clears the 3:1 non-text floor
+  on *both* grounds (3.29 white / 5.75 dark), and it fixes the finding `preview/on-dark.png` exists
+  to show: the blue half goes **2.20 → 5.75** on GitHub-dark. Take it.
+  **The green is the problem, and the word "darken" is the clue.** `#00ff00` is not darker than
+  `#00ac4e`, it is far lighter — relative luminance **0.715 vs 0.301**, the brightest green a byte
+  can hold. Against white that is **1.37:1**, and white is not an edge case: it is the ground of
+  every tile in `icon/` (`apple-touch-icon`, `pwa-192`, `pwa-512`, `maskable-512`, `github-avatar-400`
+  — `tiles.py` composites on `WHITE`), of `card.py`'s social preview (`BG = white`), of the contact
+  sheet, of the README header on GitHub-light and of PyPI. Measured on renders, the green half's ink
+  under 3:1 against white goes from 48 % → 50 % at 512 px but the *invisible* part grows worst at
+  small sizes: pixels under **1.5:1** against white go **1.6 % → 47.9 %** at 512 px and
+  **20.5 % → 57.5 %** at 16 px. In the montage the KW does not just lose weight, it dissolves into
+  the tile. And the two halves get closer in colour-blind vision too: normal-vision separation does
+  improve (1.01 → 1.29) and deuteranopia 0.62 → 0.69, but that gain is worthless if one half is
+  1.37:1 on the ground most hosts use.
+  **The structural fact**, worth knowing before picking again: a colour clears 3:1 on *both* white
+  and `#0d1117` only if its relative luminance sits in **[0.115, 0.300]** — a window barely wider
+  than an octave. Two colours inside that window can separate by at most **2.12:1**, so "both halves
+  legal on both grounds" and "a strong two-tone split" are in tension *by arithmetic, not by taste*.
+  Today's split is strong precisely because the blue sits outside the window, too dark for dark
+  grounds. That is the trade to make consciously; options measured so far, all keeping `#7f7fff`:
+  `#00ac4e` (status quo green: 3.00/6.32, split 1.10 — every cell ≥ 3:1, weakest split),
+  `#008c46` (4.34/4.36 — the balanced one, split 1.32), `#007a3d` (5.45/3.47 — split 1.66, green
+  starts to read as forest rather than brand), `#007038` (6.22/3.04, split 1.89, the last green that
+  still clears dark). Comparison renders: `/tmp/palette_four.png` on this machine (current /
+  proposed / green-kept / `#008c46`, each on white and on `#0d1117`) — not committed, because a
+  palette that is not decided is not an artefact.
+  **If a palette change is chosen, it is a real round, not a flag:** `gen_logo.py`'s `GREEN`/`BLUE`
+  constants and their comments, the colour-split check's expectations, every image in `icon/` and
+  `preview/`, the WCAG tables in `logo/README.md` §8 and `AGENTS.md` (three files quote these
+  numbers), `logo/AGENTS.old.md`'s historical quotes stay as they are, the tiles' `FIT` may move
+  because a different green changes the antialiasing the mask check counts — and the GitHub social
+  preview has to be re-uploaded, since the live one is today's palette, verified byte-for-byte.
 * **`--c-paint`'s `--help` text is wrong** (says `mask (default)`, claims mask ≡ solid). The
   default is `solid` and the matrix above is the truth. One-line fix in `gen_logo.py`; left
   alone in a documentation round so the code stays byte-stable while its docs are re-checked.
@@ -933,10 +981,16 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   a transcript lands here every session under a *different* name, and the root rule
   `chat_his*.jsonl` matched exactly one of them — see the 2026-10-06 incident in the root
   `AGENTS.md`, which is why this line exists.
-* **Still open, and it is a human job:** GitHub's social-preview image is a web-UI upload — the
-  REST and GraphQL APIs do not expose it (gotcha 34) — so `icon/github-social-preview.png` and
-  `icon/github-avatar-400.png` sit in the repo **until someone clicks**. Steps in
-  `README.md` §8.
+* **GitHub social preview: DONE, and verified as done (2026-10-11).** The owner clicked
+  *Settings → Social preview*; `usesCustomOpenGraphImage` is now **`true`** and
+  `openGraphImageUrl` is a `repository-images.githubusercontent.com/…` URL, and the bytes that URL
+  serves are 1280×640 and **0 of 51 681 sampled pixels differ** from
+  `icon/github-social-preview.png` — the upload is this artwork, not a re-encode of it. That closes
+  the item gotcha 34 said no script could close. What is left of it: `icon/github-avatar-400.png`
+  can still become the owner's **user profile picture** — a personal account has no org and no repo
+  avatar (a repository's picture *is* its social preview), so that one is an account setting, and
+  optional. Re-run the query in `README.md` §8 any time; if the preview is ever replaced, that's
+  what "still true" looks like.
 * **The package wiring is done (Rounds 12–13); PyPI's display of it is not measured.** The mark
   set — nine renders plus the SVG itself — now ships inside the package (`../kwcapture/icons/`) and
   `kwcapture install-desktop` puts it in the user's hicolor theme, so the artwork has a consumer
@@ -1031,8 +1085,16 @@ sweep through nine documents, and it produced the most transferable gotcha in th
   `grep -c '[PASS]'` inside the *step's own slice* of the log: the whole log had 134 PASS lines,
   because the ring-reader suite ran first, and reporting that would have been a number that happens
   to be wrong.
-* **Not done, and now correctly framed as asking rather than deciding:** the two GitHub uploads are
-  still web-UI clicks (gotcha 34); `kwcapture-mono.svg` still exists and still needs an answer about
-  what it is *for* now that nothing ships it (*Still open*); and whether the owner wants a word in a
-  16 px icon at all is a question worth asking out loud — the answer in force today is the mark with
-  an unreadable tail, and that is a decision, not an oversight.
+* **Asked, answered, closed the same day — which is what this round's lesson is for.** Round 13
+  ended by *asking* three things instead of deciding them in code, and the owner answered all three
+  within one exchange: the social preview is **uploaded and verified live** (`true`, a
+  `repository-images…` URL, 0 of 51 681 sampled pixels differing from `icon/github-social-preview.png`);
+  `kwcapture-mono.svg` is **unofficial and historical, safe to delete** — so it leaves the tree and
+  `--monogram` becomes a figure/`/tmp` tool, nothing more; and the unreadable word at 16 px is
+  **accepted with a shrug** — *"Why bother? There's no way it would be readable at that low
+  resolution"* — so the small sizes are settled and no future round may "rescue" them with other
+  artwork. The fourth answer (a palette of `#00ff00` + `#7f7fff`) is the one this round had to push
+  back on rather than apply, because measuring it showed the green is a *brightening* that fails on
+  white — the ground every tile in `icon/` is built on. It is written up under *Still open* with the
+  numbers, unapplied. That is the difference between gotcha 38 obeyed and gotcha 38 memorised: the
+  measurement goes **back** to the owner, with the awkward half included, before anything ships.

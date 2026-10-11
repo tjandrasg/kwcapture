@@ -739,10 +739,18 @@ that same token → **302 to `/login`** (the web app runs on a cookie session; a
 So no script in this repo can set it, and none pretends to (gotcha 34). Two uploads, both from
 `logo/icon/`:
 
-1. **Social preview** — <https://github.com/tjandrasg/kwcapture/settings> → *Social preview* →
-   **Edit image** → upload `github-social-preview.png` (1280×640).
-2. **Avatar** — a *repository* has no avatar of its own; only a user or org does. If the mark
-   should be the profile image, upload `github-avatar-400.png` in the org/user avatar settings.
+1. **Social preview — DONE 2026-10-11.** It was set by hand at
+   <https://github.com/tjandrasg/kwcapture/settings> → *Social preview* → **Edit image** →
+   `github-social-preview.png` (1280×640), and it is verified live (the query below): `true`, a
+   `repository-images.githubusercontent.com/…` URL, and the bytes that URL serves are the file in
+   this folder. If the mark is ever recoloured, **this is a second thing to re-do**, because GitHub
+   stores the upload — it does not re-render it from the repo.
+2. **Profile picture — optional, and there is no org.** `tjandrasg` is a **personal** account
+   (`repository { owner { __typename } }` → `User`), so there is no organisation avatar and a
+   *repository* has no avatar of its own either: a repository's picture **is** its social preview,
+   which is item 1. `github-avatar-400.png` exists in case the mark is wanted as the *user's*
+   profile picture — that is *Settings → Profile → Profile picture*, a different surface, not part
+   of this repository's settings and not covered by any check here.
 
 **Checking whether the upload landed** — the API cannot write the image, but it can read it, so
 the click is verifiable without a browser:
@@ -752,10 +760,22 @@ curl -s -X POST https://api.github.com/graphql -H "Authorization: Bearer $TOKEN"
   -H "Content-Type: application/json" -d '{"query":"{ repository(owner:\"tjandrasg\",name:\"kwcapture\") { usesCustomOpenGraphImage openGraphImageUrl } }"}'
 ```
 
-`usesCustomOpenGraphImage` is **false** today (measured 2026-10-11, after the icon set was
-pushed) and `openGraphImageUrl` still points at GitHub's generated `opengraph.githubassets.com/…`
-placeholder. Flip to `true`, with the URL changing to a `github-production-…` asset, is the proof
-the upload happened.
+**Measured 2026-10-11 after the click: `usesCustomOpenGraphImage` → `true`**, and
+`openGraphImageUrl` → `https://repository-images.githubusercontent.com/1406948211/dc44cc05-…`.
+Before the click it was `false` with GitHub's generated `opengraph.githubassets.com/…` placeholder,
+which is also what this query will show again if the image is ever removed.
+
+The check does not stop at the flag: fetch the URL and compare **pixels** with the file that was
+uploaded, because `true` only proves *an* image, not *this* one.
+
+```bash
+curl -sL -o /tmp/og_live.png "$(… openGraphImageUrl …)"      # 200, image/png
+magick identify /tmp/og_live.png logo/icon/github-social-preview.png   # 1280x640, same bytes
+# and a per-pixel comparison (PIL): 0 of 51 681 sampled pixels differ
+```
+
+Measured that way on 2026-10-11: both **1280×640, 84 565 B**, and **0 differing sampled pixels** —
+GitHub stored the artwork unchanged. That is the whole loop: click, query, fetch, compare.
 
 What *is* automatic is the README header: [`../README.md`](../README.md) opens with
 `logo/icon/kwcapture-mark-256.png`, written as an absolute `raw.githubusercontent.com` URL on
