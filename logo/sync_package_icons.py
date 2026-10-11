@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy the official mark's glyph into the Python package, and prove it did not drift.
+"""Copy the official mark into the Python package, and prove it did not drift.
 
     python3 logo/sync_package_icons.py            # write kwcapture/icons/ from logo/icon/
     python3 logo/sync_package_icons.py --check    # verify only; exit 1 on any drift
@@ -13,15 +13,17 @@ the moment the two trees disagree.
 
 What it copies, and from where:
 
-    logo/icon/glyph-<N>.png            ->  kwcapture/icons/hicolor/NxN/apps/kwcapture.png
-    logo/icon/kwcapture-mark-mono.svg  ->  kwcapture/icons/hicolor/scalable/apps/kwcapture.svg
-    (generated)                         kwcapture/icons/COPYING.md   provenance + licence
+    logo/icon/kwcapture-mark-<N>.png   ->  kwcapture/icons/hicolor/NxN/apps/kwcapture.png
+    logo/kwcapture-mark.svg            ->  kwcapture/icons/hicolor/scalable/apps/kwcapture.svg
+    (generated)                        kwcapture/icons/COPYING.md   provenance + licence
     (the `hicolor/` component is what makes them findable; it is read from `_icons.THEME`)
-    (generated)                          kwcapture/icons/COPYING.md   provenance + licence
 
-Why the **glyph** and not the full mark: a desktop icon is seen at 16-48 px and often masked;
-`APTURE` is mush below ~64 px (measured in README.md §8). The glyph is the same drawing with
-the word dropped.
+The artwork is **`kwcapture-mark.svg` and only that** — the owner's decision of 2026-10-11, and
+the permitted transforms are resize and re-render. An earlier revision of this file copied the
+monogram (`glyph-*.png`) because the word is mush below ~64 px; that measurement is now a
+*documented consequence* (README.md §8), not a licence to substitute a different drawing. If you
+find yourself pointing `plan()` at a monogram again: the owner chose the mark, and `--check`
+inside `tests/test_icons.py` is what makes such a change loud instead of silent.
 
 It writes inside `kwcapture/icons/` and nowhere else, and every file it writes is re-read and
 checked (sha256 against the source, and a PNG's own IHDR against the size in its directory
@@ -84,9 +86,13 @@ def plan(src=SRC, dest=DEST):
     disagree about where an icon goes. (They did once: the theme component `hicolor/` was
     missing, which put the files in a directory no icon lookup reads.)
     """
-    jobs = [(src / ("glyph-%d.png" % n), dest / ICONS.THEME / ("%dx%d" % (n, n))
+    # ONE artwork: `logo/kwcapture-mark.svg`, resized. The PNGs are its renders in icon/ and
+    # the scalable entry is the SVG itself. Deliberately no monogram source: the owner's rule
+    # (2026-10-11) is that the mark IS the icon and the only permitted transforms are resize
+    # and re-render, so a second drawing cannot enter the package through this file.
+    jobs = [(src / ("kwcapture-mark-%d.png" % n), dest / ICONS.THEME / ("%dx%d" % (n, n))
              / "apps" / "kwcapture.png", "%dx%d" % (n, n)) for n in SIZES]
-    jobs.append((src / "kwcapture-mark-mono.svg",
+    jobs.append((HERE / "kwcapture-mark.svg",
                  dest / ICONS.THEME / "scalable" / "apps" / "kwcapture.svg", "scalable"))
     return jobs
 
@@ -103,11 +109,15 @@ def provenance(jobs, dest=DEST) -> str:
 python3 logo/sync_package_icons.py
 ```
 
-Source of truth: `logo/` in the git repository (sketches → `gen_logo.py` →
-`logo/icon/glyph-*.png`, reviewed on `logo/icon/contact.png`) — the sdist and the wheel ship
-what it produced, not the generators. What is copied here is the **glyph** form of the
-official mark: the same drawing with the word `APTURE` dropped, because a desktop icon is seen
-at 16-48 px and that word is mush below ~64 px. The measurements are in `logo/README.md` §8.
+Source of truth: `logo/kwcapture-mark.svg` in the git repository (sketches →
+`gen_logo.py` → the mark → `logo/icon/kwcapture-mark-*.png`, reviewed on
+`logo/icon/contact.png`) — the sdist and the wheel ship what it produced, not the generators.
+
+**One artwork.** Every file here is that mark resized or re-rendered: eight PNG sizes plus one
+scalable SVG. The owner's rule (2026-10-11) allows no other variant — no monogram, no invented
+crop. It is known and accepted that `APTURE` is mush below about 64 px (`logo/README.md` §8 has
+the ladder): the mark is still the mark at 16 px, and shipping a different drawing at small
+sizes is not this package's decision to make.
 
 The directory layout is the freedesktop **hicolor** theme layout, and `kwcapture/_icons.py`
 installs it into `$XDG_DATA_HOME/icons/hicolor/...` when you run `kwcapture install-desktop`

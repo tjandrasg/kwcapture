@@ -114,6 +114,27 @@ def sync_section():
     check("sync_package_icons.py --check is clean", r.returncode == 0,
           "" if r.returncode == 0 else (out[-1] if out else "no output"))
 
+    # **One artwork.** The owner's rule (2026-10-11): the icon of kwcapture is
+    # `logo/kwcapture-mark.svg`, resized/re-rendered only — no monogram, no invented crop. This
+    # is the check that would have caught the revision that shipped the monogram: the scalable
+    # entry must be that SVG byte for byte, and every PNG must be the render of it that
+    # `logo/icon/` holds (--check above). A substitution of artwork is not "drift", so --check
+    # alone could pass it if the source paths were ever pointed somewhere else.
+    mark = REPO / "logo" / "kwcapture-mark.svg"
+    shipped_svg = REPO / "kwcapture" / "icons" / _icons.THEME / "scalable" / "apps" / "kwcapture.svg"
+    if mark.is_file() and shipped_svg.is_file():
+        import hashlib
+        h = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+        check("the scalable icon IS kwcapture-mark.svg, not a variant",
+              h(mark) == h(shipped_svg), h(shipped_svg)[:12])
+    for n in _icons.PNG_SIZES:
+        src = REPO / "logo" / "icon" / ("kwcapture-mark-%d.png" % n)
+        dst = (REPO / "kwcapture" / "icons" / _icons.THEME / ("%dx%d" % (n, n))
+               / "apps" / "kwcapture.png")
+        if src.is_file() and dst.is_file():
+            check("hicolor/%dx%d is a render of the mark" % (n, n),
+                  src.read_bytes() == dst.read_bytes())
+
 
 # -------------------------------------------------------------------------------- install
 def _rel(n: int) -> str:
@@ -395,9 +416,8 @@ def generator_section():
     src.mkdir()
     try:
         for n in _icons.PNG_SIZES:
-            shutil.copyfile(str(artwork / ("glyph-%d.png" % n)), str(src / ("glyph-%d.png" % n)))
-        shutil.copyfile(str(artwork / "kwcapture-mark-mono.svg"),
-                        str(src / "kwcapture-mark-mono.svg"))
+            shutil.copyfile(str(artwork / ("kwcapture-mark-%d.png" % n)),
+                            str(src / ("kwcapture-mark-%d.png" % n)))
 
         def run():
             return subprocess.run([sys.executable, str(script), "--src", str(src),
@@ -412,7 +432,7 @@ def generator_section():
         check("COPYING.md was generated next to them", (dest / "COPYING.md").is_file())
         before = good.read_bytes() if good.is_file() else b""
 
-        (src / ("glyph-%d.png" % _icons.PNG_SIZES[0])).write_bytes(
+        (src / ("kwcapture-mark-%d.png" % _icons.PNG_SIZES[0])).write_bytes(
             make_png(_icons.PNG_SIZES[0], _icons.PNG_SIZES[0], colour_type=2))
         r = run()
         out = r.stdout + r.stderr
@@ -420,10 +440,10 @@ def generator_section():
               out.strip().splitlines()[-1][:74] if out.strip() else "")
         check("…and the destination is untouched", good.read_bytes() == before)
 
-        (src / ("glyph-%d.png" % _icons.PNG_SIZES[0])).write_bytes(
-            (artwork / ("glyph-%d.png" % _icons.PNG_SIZES[0])).read_bytes())
+        (src / ("kwcapture-mark-%d.png" % _icons.PNG_SIZES[0])).write_bytes(
+            (artwork / ("kwcapture-mark-%d.png" % _icons.PNG_SIZES[0])).read_bytes())
         big = _icons.PNG_SIZES[-1]
-        (src / ("glyph-%d.png" % big)).write_bytes(make_png(32, 32, 6))   # wrong size
+        (src / ("kwcapture-mark-%d.png" % big)).write_bytes(make_png(32, 32, 6))   # wrong size
         r = run()
         out = r.stdout + r.stderr
         check("a wrongly-sized render is refused", r.returncode == 1 and "expected" in out,

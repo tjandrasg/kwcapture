@@ -3,27 +3,31 @@
 #
 #   cd logo && bash icon/build.sh        # needs inkscape, ImageMagick, Pillow (for card.py)
 #
+# THE RULE (owner's decision, 2026-10-11): the icon of kwcapture is `../kwcapture-mark.svg`.
+# Nothing else. No monogram, no "glyph form", no crop invented here, no second drawing — the
+# only permitted transformations are RESIZE and RE-RENDER. An earlier revision of this script
+# shipped the monogram (`glyph-*.png`, `kwcapture-mark-mono.svg`) as the icon set because the
+# word is mush below ~64 px; that was a design decision made by the build script instead of by
+# the owner, and it is reverted here. `icon/` now contains ONE artwork at many sizes.
+#
 # WHAT IS GENERATED, and why these sizes:
 #
-#   logo  (kwcapture-mark, transparent)  1024 512 256 128
-#       README headers, docs, og images. The word `APTURE` is legible down to ~64 px and
-#       mush below it (see the ladder in ../README.md) — so below 64 px nothing ships the
-#       word.
-#   glyph (kwcapture-mark-mono, transparent) 1024 512 400 256 192 180 128 64 48 32 24 16
-#       (256 is here because hicolor has a 256x256/apps directory and the desktop entry
-#       ships into it — see logo/sync_package_icons.py; every size in that list is a
-#       directory the system /usr/share/icons/hicolor/index.theme actually declares)
-#       The SAME drawing without the word: the monogram of the mark sketch, produced by
-#       `gen_logo.py --monogram --sketch kwcapture-mark-sketch.svg`. Favicons, tab icons,
-#       list icons, and anything GitHub crops to a circle (avatars) — the wide lockup loses
-#       the end of its word under a circular crop, the monogram does not.
-#   tile  (glyph on a white square; 180 is rounded) apple-touch-icon, pwa-192, pwa-512,
+#   mark (kwcapture-mark, transparent)  1024 512 256 128 64 48 32 24 16
+#       README headers, docs, og images — AND the icons: 16/24/32/48/64/128/256/512 are the
+#       directories the system /usr/share/icons/hicolor/index.theme declares, and
+#       logo/sync_package_icons.py copies these exact files into the Python package from here.
+#       Measured, and accepted by the owner rather than worked around: `APTURE` is legible at
+#       128 px, marginal at 64 and mush at 48 and below (../preview/ladder-icon.png). The mark
+#       is still the mark at 16 px.
+#   tile  (the mark on a white square; 180 is rounded) apple-touch-icon, pwa-192, pwa-512,
 #         maskable-512, github-avatar-400
-#       Apple touch icon, PWA icons, the GitHub avatar. The type is #0000ff, which is
-#       2.20:1 against GitHub's #0d1117: a transparent icon in a dark browser tab or a dark
-#       home screen loses the blue entirely. A light tile is the one-line fix that does not
-#       require deciding the open dark-mode recolour question.
-#   favicon.ico  16 24 32 48 64          browsers that still ask for .ico
+#       The tile is a GROUND, not a different drawing: the type is #0000ff, which is 2.20:1
+#       against GitHub's #0d1117 and 8.59:1 on white, while the green is 6.32:1 / 3.00:1 — a
+#       light ground is the only one where both halves clear 3:1. maskable keeps the 80% safe
+#       zone; the avatar is the mark resized into 400x400 with no crop: GitHub's circular mask
+#       clips 9.1% of its ink (measured, worst 45.6 px beyond the inscribed circle of 200) and
+#       that is the host's masking, not a licence to ship another artwork.
+#   favicon.ico  16 24 32 48 64          browsers that still ask for .ico, built from the mark
 #   github-social-preview.png 1280x640   Settings -> Social preview (card.py)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -37,22 +41,22 @@ inkx() { inkscape "$@" >/dev/null 2>&1; }
 FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
 
 # ---------------------------------------------------------------- source artefacts exist
-for f in "$L/kwcapture-mark.svg" kwcapture-mark-mono.svg; do
+for f in "$L/kwcapture-mark.svg"; do
   [ -f "$f" ] || { echo "missing $f"; exit 1; }
 done
 
-# -------------------------------------------------------------------------------- logo
-for n in 1024 512 256 128; do
+# ---------------------------------------------------------------------------------- mark
+# ONE artwork, many sizes. 16/24/32/48/64/128/256/512 == the hicolor directories declared by
+# /usr/share/icons/hicolor/index.theme; 1024 is the docs/header master the tiles downscale from.
+for n in 1024 512 256 128 64 48 32 24 16; do
   inkx "$L/kwcapture-mark.svg" -o "kwcapture-mark-$n.png" -w "$n" -h "$n"
 done
 
-# ------------------------------------------------------------------------------- glyph
-for n in 1024 512 400 256 192 180 128 64 48 32 24 16; do
-  inkx "kwcapture-mark-mono.svg" -o "glyph-$n.png" -w "$n" -h "$n"
-done
+# Nothing here renders a monogram. If a future round wants one, it is a conversation with the
+# owner first (THE RULE in ../AGENTS.md), not a line in this script.
 
 # --------------------------------------------------------------- tiles (dark-safe)
-# white square + centred glyph, in Pillow, which verifies its own output and exits 1 if a
+# white square + centred mark, in Pillow, which verifies its own output and exits 1 if a
 # tile comes out blank or grey. (ImageMagick was tried first: `magick a.png b.png -gravity
 # center -composite` returned a blank grey canvas here in every variation — white base,
 # xc:none base, `magick composite`, `-layers flatten`, `-type TrueColor` — while reporting
@@ -60,7 +64,8 @@ done
 python3 tiles.py
 
 # --------------------------------------------------------------------------- favicon.ico
-magick glyph-16.png glyph-24.png glyph-32.png glyph-48.png glyph-64.png \
+magick kwcapture-mark-16.png kwcapture-mark-24.png kwcapture-mark-32.png \
+  kwcapture-mark-48.png kwcapture-mark-64.png \
   -define icon:auto-resize=16,24,32,48,64 favicon.ico
 
 # ----------------------------------------------------------------------- social preview
@@ -84,4 +89,28 @@ echo
 #   * width specifiers like `%-28f` are not supported by this ImageMagick (it prints `28f` and
 #     warns `unknown image property "%-"`). Align with awk above, not with the format string.
 magick identify -format '  %f  %wx%h  %[type]  %b\n' \
-  favicon.ico github-social-preview.png github-avatar-400.png apple-touch-icon.png glyph-16.png
+  favicon.ico github-social-preview.png github-avatar-400.png apple-touch-icon.png \
+  kwcapture-mark-16.png kwcapture-mark-512.png
+# …and the guard that the set is ONE artwork: every mark PNG must be a render of the same SVG,
+# checked PIXEL-wise against a fresh render (not byte-wise: the `-strip` re-encode above changes
+# the bytes while keeping the pixels). A hand-swapped or monogram file fails the build here.
+python3 - <<'PY'
+import subprocess, sys, tempfile
+from pathlib import Path
+from PIL import Image
+here = Path(".").resolve()
+src = here.parent / "kwcapture-mark.svg"
+bad = []
+for n in (1024, 512, 256, 128, 64, 48, 32, 24, 16):
+    f = here / ("kwcapture-mark-%d.png" % n)
+    with tempfile.TemporaryDirectory() as td:
+        ref = Path(td) / "ref.png"
+        subprocess.run(["inkscape", str(src), "-o", str(ref), "-w", str(n), "-h", str(n)],
+                       check=True, capture_output=True)
+        a, b = Image.open(f).convert("RGBA"), Image.open(ref).convert("RGBA")
+        if a.size != b.size or a.tobytes() != b.tobytes():
+            bad.append(f.name)
+print("  %s" % ("all nine mark PNGs are pixel-identical to a fresh render of kwcapture-mark.svg"
+                if not bad else "NOT renders of kwcapture-mark.svg: %s" % ", ".join(bad)))
+sys.exit(1 if bad else 0)
+PY

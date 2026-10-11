@@ -2,14 +2,21 @@
 """Build icon/contact.png — one sheet showing what every shipped icon actually looks like,
 on the ground it will be seen on, at (or scaled from) its shipped size.
 
-This exists because a list of filenames is not a review. Two things it settles by showing:
-  * the circular crop GitHub applies to an avatar: the monogram keeps all its ink inside the
-    circle, which is why github-avatar-400.png is the glyph and not the wide lockup;
+This exists because a list of filenames is not a review. It is also the sheet that catches
+*this* class of mistake: an icon set that quietly stopped being one artwork. Every cell here is
+the same mark — `../kwcapture-mark.svg` — resized, on a ground; there is no monogram cell, and
+adding one would be the owner's decision, not a build step's.
+
+Two things it settles by showing:
+  * the circular crop GitHub applies, and that the avatar's 81 % artwork survives it with zero
+    ink lost (the previous revision claimed a circular crop "amputates TURE" and answered that by
+    shipping the monogram. Measured at full bleed it does lose 4 015 px / 45.6 px overshoot — and
+    the fix was the scale, not a second drawing: `tiles.py` asserts zero clipped ink);
   * the grounds. Blue #0000ff is 2.20:1 against GitHub's #0d1117 — under the 3:1 WCAG figure
     for graphical objects — while the green is 6.32:1 there. On white it is the green that is
     borderline (3.00:1) and the blue that is strong (8.59:1). No ground wins both, so the
-    shipped icons pick the *light* tile (both halves clear 3:1) and the transparent renders
-    stay available for hosts that want them.
+    tiled icons pick the *light* ground (both halves clear 3:1) and the transparent renders
+    stay in the set for hosts that want them.
 
     python3 logo/icon/contact.py
 """
@@ -26,10 +33,10 @@ COLS = 6
 
 # (file, label, ground, display size, circular crop?)
 CARDS = [
-    ("kwcapture-mark-256.png", "logo 256 · light", LIGHT, 140, False),
-    ("kwcapture-mark-128.png", "logo 128 · GitHub dark", DARK, 128, False),
-    ("glyph-64.png", "glyph 64 · GitHub dark", DARK, 64, False),
-    ("glyph-32.png", "favicon 32 · 1:1", DARK, 32, False),
+    ("kwcapture-mark-256.png", "mark 256 · light", LIGHT, 140, False),
+    ("kwcapture-mark-128.png", "mark 128 · GitHub dark", DARK, 128, False),
+    ("kwcapture-mark-64.png", "mark 64 · GitHub dark", DARK, 64, False),
+    ("kwcapture-mark-32.png", "mark 32 · favicon size", DARK, 32, False),
     ("github-avatar-400.png", "avatar 400 · tiled, circle crop", DARK, 140, True),
     ("apple-touch-icon.png", "apple-touch 180 · tiled, 1:1", DARK, 180, False),
 ]

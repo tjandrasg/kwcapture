@@ -1,17 +1,22 @@
 """Brand icons for the desktop entry this package installs.
 
 The artwork is **generated**, never hand-placed: `logo/` upstream is the source of truth and
-`logo/sync_package_icons.py` copies the glyph of the official mark into the package under
+`logo/sync_package_icons.py` copies the official mark into the package under
 `kwcapture/icons/hicolor/<size>/apps/kwcapture.png` (plus the scalable SVG), byte for byte.
 Nothing here rasterises or resamples anything, so an installed icon is bit-identical to the
 artwork that was reviewed in `logo/icon/contact.png`.
 
 Three decisions worth knowing before you change this file:
 
-* **Why the glyph and not the full mark:** a desktop icon is seen at 16-48 px and often
-  masked to a circle or a squircle. `APTURE` is mush below ~64 px (measured,
-  `logo/README.md` §8), so small sizes ship the glyph — the *same* drawing with the word
-  dropped, not a second logo.
+* **One artwork, by the owner's decision (2026-10-11):** the icon of kwcapture is
+  `logo/kwcapture-mark.svg` and nothing else — the permitted transforms are resize and
+  re-render, so what you install at 16 px is the same mark as at 512 px. Measured and
+  deliberately accepted: `APTURE` is mush below ~64 px (`logo/README.md` §8 has the ladder),
+  and an earlier revision of this module shipped a **monogram** instead at small sizes because
+  of it. That was the build script making a design decision that belonged to the owner; it is
+  reverted, and `tests/test_icons.py` now asserts every shipped file is the mark. Do not "fix"
+  the small sizes by substituting a different drawing — the fix, if one is ever wanted, is a new
+  mark from the owner.
 * **Why the name in `Icon=` is resolved when the entry is written, and never hard-coded:**
   installing icons is done by `kwcapture install-desktop` / `setup`, not by the automatic
   first-capture path, so the entry must still look right on a machine where nothing was ever
