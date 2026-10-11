@@ -727,7 +727,13 @@ know.
   boring kind that survives these bumps: **one artifact, named `dist`, uploaded with `path: dist/*`
   and downloaded by that same name** — none of the same-name multi-artifact merging or `pattern`
   globbing that made the v4→v5 jump break people. What CI did **not** prove: `ci.yml` never runs
-  `release.yml`, so the first real exercise of these two steps is the **next `v*` tag**. If the
+  `release.yml`, so `release.yml` was rehearsed as PR #2 was — `workflow_dispatch` at `main` with
+  `publish: false` (run **38132030536**): manylinux wheels built, smoke test passed,
+  **`Run actions/upload-artifact@v7 → success`**, and the `publish` job **skipped** by its own `if:`
+  (it needs `publish: true`), which is also why nothing went near PyPI. That leaves
+  **`download-artifact@v8` still unexercised** — it exists only inside `publish`, so its first real
+  run is the next `v*` tag (or a dispatch with `publish: true` once the PyPI trusted publisher is
+  configured). If the
   `pypi` job then cannot find `dist/`, that is this bump — the release assets are already attached by
   that point, so the fix is to re-run the job (or pin those two lines back), not to panic mid-release.
 * **First cycle (2026-10-09):** PR #2 grouped checkout v4→v7, setup-python v5→v7,
