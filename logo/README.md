@@ -29,7 +29,7 @@ from memory — which is the house style for a reason you will meet in
 |---|---|
 | ![the full logo](preview/kwcapture-512.png) | **`kwcapture.svg`** — the logo. Original monogram + `APTURE` at −38°. `python3 gen_logo.py` |
 | ![the mark](preview/kwcapture-mark-512.png) | **`kwcapture-mark.svg`** — the redrawn, geometric monogram + `APTURE` fitted into a helper box and stretched ×1.753 across the baseline. `python3 gen_logo.py --mark` |
-| ![the monogram](preview/kwcapture-mono-512.png) | **`kwcapture-mono.svg`** — the bare monogram, two-tone, for favicons and ≤64 px. `python3 gen_logo.py --monogram` |
+| ![the monogram](preview/kwcapture-mono-512.png) | **`kwcapture-mono.svg`** — the bare monogram, two-tone. A generator artefact and a measurement in the ladder below, **not an icon**: the shipped icon is `kwcapture-mark.svg` at every size (owner's rule, §8). `python3 gen_logo.py --monogram` |
 
 Palette: `#00ac4e` (the monogram half: the K's stem and the W) and `#0000ff` (the word half:
 the C, the pointer-A, `PTURE`). Both flat, no gradient since 2026-10-10 — `--classic` brings
@@ -70,9 +70,9 @@ logo/
 ├── sync_package_icons.py       TOOL    icon/ -> ../kwcapture/icons/ (byte-for-byte) + --check
 │
 ├── icon/                       SHIPPED  the official icon set (see icon/build.sh)
-│   ├── kwcapture-mark-mono.svg         the glyph form of the mark (same drawing, no word)
-│   ├── kwcapture-mark-{1024,512,256,128}.png     the logo, transparent
-│   ├── glyph-{1024,512,400,256,192,180,128,64,48,32,24,16}.png   the glyph, transparent
+│   ├── kwcapture-mark-{1024,512,256,128,64,48,32,24,16}.png   ONE artwork: the mark, transparent
+│   │       (16…512 are the hicolor sizes the package installs; 1024 is the docs master)
+│   │       no monogram file lives here — see §8, "one artwork"
 │   ├── favicon.ico  apple-touch-icon.png  pwa-{192,512}.png  maskable-512.png
 │   ├── github-avatar-400.png  github-social-preview.png (1280×640)  contact.png (the sheet §8 shows)
 │   ├── build.sh                        rebuilds the whole set in one command
@@ -603,7 +603,8 @@ done
 ![kwcapture.svg down the ladder](preview/ladder-kwcapture.png)
 
 `APTURE` stops being readable around **128 px** and is gone by 64 — that is not a bug in the
-render, it is the argument for the other two files:
+render, and since 2026-10-11 it is a *documented consequence* rather than a reason to substitute
+a different drawing. Read it as the measurement it is:
 
 ![kwcapture-mono.svg down the ladder](preview/ladder-mono.png)
 
@@ -611,7 +612,7 @@ render, it is the argument for the other two files:
 |---|---|
 | ≥ 256 px | `kwcapture.svg` (docs header, README, og image) |
 | 128–256 px | `kwcapture-mark.svg` — the box-fitted type survives here best |
-| ≤ 64 px | a glyph and nothing else: `icon/kwcapture-mark-mono.svg` for the shipped set (§8), `kwcapture-mono.svg` if you want the *original* drawing's monogram. A favicon with `APTURE` is mush |
+| ≤ 64 px | still `kwcapture-mark.svg` — the owner's rule (§8): one artwork, resized. The word is mush there and that is accepted; a monogram is **not** a small-size fallback |
 
 ### Icons
 
@@ -621,7 +622,7 @@ throwaway versions, for an icon you want in `/tmp` in ten seconds:
 
 ```bash
 # favicon / app icon — ImageMagick does the sizes; -background none keeps it transparent
-magick -background none logo/kwcapture-mono.svg \
+magick -background none logo/kwcapture-mark.svg \
        -define icon:auto-resize=16,32,48,64,128,256 /tmp/kwcapture.ico
 # social card: 1200x630 exactly (note -extent: -resize alone would give you 630x630)
 magick -background none logo/kwcapture.svg -resize 630x630 \
@@ -632,16 +633,26 @@ Verified: the `.ico` comes out with all six sizes; the card is 1200×630. **Do n
 for an `.ico`** — it exits 0 and writes no file at all. An icon that silently does not exist is
 the same species of bug as a check that silently does not run: the exit code is not the result.
 
-Build them from the **same** drawing the header uses: the shipped set settled that on 2026-10-11
-by taking the glyph from the *mark* sketch (§8), so the favicon, the avatar and the README header
-are one drawing. `kwcapture-mono.svg` — the original sketch's monogram — stays as the other
-version of it, and `AGENTS.md` still carries the "two monograms" item.
+Build them from the **same** drawing the header uses. Since 2026-10-11 that is not advice but a
+rule with a check behind it: the icon of kwcapture is `kwcapture-mark.svg`, the permitted
+transforms are resize and re-render, and `tests/test_icons.py` asserts every file shipped inside
+the package is that mark (`AGENTS.md` still carries the "two monograms" item as design history,
+not as an icon menu).
 
 ## 8. The official icon set — `icon/`
 
-On 2026-10-11 the owner chose **`kwcapture-mark.svg`** as the logo of the project. A logo is not
-an icon, so `icon/` holds the formats the hosts actually ask for — GitHub's social preview and
-avatar, a `.ico` favicon, Apple touch, PWA — and one command rebuilds every one of them:
+On 2026-10-11 the owner chose **`kwcapture-mark.svg`** as the logo of the project — and, in the
+same breath, as its **icon**. So `icon/` holds that one artwork in the formats hosts ask for (a
+`.ico`, Apple touch, PWA, GitHub's avatar and social card), plus its renders at every size the
+freedesktop theme declares, and one command rebuilds all of them:
+
+> **One artwork, two grounds, many sizes — that is the whole set.** No monogram, no "glyph form",
+> no crop invented here. The only permitted transformations are **resize** and **re-render**. An
+> earlier revision of this directory shipped `glyph-*.png` (the mark's monogram) as the small-size
+> icon because `APTURE` is mush below ~64 px; that decision belonged to the owner, not to a build
+> script, and it is reverted. The files are deleted (`git log --diff-filter=D -- logo/icon/`
+> recovers them if a *document* ever needs the comparison).
+
 
 ```bash
 cd logo && bash icon/build.sh      # inkscape + ImageMagick + Pillow; writes into icon/ only
@@ -651,46 +662,43 @@ cd logo && bash icon/build.sh      # inkscape + ImageMagick + Pillow; writes int
 
 | file | what it is for | built by |
 |---|---|---|
-| `../kwcapture-mark.svg` | **the logo** — the source of everything below | `gen_logo.py --mark` |
-| `kwcapture-mark-mono.svg` | **the glyph form**: the same drawing with the word dropped | `gen_logo.py --monogram --sketch kwcapture-mark-sketch.svg` |
+| `../kwcapture-mark.svg` | **the logo and the icon** — the source of everything below, and copied verbatim into the package as the scalable entry | `gen_logo.py --mark` |
 | `kwcapture-mark-{1024,512,256,128}.png` | README headers, docs, og images — anywhere ≥ 128 px | `icon/build.sh` |
-| `glyph-{1024,512,400,256,192,180,128,64,48,32,24,16}.png` | tab icons, list icons, any small or masked slot — and the eight sizes that ship inside the Python package (§8, *Into the Python package*) | `icon/build.sh` |
+| `kwcapture-mark-{64,48,32,24,16}.png` | the small sizes — **the same mark**, and the eight PNGs (16…512) that ship inside the Python package (*Into the Python package*, below) | `icon/build.sh` |
 | `favicon.ico` (16/24/32/48/64) | browsers that still ask for `.ico` | `icon/build.sh` |
 | `apple-touch-icon.png` (180, rounded) | iOS home screen (it masks again, which is fine) | `icon/tiles.py` |
 | `pwa-192.png`, `pwa-512.png`, `maskable-512.png` | a PWA manifest; `maskable-512` keeps the 80 % safe zone | `icon/tiles.py` |
-| `github-avatar-400.png` | **GitHub avatar** — org/profile image, cropped to a circle | `icon/tiles.py` |
+| `github-avatar-400.png` | **GitHub avatar** — org/profile image. The mark at 79 % of the tile, so GitHub's circular mask clips **zero** ink | `icon/tiles.py` |
 | `github-social-preview.png` | **GitHub social preview**, 1280×640, 83 KB (the limit is 1 MB) | `icon/card.py` |
 | `contact.png` | the review sheet above | `icon/contact.py` |
 
-Nothing here is hand-made. `build.sh` refuses to run if a source SVG is missing, and each Python
-builder checks its own output: `tiles.py` fails on a blank or greyscale tile, `card.py` measures
-every string with `font.getlength()` and asserts nothing reached the right edge. That assert is
-not decoration — the first `card.py` hard-coded font sizes and printed `wrote … 1280x640` over a
-card whose tagline ran off the canvas. **A success message is not a check** (gotcha 24, met a
-third time in this round).
+Nothing here is hand-made, and nothing here is a second drawing either: `build.sh` ends by
+re-rendering `../kwcapture-mark.svg` at all nine sizes and comparing **pixels** against the files
+it just built, so a hand-swapped or monogram file fails the build. Each Python builder verifies
+its own output too: `tiles.py` fails on a blank or greyscale tile *and* on any tile whose artwork
+the host's mask would clip, `card.py` measures every string with `font.getlength()` and asserts
+nothing reached the right edge. That last assert is not decoration — the first `card.py`
+hard-coded font sizes and printed `wrote … 1280x640` over a card whose tagline ran off the
+canvas. **A success message is not a check** (gotcha 24, met a third time in this round).
 
-### Why the set splits logo / glyph / tile
+### One artwork, two grounds — and what that costs
 
-Two measurements decided it, not taste.
+**The word dies at 64 px.** Rendered, not guessed (`bash preview/build.sh` makes this figure —
+the bottom row is the monogram, shown as the *measurement*, and it is not in the shipped set):
 
-**The word dies at 64 px.** Rendered, not guessed (`bash preview/build.sh` makes this figure):
-
-![mark and glyph down to favicon size](preview/ladder-icon.png)
+![the mark's legibility ladder, with the monogram as the control](preview/ladder-icon.png)
 
 `APTURE` is legible at 128 px, marginal at 64 — you can just resolve it — and mush at 48 and
-below. So nothing below 64 px ships the word; it ships the glyph, and the glyph is the *same
-drawing*, not a second design:
+below. What the set does about that is **nothing**: it ships the mark anyway, because the owner
+chose the mark and the only permitted transforms are resize and re-render. The honest statement
+of the trade is: at 16 px the icon reads as the monogram with an unreadable tail, which is a
+branding cost the project accepts rather than one a build script may cover up by substituting a
+different drawing. (The previous revision did exactly that, and the files it shipped —
+`glyph-*.png`, `kwcapture-mark-mono.svg` — are deleted here; `git log --diff-filter=D --
+logo/icon/` finds them if a document ever needs the comparison again.)
 
-```bash
-cd logo && python3 gen_logo.py --monogram \
-           --sketch kwcapture-mark-sketch.svg --out icon/kwcapture-mark-mono.svg
-```
-
-The `--sketch`/`--out` literal-path trap (§4.5) applies, so cwd must be `logo/`. Verified
-2026-10-11: that command reproduces `icon/kwcapture-mark-mono.svg` **byte-identically** (`cmp`),
-and `validate_logo.py` prints **OK** on it (colour split 100 % on ink, render 42.3 % blue).
-
-**No ground wins both colours.** WCAG relative luminance, computed from the two hex values:
+**No ground wins both colours**, and this is where a *ground* (not a variant) does the work.
+WCAG relative luminance, computed from the two hex values:
 
 | | against GitHub dark `#0d1117` | against white |
 |---|---|---|
@@ -704,10 +712,22 @@ entirely") was struck from `build.sh` after the dark contact sheet disproved it.
 is the only ground where **both** halves clear 3:1, and a square is what iOS, PWA and avatar
 slots want anyway. The transparent renders stay in the set for hosts that want them.
 
-**Why the avatar is the glyph and not the logo:** GitHub crops avatars to a circle, and the
-mark's word runs out to the right edge of the artboard — a circular crop amputates `TURE`. The
-monogram keeps all its ink inside the circle. That comparison is exactly what `contact.png`
-exists to show, and it settles by looking what a filename list cannot.
+**The masks, measured instead of feared.** The old reason for shipping a monogram was "GitHub
+crops avatars to a circle and a circular crop amputates `TURE`". Both halves of that were
+measured on 2026-10-11, and the answer is a **scale**, not a second logo:
+
+| the mark on a 400 px tile | ink lost to the inscribed circle |
+|---|---|
+| full bleed (400 px) | **4 015 px**, worst 45.6 px beyond the circle |
+| 81 % (324 px) | 3 px of resampling halo, 0.9 px overshoot |
+| **79 % (316 px)** | **0 px** — nothing clipped |
+
+The lockup's ink is wide but its corners are empty, so it fits a circle better than its bounding
+box suggests (the box alone implies 63 %). `tiles.py` uses `FIT = 0.79` for every masked tile and
+**fails the build** if any ink lands under the mask, so if the mark, the resampler or the tile
+maths ever change, this stops being true loudly. `maskable-512` is additionally capped by its
+80 % safe zone. `contact.png` shows the avatar with the circle applied — review it, don't reason
+about filenames.
 
 ### Setting them on GitHub
 
@@ -746,18 +766,21 @@ purpose, because PyPI renders the same README and does not resolve repo-relative
 ```bash
 cd logo
 python3 gen_logo.py --mark && python3 validate_logo.py kwcapture-mark.svg
-python3 gen_logo.py --monogram --sketch kwcapture-mark-sketch.svg \
-        --out icon/kwcapture-mark-mono.svg
-bash icon/build.sh          # every size, tile, .ico, card, and the contact sheet
+bash icon/build.sh          # every size, tile, .ico, card, contact sheet + the one-artwork guard
+python3 ../logo/sync_package_icons.py    # and into the package (see below)
 ```
+
+`build.sh` has no monogram step any more — deliberately: if you need a monogram for a *figure*,
+render one to `/tmp` with `gen_logo.py --monogram --sketch kwcapture-mark-sketch.svg`, which is
+what `preview/build.sh` does for the ladder. Nothing monogram-shaped belongs in `icon/`.
 
 Then open `icon/contact.png` and *look at it* before committing. The sheet is the review; the
 exit codes only tell you the tools were awake.
 
 ### Into the Python package — `sync_package_icons.py`
 
-The glyph set does not stop in this directory. The package whose desktop entry needs an icon ships
-it, and one command is the **only** sanctioned writer of that tree:
+The mark does not stop in this directory. The package whose desktop entry needs an icon ships it,
+and one command is the **only** sanctioned writer of that tree:
 
 ```bash
 python3 logo/sync_package_icons.py            # icon/ -> ../kwcapture/icons/ (+ COPYING.md)
@@ -767,15 +790,19 @@ make icons                                    # the same, through the Makefile
 
 | in `logo/icon/` | → `../kwcapture/icons/` | installed by `kwcapture install-desktop` into |
 |---|---|---|
-| `glyph-<N>.png`, N = 16 24 32 48 64 128 256 512 | `hicolor/<N>x<N>/apps/kwcapture.png` | `$XDG_DATA_HOME/icons/hicolor/<N>x<N>/apps/` |
-| `kwcapture-mark-mono.svg` | `hicolor/scalable/apps/kwcapture.svg` | the same, scalable |
+| `kwcapture-mark-<N>.png`, N = 16 24 32 48 64 128 256 512 | `hicolor/<N>x<N>/apps/kwcapture.png` | `$XDG_DATA_HOME/icons/hicolor/<N>x<N>/apps/` |
+| `../kwcapture-mark.svg` (not in `icon/` — the logo itself) | `hicolor/scalable/apps/kwcapture.svg` | the same, scalable |
 | — | `COPYING.md` | nowhere: it is licence text for the tree, not an icon |
 
 Three rules make that copy worth trusting, and each of them is a check rather than an intention:
 
-* **a copy, never a resample** — the bytes in the wheel are the bytes reviewed in `contact.png`;
-  the sizes exist because `/usr/share/icons/hicolor/index.theme` declares those directories, which
-  is also why `glyph-256.png` had to be added for this (`AGENTS.md` gotcha 37);
+* **a copy, never a resample, and never a different drawing** — the bytes in the wheel are the
+  bytes reviewed in `contact.png`; the sizes exist because
+  `/usr/share/icons/hicolor/index.theme` declares those directories, which is why the mark is now
+  rendered at 16/24/32/48/64 as well as from 128 up (`AGENTS.md` gotcha 37). What they are a
+  render *of* is fixed too: `plan()` reads `kwcapture-mark-<N>.png` and `kwcapture-mark.svg`, and
+  `tests/test_icons.py` compares the shipped scalable SVG against `logo/kwcapture-mark.svg` byte
+  for byte, so substituting artwork is caught rather than trusted;
 * **one source for the size list** — it is read out of `kwcapture/_icons.py` itself, so the
   generator and the installer cannot disagree about which sizes exist;
 * **`--check` runs somewhere other than the machine that made the copy** — `tests/test_icons.py`

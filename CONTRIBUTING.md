@@ -67,11 +67,16 @@ verify frames either** (see below), so your laptop is not uniquely disqualified.
   protocol against a synthetic ring: invalid descriptors, torn frames, a concurrent writer,
   bounds-checking of frame geometry before it becomes an offset. This is real coverage of the
   zero-copy read path and it runs anywhere.
-* **Also no compositor, and no KDE either:** `tests/test_icons.py` — 89 checks of the brand icons
+* **Also no compositor, and no KDE either:** `tests/test_icons.py` — 98 checks of the brand icons
   and the desktop entry. Everything writes into a scratch `$XDG_DATA_HOME`, it never touches your
   real `~/.local/share`, and it never pokes a live KDE service cache. Packaging changes are
   covered here: `MANIFEST.in`, `pyproject.toml`'s package-data globs and the
-  `logo/icon/` → `kwcapture/icons/` sync are exactly what this suite notices first.
+  `logo/icon/` → `kwcapture/icons/` sync are exactly what this suite notices first. It also
+  enforces the artwork rule: the scalable icon must be `logo/kwcapture-mark.svg` byte for byte and
+  every shipped PNG must be that mark's render of the size its directory promises — so a PR that
+  swaps in a different drawing (a monogram, a crop, a "better at 16 px" variant) fails here rather
+  than shipping. If you believe such a variant is needed, open an issue with the measurement; do
+  not change the artwork in a build script.
 * **Nested compositor, no monitor / GPU / login session:**
   `dbus-run-session -- bash probe/nested_kwin_test.sh` starts `kwin_wayland --virtual` inside a
   private D-Bus session, puts a client window in it and drives a full capture against it (~6 s on

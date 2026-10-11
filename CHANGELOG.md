@@ -3,13 +3,16 @@
 ## Unreleased
 
 The desktop entry this package writes finally names an icon that **exists**, and the artwork
-behind it ships inside the package instead of being re-drawn by whoever packages it. No capture
-code changed, nothing here runs at import time, and nothing here can make a screenshot slower.
+behind it ships inside the package instead of being re-drawn by whoever packages it. The artwork
+is **`logo/kwcapture-mark.svg` and only that**: the icon is the official mark at every size, and
+the permitted transformations are resize and re-render (see the second bullet — this round
+started out shipping a different drawing and was corrected). No capture code changed, nothing
+here runs at import time, and nothing here can make a screenshot slower.
 
-- **New `kwcapture/_icons.py`; the icons now ship in the wheel.** The **glyph** form of
-  `logo/kwcapture-mark.svg` — the same drawing with `APTURE` dropped, because the word is mush
-  below ~64 px — at 16/24/32/48/64/128/256/512 plus a scalable SVG, laid out as the freedesktop
-  **hicolor** theme (`kwcapture/icons/hicolor/<size>/apps/kwcapture.png`), with a `COPYING.md`
+- **New `kwcapture/_icons.py`; the icons now ship in the wheel.** The **official mark** —
+  `logo/kwcapture-mark.svg` — at 16/24/32/48/64/128/256/512 plus that same SVG as the scalable
+  entry, laid out as the freedesktop **hicolor** theme
+  (`kwcapture/icons/hicolor/<size>/apps/kwcapture.png`), with a `COPYING.md`
   beside them: the pictures are CC BY 4.0, the code MIT, and an installed tree now says which is
   which where a reader will actually see it. Stdlib only — the PNG IHDR is read by hand — so no
   Pillow and no import-time work. **10 files in the wheel and 10 in the sdist**, measured by
@@ -45,17 +48,29 @@ code changed, nothing here runs at import time, and nothing here can make a scre
   set is a note, **never** a problem count: branding must not make a working capture look broken.
   Verified on the target desktop: 9 files installed, all three entries `Icon=kwcapture`,
   `desktop-file-validate` silent.
+- **The icon is the mark, at every size — the owner's decision, and it is now enforced.** An
+  earlier revision of this work reasoned that a desktop icon is seen at 16-48 px, that `APTURE`
+  is mush below ~64 px, and therefore shipped the **monogram** (`glyph-*.png`,
+  `kwcapture-mark-mono.svg`). That was a build script making a branding decision that belongs to
+  the owner. Reverted: `logo/icon/` renders the mark at nine sizes (16…1024) and nothing else,
+  `sync_package_icons.py` copies those plus `logo/kwcapture-mark.svg`, and the monogram files are
+  deleted. The consequence is documented instead of dodged — at 16 px the word is unreadable.
+  Tiles changed with it: the mark sits at **79 %** of a masked tile, measured as the largest
+  fraction that loses no ink under the host's mask (full bleed loses **4 015 px, worst 45.6 px
+  past the inscribed circle**; at 79 %, zero), and `tiles.py` fails the build if that stops being
+  true. `tests/test_icons.py` gained 9 checks: the scalable icon must be `kwcapture-mark.svg`
+  byte for byte and every PNG must be that mark's render of its size — **98 checks now**.
 - **`logo/sync_package_icons.py` is now the only sanctioned path from `logo/icon/` into the
   package**: a byte-for-byte copy that never resamples, with `--check` for drift, reading the
   size list out of `_icons.PNG_SIZES` so the two trees cannot disagree about which sizes exist.
-  `logo/icon/glyph-256.png` was added for it — hicolor declares a `256x256/apps` directory, and
-  every shipped size is one `/usr/share/icons/hicolor/index.theme` actually lists. The test suite
-  runs `--check`, so "the desktop icon is last month's render" fails a build, in CI as well as
-  on the machine that made the change.
+  Every shipped size is a directory `/usr/share/icons/hicolor/index.theme` actually lists — so
+  the mark is now rendered at 16/24/32/48/64 too, where it previously existed only from 128 up.
+  The test suite runs `--check`, so "the desktop icon is last month's render" fails a build, in
+  CI as well as on the machine that made the change.
 - **Packaging:** `MANIFEST.in` and `[tool.setuptools.package-data]` carry `kwcapture/icons/` into
   sdist and wheel — **one glob per theme directory** (`icons/hicolor/*/apps/*`), because
   setuptools globs do not cross `/`, which a `icons/**`-style pattern quietly fails to do.
-- **`tests/test_icons.py`: 89 checks, no compositor needed**, now a CI step next to the
+- **`tests/test_icons.py`: 98 checks, no compositor needed**, now a CI step next to the
   ring-reader suite — and `probe/sabotage_icons.sh`, which breaks each guard in turn, restores it
   and compares the outcome with what it expected: **10/10 detected** here, clean tree green. It
   covers the awkward ones deliberately: a *stale* file counts as missing; uninstall cannot delete

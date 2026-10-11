@@ -225,14 +225,18 @@ $XDG_DATA_HOME/icons/hicolor/scalable/apps/kwcapture.svg
 
 Nine files, copied byte-for-byte out of the package (`kwcapture/icons/`, generated from
 [`logo/`](logo) — see [`logo/README.md`](logo/README.md) §8), never re-rasterised at install time.
-They are the **glyph** — the same drawing as the logo with the word dropped — because
-`APTURE` is mush below ~64 px, and they are the ones with alpha, because an opaque square behind
-the mark on a dark panel is a bug people see.
+
+**It is one artwork: [`logo/kwcapture-mark.svg`](logo/kwcapture-mark.svg), resized.** That is the
+project's official mark and the only thing this package ships as an icon — no monogram, no crop,
+no "small-size variant"; the permitted transformations are resize and re-render, at 16 px as much
+as at 512. What that costs is documented rather than worked around: `APTURE` is mush below about
+64 px (the ladder in [`logo/README.md`](logo/README.md) §8 shows it), so at favicon size the mark
+reads as the monogram plus an unreadable tail. The renders carry alpha, because an opaque square
+behind the mark on a dark panel is a bug people see.
 
 Two things worth knowing, both measured rather than assumed:
 
-* **The `Icon=` name in the desktop entry is resolved on your machine, when the entry is
-  written.** If these icons are installed the name is `kwcapture`; if they are not, it is the
+* **The name in `Icon=` is resolved on your machine, when the entry is written.** If these icons are installed the name is `kwcapture`; if they are not, it is the
   first name that actually resolves in an installed theme (`accessories-screenshot-tool` on
   KDE, `applets-screenshooter` on GTK naming). A `;` fallback chain is **not** a thing here:
   GLib and KService both take the whole `Icon=` value as one name, so `Icon=a;b` resolves to
@@ -621,7 +625,7 @@ kwcapture/
   native/include/kwcapture_shm.h   shared-memory protocol (asserted on both sides)
 tests/test_kwcapture.py  165 functional checks, live Plasma required (also `pytest tests/`)
 tests/test_ring_reader.py 37 checks of the shm protocol — no compositor needed
-tests/test_icons.py      89 checks of the icons + the desktop entry — no compositor needed
+tests/test_icons.py      98 checks of the icons + the desktop entry — no compositor needed
 bench.py                 comparison against mss and PIL.ImageGrab
 probe/                   experiments: nested-KWin headless test, Wayland global dumper,
                          non-normal-window enumeration (probe/non_normal_windows.py), etc.
@@ -652,7 +656,7 @@ make wheel          # dist/*.whl
 
 | workflow | runs on | what it proves |
 |---|---|---|
-| [`ci.yml`](actions/workflows/ci.yml) | every push and PR | **`build`**: the helper really ends up in the wheel, both artefacts really carry the 10 brand-icon files, the sdist builds and installs from scratch in a clean venv, the 37 ring-reader checks (shared-memory protocol, torn-frame guards, concurrent writer) and the 89 brand-icon checks (install/uninstall, the desktop entry, `kwcapture/icons/` still equal to `logo/icon/`) run with no compositor at all. **`headless KWin capture`**: a real Plasma 6 KWin, below. |
+| [`ci.yml`](actions/workflows/ci.yml) | every push and PR | **`build`**: the helper really ends up in the wheel, both artefacts really carry the 10 brand-icon files, the sdist builds and installs from scratch in a clean venv, the 37 ring-reader checks (shared-memory protocol, torn-frame guards, concurrent writer) and the 98 brand-icon checks (install/uninstall, the desktop entry, `kwcapture/icons/` still equal to `logo/icon/`, and every shipped file really being `logo/kwcapture-mark.svg` resized rather than some other drawing) run with no compositor at all. **`headless KWin capture`**: a real Plasma 6 KWin, below. |
 | [`release.yml`](actions/workflows/release.yml) | `v*` tags | sdist + `manylinux` wheels via cibuildwheel, attached to the GitHub release; PyPI publishing is a separate job behind the `pypi` environment and an opt-in input. |
 
 **The headless job captures from a real KWin with no GPU, no monitor and nobody logged in** —
@@ -686,10 +690,11 @@ dbus-run-session -- bash probe/nested_kwin_test.sh
 
 The functional suite (`tests/test_kwcapture.py`) needs a live Plasma session and is not run in CI.
 Its per-output checks multiply, so the count follows the hardware: 172 on a 75 % + 125 % two-monitor
-desk, 165 on a single output at 100 %. The other two suites do not depend on hardware: 37 and 89
+desk, 165 on a single output at 100 %. The other two suites do not depend on hardware: 37 and 98
 checks. The icon suite's one machine-dependent check is `desktop-file-validate`, which reports
-**SKIP** when the tool is absent — measured on this suite's first CI run: **88 passed + 1 skipped**
-on `ubuntu-latest`, **89 + 0** on the KDE desktop it was written on. A skip is printed, never
+**SKIP** when the tool is absent, so the runner reports one fewer pass than this desktop's
+**98 + 0**; on the first CI run of the 89-check version that measured **88 passed + 1 skipped**.
+A skip is printed, never
 silent, because "a check that stops running without saying so" is the failure mode this project has
 been bitten by most often.
 

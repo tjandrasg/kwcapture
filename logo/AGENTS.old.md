@@ -1604,3 +1604,67 @@ in order of how much it taught:
   serves 200. The social preview is **not** live: `usesCustomOpenGraphImage` is `false` and
   `openGraphImageUrl` is still GitHub's generated placeholder — the honest status of the one item
   this round could not finish, and the query to re-ask it is in `README.md` §8.
+
+---
+
+## I — Round 12's session-log narrative, verbatim
+
+Moved here 2026-10-11 (Round 13) by the size rule in `logo/AGENTS.md`: one round's narrative per
+file, the archive keeps the rest. Nothing edited — this is the text as it stood at the bottom of
+the working set, 4 070 bytes, including its own claims. **One of those claims is now wrong on
+purpose and kept that way:** the artwork Round 12 shipped was the mark's *monogram*
+(`icon/glyph-*.png`, `icon/kwcapture-mark-mono.svg`), chosen because `APTURE` is mush below 64 px.
+The owner's rule of 2026-10-11 is that the icon is `logo/kwcapture-mark.svg` and the permitted
+transforms are resize and re-render, so Round 13 deleted those files. Read Part I for the **wiring**
+— the sync rule, the CI gate, the theme-declared sizes, the licence travelling with the bytes, the
+sabotage probe — all of which survived, and read Round 13's entry in `logo/AGENTS.md` for what the
+files in `icon/` and `kwcapture/icons/` actually are today. Recover a deleted drawing with
+`git log --diff-filter=D -- logo/icon/`; the paragraph-level wrongness is the finding (gotcha 18),
+and the generalised lesson is gotcha 38: a build script has no authority to make this decision.
+
+**Round 12 — 2026-10-11, the desktop-icon round.** The mark left this directory and went into
+the Python package: `kwcapture install-desktop` now installs it as an actual desktop icon. What
+that turned out to be, in the order it bit:
+
+* **A shipped copy is a second artefact, so it wants a rule and a check, not care.**
+  `logo/sync_package_icons.py` is now the only thing allowed to write `kwcapture/icons/`: a
+  byte-for-byte copy — it never resamples — with `--check` for drift, reading `PNG_SIZES` out of
+  `kwcapture/_icons.py` rather than repeating it, so the generator and the installer cannot
+  disagree about which sizes exist. `tests/test_icons.py` runs `--check`, so drift fails a build
+  instead of quietly shipping last month's logo (gotcha 36).
+* **A `--check` that runs only on the machine that made the copy is a note, not a gate.** That
+  suite is a CI step now (no compositor, no KDE, no hardware — it writes into a scratch
+  `$XDG_DATA_HOME` and restores the environment on the way out), and CI additionally asserts the
+  wheel and the sdist each carry the 10 files. Verified here before claiming it: `python -m build`
+  → 10 in each artefact and no `logo/` in the sdist; install the wheel in a throwaway venv, run it
+  **from `/tmp`** with a scratch `XDG_DATA_HOME` → 9 files installed, and the status line reads
+  *brand icons: 9 files in …, entry uses `Icon=kwcapture`*; uninstall → 9 gone and the same status
+  line says the entry would fall back to `accessories-screenshot-tool` — the first name this
+  desktop actually has installed.
+* **Sizes belong to the theme, not to taste.** `glyph-256.png` joined the set because hicolor
+  declares a `256x256/apps` directory and the desktop entry ships into it; every size in the
+  package is one that `/usr/share/icons/hicolor/index.theme` actually lists (gotcha 37).
+* **The `Icon=` findings belong to the root [`../AGENTS.md`](../AGENTS.md) gotchas** — the
+  six-release spec name that resolves in no theme, `;` being parsed by nobody (GLib and KService
+  both take the whole value as one name), and entries keyed per helper binary, which left two of
+  this desktop's three entries stale until `_desktop.refresh_entries()`. From this directory's
+  side only one thing matters, and it is a design statement: **the artwork ships as the glyph** —
+  the same drawing as `kwcapture-mark.svg` with the word dropped, not a second logo. THE RULE is
+  untouched by any of this: no letter was added, moved or repainted this round.
+* **The licence now travels with the bytes.** `kwcapture/icons/COPYING.md` is generated: CC BY 4.0
+  for the pictures against MIT for the code (the split this directory's
+  [`LICENSE.md`](LICENSE.md) makes), the attribution line the licence asks for, and the source
+  sha256 of every file — so an installed tree can be traced back to the sketch it came from.
+  `logo/` stays out of the sdist deliberately — **1.5 MB** on this checkout, 1.1 MB of it generated
+  review PNGs (`du -sb logo --exclude='*.jsonl'`, measured because the first draft of this line said
+  "~700 KB" and was wrong); the `--check` inside the test suite is the bridge back to it.
+* **A probe that proves the checks can fail:** `../probe/sabotage_icons.sh` breaks ten rules in
+  turn and requires the suite to notice — **10/10 detected** here, clean tree green — restoring
+  every file from a `trap`, because it edits tracked source and sessions here die mid-run. One
+  sabotage needed the *test* rewritten rather than the code: the test corrupted a PNG **header**,
+  so the module's IHDR check caught it and the guard under test (re-read after write) passed for
+  the wrong reason. Flipping a byte inside the IDAT is the version that only that guard can see.
+  Gotchas 22 and 24 in the wild, in a test written the same day.
+* **Not done:** the two GitHub uploads are still web-UI clicks (gotcha 34), and whether PyPI
+  renders a project icon out of the now-shipped artwork is **untested** — do not claim it. The
+  docs header stays the only displayed consumer that is verified.

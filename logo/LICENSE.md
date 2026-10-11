@@ -44,11 +44,13 @@ You may do all of that **provided you**:
 Full legal code: <https://creativecommons.org/licenses/by/4.0/legalcode>.
 Human-readable summary: <https://creativecommons.org/licenses/by/4.0/>.
 
-**Every file in `icon/` is this same artwork**, not a new work: the PNGs, the `.ico` and the
-renders are mechanical outputs of `icon/build.sh` from the SVGs (§2 covers the builders, not what
-they emit), and `icon/kwcapture-mark-mono.svg` is `gen_logo.py --monogram` output. Cropping,
-recolouring or tiling the mark is an **adaptation** under CC BY 4.0, so the attribution of §3
-travels with an avatar, a favicon or a social card just as it does with the SVG.
+**Every file in `icon/` is this same artwork**, not a new work: the PNGs, the `.ico`, the tiles
+and the renders are mechanical outputs of `icon/build.sh` from `kwcapture-mark.svg` (§2 covers
+the builders, not what they emit). Since 2026-10-11 the owner's rule is that the mark is the only
+artwork that may represent the project, so nothing else is generated into `icon/` at all —
+resizing and re-rendering are the permitted transformations, and a second drawing is not.
+Cropping, recolouring or tiling the mark is an **adaptation** under CC BY 4.0, so the attribution
+of §3 travels with an avatar, a favicon or a social card just as it does with the SVG.
 
 **Why CC BY 4.0 and not something else** — the alternatives, and what each would have cost:
 
