@@ -502,6 +502,17 @@ overflows is exactly what the assert is for.
   click the button, so the upload cannot be scripted and is not claimed anywhere in this folder.
   (An admin *can* delete the repository through this API and cannot set its picture. Worth
   remembering when a tool promises "set your project icon via the API".)
+* Six more candidate paths, all **404**, in case a future session is tempted to guess again:
+  `POST /repos/tjandrasg/kwcapture/{social-preview-image, socialPreview, social_preview,
+  preview-image, image, avatar}`.
+* **The read side does exist, and it is the useful half.** `Repository` carries
+  `openGraphImageUrl` and `usesCustomOpenGraphImage`, so the *upload* is unverifiable-by-luck only
+  if you forget to ask. Baseline measured on 2026-10-11, after the icon set was pushed:
+  `usesCustomOpenGraphImage: false`, `openGraphImageUrl` still the generated
+  `https://opengraph.githubassets.com/<hash>/tjandrasg/kwcapture` placeholder. After the click in
+  the web UI, `true` plus a `github-production-…` asset URL is the evidence it worked — the same
+  discipline as `curl -o /dev/null -w '%{http_code}'` on the README header: **the claim is the
+  check, not the upload attempt**.
 * **Avatars belong to a user or an org, never to a repository.** A repo's "icon" *is* its social
   preview; `github-avatar-400.png` is therefore for a profile, not for the repo, and shipping it
   next to the card without saying so would have invited the next person to hunt for a repo avatar

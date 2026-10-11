@@ -124,6 +124,11 @@ docs; this file is the investigation log + gotchas.
 > Click: *Settings → Social preview → Edit image* with `logo/icon/github-social-preview.png`
 > (1280×640), and the org/profile avatar with `logo/icon/github-avatar-400.png` if the mark is to
 > live there too. A **repository has no avatar** — its picture *is* the social preview.
+> The read side of that API works, so the click is checkable from a shell:
+> `repository(owner:"tjandrasg", name:"kwcapture"){ usesCustomOpenGraphImage openGraphImageUrl }`
+> — measured **`false`** on 2026-10-11 with the icon set already pushed, the URL still GitHub's
+> generated `opengraph.githubassets.com/…` placeholder. Ask again after the upload: `true` and a
+> `github-production-…` URL is what "done" looks like.
 
 > **`logo/*.jsonl` is gitignored, name-agnostically** (`.gitignore` line 40). A design-session
 > transcript lands in that directory under a *different* filename every session; the old root rule

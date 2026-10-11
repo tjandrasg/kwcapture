@@ -8,12 +8,12 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **68 572 bytes**
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **69 298 bytes**
 > — measured with `wc -c logo/AGENTS.md`, not remembered. It was **86 077** before Round 10's
 > archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
 > (every substantive line of the old file is present in one of the two files — checked, not
 > asserted; the archive's header carries the sha256 it was cut from); **59 077** when Round 11
-> opened, and **68 572** at its close. The icon round spent ~9 KB on `icon/` — two Files rows, the
+> opened, and **69 298** at its close. The icon round spent ~10 KB on `icon/` — two Files rows, the
 > regenerate commands, five gotchas, a block of expected numbers — and paid part of it straight
 > back by moving Round 10's session-log narrative (2 029 bytes, verbatim) to
 > [`AGENTS.old.md` Part G](AGENTS.old.md). **A round that adds narrative also moves one out.**
@@ -486,8 +486,10 @@ Round 11's** (the icon round), and all five arrived while building something, no
 34. **The GitHub API cannot set a repository's picture, and a repository has no avatar.**
    `PATCH /repos/{owner}/{repo}` takes description, homepage, wiki, discussions… and no image
    field; the social-preview image is a web-UI upload only. So `README.md` §8 carries two manual
-   uploads instead of a script that pretends. Check the API before promising an automation, and
-   check *which* object owns the asset: avatars belong to a user or an org, never to a repo.
+   uploads instead of a script that pretends. `Repository` exposes `openGraphImageUrl` and
+   `usesCustomOpenGraphImage` — **read-only**, so they are the way to *verify* the upload without
+   a browser, never the way to do it. Check the API before promising an automation, and check
+   *which* object owns the asset: avatars belong to a user or an org, never to a repo.
 35. **A build script's report can print nothing and still leave the build green.** `icon/build.sh`
    used to end with `magick identify --format … 2>/dev/null | head -8`: `identify` wants `-format`
    with **one** dash, so with two it reads the format string as a *filename*, dies with "no decode
@@ -824,3 +826,9 @@ in order of how much it taught:
 * **Not done, by nature rather than by failure:** the two GitHub uploads are clicks in a web UI
   (gotcha 34), and the `pyproject`/package icon wiring is untouched — this round touched assets
   and docs, no code in `kwcapture/`.
+* **Checked after the push, because a pushed link is a claim:** the README header URL
+  (`raw.githubusercontent.com/tjandrasg/kwcapture/main/logo/icon/kwcapture-mark-256.png`)
+  answers **200 / 12 342 B**, byte-for-byte the file in `icon/`, and `logo/README.md` itself
+  serves 200. The social preview is **not** live: `usesCustomOpenGraphImage` is `false` and
+  `openGraphImageUrl` is still GitHub's generated placeholder — the honest status of the one item
+  this round could not finish, and the query to re-ask it is in `README.md` §8.

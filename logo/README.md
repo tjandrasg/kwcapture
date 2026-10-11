@@ -723,6 +723,19 @@ So no script in this repo can set it, and none pretends to (gotcha 34). Two uplo
 2. **Avatar** — a *repository* has no avatar of its own; only a user or org does. If the mark
    should be the profile image, upload `github-avatar-400.png` in the org/user avatar settings.
 
+**Checking whether the upload landed** — the API cannot write the image, but it can read it, so
+the click is verifiable without a browser:
+
+```bash
+curl -s -X POST https://api.github.com/graphql -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"query":"{ repository(owner:\"tjandrasg\",name:\"kwcapture\") { usesCustomOpenGraphImage openGraphImageUrl } }"}'
+```
+
+`usesCustomOpenGraphImage` is **false** today (measured 2026-10-11, after the icon set was
+pushed) and `openGraphImageUrl` still points at GitHub's generated `opengraph.githubassets.com/…`
+placeholder. Flip to `true`, with the URL changing to a `github-production-…` asset, is the proof
+the upload happened.
+
 What *is* automatic is the README header: [`../README.md`](../README.md) opens with
 `logo/icon/kwcapture-mark-256.png`, written as an absolute `raw.githubusercontent.com` URL on
 purpose, because PyPI renders the same README and does not resolve repo-relative image paths.
