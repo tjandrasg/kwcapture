@@ -1556,3 +1556,51 @@ the exact failure gotcha 24 documents, met a second time one day later — and t
 was failing turned out to be **skipping silently**, keyed by filename. `assert changed` is not
 pedantry; it is the only reason the first attempt was noticed at all.
 
+---
+
+## H — Round 11's session-log narrative, verbatim
+
+Moved here 2026-10-11 (Round 12) by the size rule in `logo/AGENTS.md`: one round's narrative
+per file, the archive keeps the rest. Nothing edited — this is the text as it stood at the
+bottom of the working set, including its own claims. Round 12 (the desktop-icon round) did
+re-verify two of them by running them: `bash icon/build.sh` still rebuilds the set (now **24**
+images — `glyph-256.png` was added for the hicolor `256x256/apps` directory), and the README
+header URL still answers 200. What Round 11 left undone in code — the wiring of the artwork
+into the Python package — is what Round 12 did, so read this before reading Round 12's entry.
+
+**Round 11 — 2026-10-11, the icon round.** The owner chose **`kwcapture-mark.svg` as the
+official logo** and asked for the formats GitHub consumes, pushed. What that turned out to need,
+in order of how much it taught:
+
+* **A logo is not an icon.** `icon/` now holds 23 generated images plus the glyph SVG they all
+  come from: the mark at 1024/512/256/128, the glyph at eleven sizes down to 16, a `favicon.ico`,
+  Apple touch, PWA + maskable, a 400 px avatar, a 1280×640 social preview and a `contact.png`
+  review sheet. One command (`bash icon/build.sh`) and three Pillow builders that each verify
+  their own output.
+* **The split logo/glyph/tile was decided by two measurements, not by taste.** The word dies
+  (`preview/ladder-icon.png`: legible 128, marginal 64, mush 48 and below), and no single ground
+  clears 3:1 for both colours (blue 2.20 on dark, green 3.00 on white) — so small sizes ship the
+  glyph of the *same* drawing, and tiles are light. The avatar is the glyph because GitHub crops
+  to a circle and a circular crop amputates `TURE`.
+* **One of my own claims was too strong, and the contact sheet disproved it.** I had written in
+  `build.sh` that a transparent icon on dark "loses the blue entirely"; the dark cells of the
+  sheet show the strokes surviving fine at 2.20:1. The number stayed, the drama did not. That is
+  gotcha 22's lesson again — **draw the thing and look before you keep the sentence**.
+* **Gotchas 31–35** — Inkscape's `-b none` painting opaque white, ImageMagick compositing a blank
+  canvas while exiting 0, a card writing off its own canvas and printing its size approvingly,
+  the GitHub API having no image field at all, and `identify --format` (two dashes) making
+  `icon/build.sh`'s own report vanish behind a `2>/dev/null` — are one-liners above, full versions
+  in [`AGENTS.old.md` Part B](AGENTS.old.md). Four of the five are the same animal: **a tool that
+  succeeds at the wrong thing**. The fifth is the meta case, and the one to remember: the report
+  line that checked the artefacts was itself unchecked, so `build.sh` shipped a build whose
+  summary printed nothing. It is fixed (one dash, stderr un-suppressed) and `%-28f` turned out to
+  be unsupported by this ImageMagick in the process.
+* **Not done, by nature rather than by failure:** the two GitHub uploads are clicks in a web UI
+  (gotcha 34), and the `pyproject`/package icon wiring is untouched — this round touched assets
+  and docs, no code in `kwcapture/`.
+* **Checked after the push, because a pushed link is a claim:** the README header URL
+  (`raw.githubusercontent.com/tjandrasg/kwcapture/main/logo/icon/kwcapture-mark-256.png`)
+  answers **200 / 12 342 B**, byte-for-byte the file in `icon/`, and `logo/README.md` itself
+  serves 200. The social preview is **not** live: `usesCustomOpenGraphImage` is `false` and
+  `openGraphImageUrl` is still GitHub's generated placeholder — the honest status of the one item
+  this round could not finish, and the query to re-ask it is in `README.md` §8.

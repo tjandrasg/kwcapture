@@ -67,11 +67,12 @@ logo/
 ├── gen_logo.py                 TOOL    sketch + knobs -> SVGs
 ├── validate_logo.py            TOOL    the gate: geometry, type, box, colour, render
 ├── render_agreement.py         TOOL    diagnostic: does each engine agree with the path data?
+├── sync_package_icons.py       TOOL    icon/ -> ../kwcapture/icons/ (byte-for-byte) + --check
 │
 ├── icon/                       SHIPPED  the official icon set (see icon/build.sh)
 │   ├── kwcapture-mark-mono.svg         the glyph form of the mark (same drawing, no word)
 │   ├── kwcapture-mark-{1024,512,256,128}.png     the logo, transparent
-│   ├── glyph-{1024,512,400,192,180,128,64,48,32,24,16}.png   the glyph, transparent
+│   ├── glyph-{1024,512,400,256,192,180,128,64,48,32,24,16}.png   the glyph, transparent
 │   ├── favicon.ico  apple-touch-icon.png  pwa-{192,512}.png  maskable-512.png
 │   ├── github-avatar-400.png  github-social-preview.png (1280×640)  contact.png (the sheet §8 shows)
 │   ├── build.sh                        rebuilds the whole set in one command
@@ -114,7 +115,7 @@ run erases it — and the validator will not notice, because it validates the fi
 | what you want to change | where you change it |
 |---|---|
 | the monogram's shape, the pointer, the box | the relevant `*-sketch.svg`, in Inkscape |
-| the letters, size, tilt, spacing, colours, stretch | a `gen_logo.py` flag (§4.4) |
+| the letters, size, tilt, spacing, colours, stretch | a `gen_logo.py` flag (§4.5) |
 | a rule about what is allowed | `validate_logo.py`, and then prove it fails (§5.4) |
 | a number in the docs | run the tool and paste the real output |
 
@@ -653,7 +654,7 @@ cd logo && bash icon/build.sh      # inkscape + ImageMagick + Pillow; writes int
 | `../kwcapture-mark.svg` | **the logo** — the source of everything below | `gen_logo.py --mark` |
 | `kwcapture-mark-mono.svg` | **the glyph form**: the same drawing with the word dropped | `gen_logo.py --monogram --sketch kwcapture-mark-sketch.svg` |
 | `kwcapture-mark-{1024,512,256,128}.png` | README headers, docs, og images — anywhere ≥ 128 px | `icon/build.sh` |
-| `glyph-{1024,512,400,192,180,128,64,48,32,24,16}.png` | tab icons, list icons, any small or masked slot | `icon/build.sh` |
+| `glyph-{1024,512,400,256,192,180,128,64,48,32,24,16}.png` | tab icons, list icons, any small or masked slot — and the eight sizes that ship inside the Python package (§8, *Into the Python package*) | `icon/build.sh` |
 | `favicon.ico` (16/24/32/48/64) | browsers that still ask for `.ico` | `icon/build.sh` |
 | `apple-touch-icon.png` (180, rounded) | iOS home screen (it masks again, which is fine) | `icon/tiles.py` |
 | `pwa-192.png`, `pwa-512.png`, `maskable-512.png` | a PWA manifest; `maskable-512` keeps the 80 % safe zone | `icon/tiles.py` |
@@ -753,6 +754,44 @@ bash icon/build.sh          # every size, tile, .ico, card, and the contact shee
 Then open `icon/contact.png` and *look at it* before committing. The sheet is the review; the
 exit codes only tell you the tools were awake.
 
+### Into the Python package — `sync_package_icons.py`
+
+The glyph set does not stop in this directory. The package whose desktop entry needs an icon ships
+it, and one command is the **only** sanctioned writer of that tree:
+
+```bash
+python3 logo/sync_package_icons.py            # icon/ -> ../kwcapture/icons/ (+ COPYING.md)
+python3 logo/sync_package_icons.py --check    # verify only; exit 1 on any drift
+make icons                                    # the same, through the Makefile
+```
+
+| in `logo/icon/` | → `../kwcapture/icons/` | installed by `kwcapture install-desktop` into |
+|---|---|---|
+| `glyph-<N>.png`, N = 16 24 32 48 64 128 256 512 | `hicolor/<N>x<N>/apps/kwcapture.png` | `$XDG_DATA_HOME/icons/hicolor/<N>x<N>/apps/` |
+| `kwcapture-mark-mono.svg` | `hicolor/scalable/apps/kwcapture.svg` | the same, scalable |
+| — | `COPYING.md` | nowhere: it is licence text for the tree, not an icon |
+
+Three rules make that copy worth trusting, and each of them is a check rather than an intention:
+
+* **a copy, never a resample** — the bytes in the wheel are the bytes reviewed in `contact.png`;
+  the sizes exist because `/usr/share/icons/hicolor/index.theme` declares those directories, which
+  is also why `glyph-256.png` had to be added for this (`AGENTS.md` gotcha 37);
+* **one source for the size list** — it is read out of `kwcapture/_icons.py` itself, so the
+  generator and the installer cannot disagree about which sizes exist;
+* **`--check` runs somewhere other than the machine that made the copy** — `tests/test_icons.py`
+  runs it and that suite is a CI step, so a re-rendered mark with a stale package copy is a failed
+  build rather than somebody's outdated desktop icon (gotcha 36).
+
+`COPYING.md` is generated too: **CC BY 4.0** for the pictures against MIT for the code
+([`LICENSE.md`](LICENSE.md)), the attribution line the licence asks for, and the sha256 of the
+source every file was copied from. `logo/` itself is deliberately **not** in the sdist — 1.5 MB on
+this checkout, 1.1 MB of it generated review PNGs — so the `--check` is the bridge back to it.
+
+What the user of the package sees is in the root [`../README.md`](../README.md) under *Brand icons*: `install-desktop` and
+`setup` install these files, `--no-icons` skips them, `--uninstall` removes only files whose bytes
+are still ours, and the entry's `Icon=` name is resolved per machine — a `;` fallback chain is not
+parsed by GLib or by KService, so the name is chosen at write time instead.
+
 ## 9. Dark surfaces
 
 ![on GitHub dark](preview/on-dark.png)
@@ -773,7 +812,7 @@ Re-check the C against **its own** green when you do: today's blue-vs-green is 2
 prettier light blues collapse toward 1.2, at which point the C dissolves into the W and the
 first letter of the word is gone.
 
-## 9. A clean build, end to end
+## 10. A clean build, end to end
 
 This is the exact sequence behind the "verified" claim at the top of `AGENTS.md`. Generating to
 `/tmp` and `cmp`-ing proves regeneration is byte-identical without touching the repo:
@@ -798,14 +837,17 @@ Measured 2026-10-11: 3/3 byte-identical, xmllint silent, both explicit validatio
 `render_agreement.py` reporting the same two MSVG numbers the docs carry.
 
 The icon set is a second, separate build (`bash icon/build.sh`, §8): it re-reads the same SVGs,
-cannot write outside `icon/`, and each of its builders verifies its own pixels.
+cannot write outside `icon/`, and each of its builders verifies its own pixels. The package copy is
+a third (`python3 logo/sync_package_icons.py --check`, §8): it verifies that what shipped is what
+this directory produced.
 
 ## 11. Where to go next
 
 | you want to | read |
 |---|---|
-| change anything at all | [`AGENTS.md`](AGENTS.md) — the rules, the knobs and why, the expected numbers, the 29 gotchas |
-| know why a rule exists, or what was tried and rejected | [`AGENTS.old.md`](AGENTS.old.md) — full gotchas, the falsified numbers, the session log |
+| change anything at all | [`AGENTS.md`](AGENTS.md) — the rules, the knobs and why, the expected numbers, the 37 gotchas |
+| know why a rule exists, or what was tried and rejected | [`AGENTS.old.md`](AGENTS.old.md) — full gotchas, the falsified numbers, the session log (Rounds 1–11) |
 | ship an icon, an avatar or a social card | `icon/` — §8: one command (`bash icon/build.sh`), and the measurements behind every size |
+| get the mark onto a desktop, or into the package | §8 *Into the Python package*: `sync_package_icons.py`, hicolor, and the `Icon=` findings in [`../AGENTS.md`](../AGENTS.md) |
 | use, copy or recolour the artwork | [`LICENSE.md`](LICENSE.md) — CC BY 4.0 (artwork), MIT (tooling), trademarks **not** granted |
 | the software the mark belongs to | [`../README.md`](../README.md) — `kwcapture`: ~40 fps Wayland capture for KDE Plasma |

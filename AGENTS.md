@@ -41,8 +41,14 @@ configured for github.com (it is in `~/.git-credentials`) — never commit or pr
 
 Working dir: `~/way_scr_cap`. **Read this first if you are a fresh session.**
 Status: **done and working** — ~40 fps full-screen / ~185 fps per-window Wayland capture,
-Python API + CLI + 165 functional + 37 ring-reader checks. See `README.md` for user-facing
-docs; this file is the investigation log + gotchas.
+Python API + CLI + 165 functional + 37 ring-reader + 89 brand-icon checks. See `README.md` for
+user-facing docs; this file is the investigation log + gotchas.
+
+**Unreleased on `main` as of 2026-10-11**: the brand-icon work — artwork shipped inside the
+package, `kwcapture install-desktop` installing it into the user's hicolor theme, and the
+correction of the entry's `Icon=` name. Under *LOGO* below, user-facing in README → *Brand icons*,
+and in `CHANGELOG.md` → *Unreleased*. Nothing about capture changed; all three suites green here
+(165 + 37 + 89, 0 skips) plus `probe/sabotage_icons.sh` at 10/10.
 
 ## FRESH STATUS — 2026-10-09 ~08:20 — **v0.6.0 RELEASED to GitHub + PyPI: the hidden-window enumeration is out**
 
@@ -73,37 +79,28 @@ docs; this file is the investigation log + gotchas.
 > `AmbiguousWindow`. Nothing in this tree shows that breaking anything, but it is the first thing to
 > ask about if a downstream report arrives.
 
-> **Post-release housekeeping, same day (`main` = `d57c837`, CI `build` green).** No library code
-> changed — this was repo/docs work: the README badge row (PyPI version + status + license + CI, and
-> two static badges *KDE Plasma: 6.x tested* / *Wayland: ScreenShot2*; **no download badge**, measured
-> reason below), the community files (`SECURITY.md`, the two issue forms + `config.yml`,
-> `PULL_REQUEST_TEMPLATE.md`, `dependabot.yml`), Dependabot's first PR merged (`2ec83eb`) **with the
-> release workflow rehearsed against it** (run 37881396351 — recipe in the community-files section),
-> then `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`. GitHub's community checklist: 7/7.
-> **Packaging gotcha found while doing it:** `MANIFEST.in` lists docs **by explicit name**, so
-> `SECURITY.md`, `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` were absent from the sdist until added
-> there — a new root `.md` never ships automatically. Fixed and verified by rebuilding the sdist;
-> the published 0.6.0 files are immutable, so this lands at the next release. Worth doing because
-> the people who run `pip install --no-binary` are exactly the ones who read `SECURITY.md`.
-> **Size note — trimmed the same day, 77 KB → 53 KB.** It had grown ~11 KB during this session, so the
-> superseded detail went to `AGENTS.old.md` **verbatim** (nothing deleted; every move listed under
-> *ARCHIVED* below): both 2026-10-08 day-logs, BUG-1's original analysis, BUG-2's full analysis,
-> BUG-4's bisect record, the completed `~~done~~` ideas, and a shorter community-files section — each
-> replaced by the distilled bullets that stay here. **What made this safe: the archive was written
-> first, and the script asserted every moved line was present in it before a summary replaced it.**
-> If you add a third FRESH STATUS, distil one out the same way rather than growing the file again.
-
+> **Post-release housekeeping, 2026-10-09** (day-log verbatim in
+> [`AGENTS.old.md`](AGENTS.old.md) → *ARCHIVED 2026-10-11*): the README badge row (and **no
+> download badge** — measured reason, see *README badges* below), the community files
+> (`SECURITY.md`, two issue forms + `config.yml`, `PULL_REQUEST_TEMPLATE.md`, `dependabot.yml`),
+> Dependabot's first PR merged (`2ec83eb`) **with the release workflow rehearsed against it**, then
+> `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` → GitHub's community checklist 7/7. Two durable
+> findings: **`MANIFEST.in` lists docs by explicit name**, so a new root `.md` is invisible to the
+> sdist until it is added there (`SECURITY.md`/`CONTRIBUTING.md`/`CODE_OF_CONDUCT.md` all shipped
+> missing from 0.6.0 that way — the published files are immutable, so the fix lands next release);
+> and a re-grep for a *token-shaped* run (`ghp_[A-Za-z0-9]{20,}`) before believing a secret scan,
+> because this file's own checklist text contains the literal prefixes.
 ## LOGO — `logo/` is committed, and `kwcapture-mark.svg` is the official mark (2026-10-11)
 
 > **The owner decided it, on 2026-10-11:** [`logo/kwcapture-mark.svg`](logo/kwcapture-mark.svg)
 > — the geometric KW monogram whose junction is the **C**, the mouse pointer as the **A**, and
 > `PTURE` in type — is the project's logo. `logo/` had been untracked since it was started;
-> it is now in git: **55 files** — two Inkscape sketches (inputs, never written to), three
-> generated SVGs, three tools (`gen_logo.py`, `validate_logo.py`, `render_agreement.py`), the
-> shipped `icon/` set, the documentation `preview/` set, and `AGENTS.md` / `README.md` /
-> `LICENSE.md`. **Read [`logo/AGENTS.md`](logo/AGENTS.md) before touching anything in there**: it
+> it is now in git: **57 files** — two Inkscape sketches (inputs, never written to), three
+> generated SVGs, four tools (`gen_logo.py`, `validate_logo.py`, `render_agreement.py`,
+> `sync_package_icons.py`), the shipped `icon/` set, the documentation `preview/` set, and
+> `AGENTS.md` / `README.md` / `LICENSE.md`. **Read [`logo/AGENTS.md`](logo/AGENTS.md) before touching anything in there**: it
 > carries THE RULE (`WORD = "PTURE"`, never `CAPTURE`), the knob table, the expected numbers and
-> 34 gotchas — several paid for by sessions that ran out of tokens.
+> 37 gotchas — several paid for by sessions that ran out of tokens.
 
 > **Licence, and why two:** artwork (SVGs, sketches, every PNG) **CC BY 4.0**; the tooling in
 > `logo/*.py` **MIT**, matching the package's own [`LICENSE`](LICENSE); the Inter face
@@ -129,6 +126,26 @@ docs; this file is the investigation log + gotchas.
 > — measured **`false`** on 2026-10-11 with the icon set already pushed, the URL still GitHub's
 > generated `opengraph.githubassets.com/…` placeholder. Ask again after the upload: `true` and a
 > `github-production-…` URL is what "done" looks like.
+
+> **The mark is installed on the desktop now, not just displayed** (2026-10-11). `kwcapture
+> install-desktop` / `setup` copy the **glyph** of `kwcapture-mark.svg` into
+> `$XDG_DATA_HOME/icons/hicolor/{16,24,32,48,64,128,256,512}/apps/kwcapture.png` + `scalable`,
+> from `kwcapture/icons/` — a copy, never a resample, byte-identical to the reviewed artwork in
+> `logo/icon/contact.png`. That copy is generated by `logo/sync_package_icons.py`, whose `--check`
+> runs inside `tests/test_icons.py`, so the shipped icon cannot quietly become last month's render.
+> **Branding is a note in `doctor`, never a problem count** — a missing icon set must not make a
+> working capture look broken, and the automatic first-`Capture()` path still writes exactly one
+> `.desktop` file and installs nothing (there is a check asserting that promise). Licence travels
+> with the artwork: `kwcapture/icons/COPYING.md` says CC BY 4.0 for the pictures, MIT for the
+> code, next to the files an installed tree actually contains. Wheel and sdist both carry the 10
+> files (verified by building them here: `unzip -l` / `tar tzf`), and `logo/` itself stays out of
+> the sdist. Three measured findings behind the design — see the gotchas below and README → *Brand
+> icons*: the six-release `Icon=accessories-screenshot` **resolves in no theme on this KDE
+> desktop**; **a `;` fallback chain is not parsed by anyone**; and **entries are keyed per helper
+> binary**, so installing from one venv refreshed one of this machine's three stale entries —
+> hence `_desktop.refresh_entries()`. `kwcapture doctor` on this desktop reports *brand icons: 9
+> files in ~/.local/share/icons, entry uses `Icon=kwcapture`*, and all three entries on this
+> machine say `Icon=kwcapture`.
 
 > **`logo/*.jsonl` is gitignored, name-agnostically** (`.gitignore` line 40). A design-session
 > transcript lands in that directory under a *different* filename every session; the old root rule
@@ -206,6 +223,14 @@ Moved out **verbatim** — session logs of *released* work whose conclusions alr
 `CHANGELOG.md`, `README.md`, `SECURITY.md` or the CI job's own comments. Nothing is ever deleted; the
 archive keeps the reasoning and the dead ends, and this file is what a fresh session can hold in its
 head. If you are about to add a third `FRESH STATUS`, distil one out instead.
+
+**2026-10-11** (during the brand-icon work; `wc -c` was **58 859** at the moment of the move and
+**64 590** with the new material in it — measured, because a size note in a size note is exactly
+the number that goes stale): the *post-release housekeeping* day-log
+of 2026-10-09 → distilled into the v0.6.0 FRESH STATUS block above. Nothing else moved; the two
+durable findings in it (`MANIFEST.in` lists docs **by name**; re-grep for token-shaped runs before
+believing a secret scan) stayed here as bullets, and the new brand-icon material went into **LOGO**
+and *Gotchas* rather than into a third day-log.
 
 **2026-10-09** (file had grown back to 77 KB): the 2026-10-08 headless-CI day-log → distilled into
 **HEADLESS / NESTED KWin**; the 2026-10-08 non-normal-window day-log → distilled into the
@@ -605,6 +630,34 @@ opencv-python-headless; plus `.pth` → `/usr/lib/python3/dist-packages` so `imp
   `mmap.close()` raises `BufferError` while ctypes/numpy hold views (caught in `close()`).
 * Pillow: no `BGRA` mode — use `Image.frombuffer("RGBA", size, buf, "raw", "BGRA", 0, 1)`.
   `Image.fromarray(a, "BGRA")` does not work.
+* **A name from the icon-naming spec is not a file that exists.** `Icon=accessories-screenshot`
+  was in this project's desktop entry for six releases and resolves in **no** theme on the KDE
+  desktop it targets — KDE ships `accessories-screenshot-tool`, HighContrast ships
+  `applets-screenshooter`. And **the `;` fallback chain is not a thing**: GLib's
+  `DesktopAppInfo.get_icon()` puts the entire value into one `GThemedIcon` name
+  (`Icon=kwcapture;x` → `['kwcapture;x', …]`) and upstream KService does `m_strIcon =
+  entryMap.take("Icon")`, so a chain resolves to *neither* name on *both* consumers, your own
+  icon included. Resolve the name when you write the file (`_icons.pick_icon_name()`), do not
+  emit a list and hope.
+* **Icon themes do not agree on layout, so never glob one of them.** hicolor is `<size>/apps/`,
+  Breeze is `apps/<size>/`; a `*/apps/NAME` glob concludes KDE's own screenshot icon is missing
+  **on a KDE desktop**. Read the theme's own `index.theme` `Directories=` and grade the resolver
+  against an oracle that does not share your assumption (`tests/test_icons.py` shells out to
+  `find`), which is exactly how this was caught.
+* **A `.desktop` entry is keyed per executable, so "installed" is per environment.** Three
+  virtualenvs → three entries → three copies of every line in it, and `install-desktop` fixes one.
+  Two of this desktop's three kept the dangling icon until `refresh_entries()` existed. It keeps
+  each file's own `Exec=` — KWin's authorisation key is `sha1(resolved exe)[:10]`, and the entry
+  filename is derived from it, so refreshing an entry must never rewrite that line.
+* **`$XDG_DATA_HOME/icons` is shared with other people's installers** (Wine alone puts hundreds of
+  icons there). Delete by hash, not by filename: `.../apps/kwcapture.png` is ours only when its
+  sha256 equals what we ship, and a user install never writes to a system theme directory.
+* **setuptools package-data globs do not cross `/`** — `icons/**` ships nothing at all, and the
+  failure is silent: the wheel installs fine and there is simply nothing to install. One glob per
+  theme directory (`icons/hicolor/*/apps/*`), then check the built artefact
+  (`unzip -l dist/*.whl | grep icons`); CI now asserts 10 files in both wheel and sdist. Same
+  family as `MANIFEST.in` listing docs **by name** above: packaging is a list, and a list that is
+  missing an entry does not complain.
 * `wl_output.geometry` width/height are **millimetres**; pixel size/refresh come from
   `wl_output.mode`. Connector name (`DP-1`) is the `wl_output.name` event → needs binding v4.
 * `pkill -f kwcapture` from a shell command **matches that same shell command** and kills
@@ -689,14 +742,18 @@ every candidate badge — it returns the message shields would render).
 1. Bump the version in **both** `pyproject.toml` and `kwcapture/__init__.py`, update
    `CHANGELOG.md` + `README.md` (including the release-wheel URL at the top of README).
 2. `make && .venv/bin/python -X dev tests/test_kwcapture.py` — everything must pass on the
-   real desktop (CI only checks that it *builds and imports*, plus
-   `tests/test_ring_reader.py`, which needs no compositor). Check the count of `[PASS]`
-   lines against the number claimed in CHANGELOG.md, and run
-   `.venv/bin/python -X dev tests/test_ring_reader.py` too — it is the BUG-4 guardrail.
+   real desktop (CI checks that it *builds and imports*, plus the two suites that need no
+   compositor). Check the count of `[PASS]` lines against the number claimed in CHANGELOG.md,
+   and run `.venv/bin/python -X dev tests/test_ring_reader.py` (the BUG-4 guardrail) **and**
+   `make test-icons` (the brand-icon / desktop-entry / package-data guardrail, 89 checks) too.
 3. `git commit` the lot, then `git tag vX.Y.Z && git push origin main --follow-tags`.
 4. Build the artefacts here: `.venv/bin/python -m build` → `dist/*.tar.gz` +
    `dist/*-py3-none-linux_x86_64.whl`. Sanity check the wheel in a throwaway venv **from
-   outside the checkout** (`/tmp`), including a real `Capture()` + `list_windows()`.
+   outside the checkout** (`/tmp`), including a real `Capture()` + `list_windows()`, and check
+   the artwork really rode along: `unzip -l dist/*.whl | grep -c kwcapture/icons/` must be 10
+   (8 png + 1 svg + `COPYING.md`), and `kwcapture install-desktop` from that venv into a scratch
+   `XDG_DATA_HOME` must report 9 files. Both are asserted in CI too — package data fails
+   silently, and a wheel without it is a package whose icons quietly never install.
 5. PyPI — publish **the sdist + the CI manylinux wheel**, not the sdist alone: the manylinux
    wheel is what makes `pip install kwcapture` need no compiler. Take both **from the GitHub
    release of that tag** (so PyPI serves bytes identical to GitHub) rather than the local

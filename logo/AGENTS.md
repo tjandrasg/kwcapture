@@ -8,7 +8,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **69 298 bytes**
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **76 170 bytes**
 > — measured with `wc -c logo/AGENTS.md`, not remembered. It was **86 077** before Round 10's
 > archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
 > (every substantive line of the old file is present in one of the two files — checked, not
@@ -16,7 +16,13 @@ log, the falsified claims, the war story behind every gotcha.
 > opened, and **69 298** at its close. The icon round spent ~10 KB on `icon/` — two Files rows, the
 > regenerate commands, five gotchas, a block of expected numbers — and paid part of it straight
 > back by moving Round 10's session-log narrative (2 029 bytes, verbatim) to
-> [`AGENTS.old.md` Part G](AGENTS.old.md). **A round that adds narrative also moves one out.**
+> [`AGENTS.old.md` Part G](AGENTS.old.md). **Round 12** (the desktop-icon round) opened at
+> **69 298** and closes at **76 170**: ~5 KB went on `sync_package_icons.py` (a Files row, the
+> regenerate commands, gotchas 36–37, the package-set expected numbers) and its log entry, and the
+> payment was moving Round 11's narrative (3 019 bytes, verbatim) to
+> [`AGENTS.old.md` Part H](AGENTS.old.md) — asserted present in the archive *before* the summary
+> replaced it, the same way Round 10's pass was done. **A round that adds narrative also moves one
+> out.**
 > The failure mode is
 > real: a note here once claimed 62 KB while the file was already 72, and the number in
 > *this very note* was the stale one until it was recomputed. When a round finishes:
@@ -53,6 +59,19 @@ log, the falsified claims, the war story behind every gotcha.
 > white, green `#00ac4e` **6.32:1** / **3.00:1**, blue-vs-green 2.87:1, and `APTURE` legible at
 > 128 px / marginal at 64 / mush at 48 and below. Nothing in the Round 10 block above changed —
 > including both caveats, and including `render_agreement.py` still exiting 1.
+
+> **Verified 2026-10-11 (Round 12 — the desktop-icon round), by running it.** `bash icon/build.sh`
+> rebuilds **24 images** now: `glyph-256.png` was added because the desktop entry ships into
+> hicolor's `256x256/apps` directory (gotcha 37) — that is the only change to the set itself.
+> `python3 logo/sync_package_icons.py` writes 9 icon files + `COPYING.md` into
+> `../kwcapture/icons/`, `--check` on the real trees is clean (*checked 9 icon files (0 written
+> now)*, exit 0), and a `python -m build` here puts those **10 files in the wheel and 10 in the
+> sdist**, with `logo/` in neither. `tests/test_icons.py`: **89 checks, 0 skipped**; that suite is
+> a CI step, as is the artefact assertion. `probe/sabotage_icons.sh`: **10/10 sabotages detected**,
+> tree restored. On this desktop: 9 files installed, all three `.desktop` entries `Icon=kwcapture`,
+> `desktop-file-validate` silent, `kwcapture doctor` green. **This round touched no SVG, no sketch
+> and no knob**, so the Round 10 and Round 11 blocks above stand unchanged — both caveats included
+> (the flake, and `render_agreement.py` exiting 1 on purpose).
 
 ---
 
@@ -95,8 +114,9 @@ nothing else — the geometry, the fit and this rule are untouched.
 | `gen_logo.py` | the generator: sketch + knobs → the SVGs. Manual: `README.md` §gen_logo.py |
 | `validate_logo.py` | the gate: ink bounds, clearances, centring, the A-vs-cap **type check**, the **box check**, the **colour split check** (the only check that can see paint) and the **render check** (it rasterises with QtSvg and MSVG, so a *viewer* decides). One path argument, default `kwcapture.svg` |
 | `render_agreement.py` | **diagnostic, not a gate**: per engine, the ink box it paints vs the box the path data implies, per colour. Found the MSVG `rotate()` bug. Exits 1 today **on purpose** (gotcha 27) |
+| `sync_package_icons.py` | **the only sanctioned path from `icon/` into the package**: copies the glyph set into `../kwcapture/icons/` (hicolor theme layout, one directory per declared size), generates `kwcapture/icons/COPYING.md` with the licence + provenance sha256s, and `--check` fails on any drift. Copies only — it never rasterises or resamples — and it reads the size list from `kwcapture/_icons.py`, so generator and installer cannot disagree (gotcha 36) |
 | `preview/` | generated PNGs for `README.md`, plus `build.sh` (one command rebuilds all of them) and `anatomy.py`. Derived artefacts: regenerate, never hand-edit |
-| `icon/` | **the shipped icon set**: 23 images (logo renders, glyph renders, `favicon.ico`, Apple touch, PWA, `github-avatar-400.png`, `github-social-preview.png`, the `contact.png` review sheet) built by `build.sh` + `tiles.py` + `card.py` + `contact.py`. All derived: regenerate, never hand-edit. Manual: `README.md` §8 |
+| `icon/` | **the shipped icon set**: 24 images (logo renders, glyph renders at twelve sizes, `favicon.ico`, Apple touch, PWA, `github-avatar-400.png`, `github-social-preview.png`, the `contact.png` review sheet) built by `build.sh` + `tiles.py` + `card.py` + `contact.py`. Eight of the glyph renders are what `sync_package_icons.py` copies into the package. All derived: regenerate, never hand-edit. Manual: `README.md` §8 |
 | `icon/kwcapture-mark-mono.svg` | **the glyph form of the mark** — `--monogram` fed with the *mark* sketch, i.e. the same drawing as `kwcapture-mark.svg` with the word dropped. The source of every shipped small icon, favicon and avatar. **Not** the same drawing as `kwcapture-mono.svg` (the *original* sketch's monogram) — see *Still open* |
 | `README.md` | the manual: directory structure, every `*.py` program, the commands that make each image |
 | `LICENSE.md` | artwork **CC BY 4.0**, tooling **MIT** (the package's own [`../LICENSE`](../LICENSE)), Inter **OFL-1.1** referenced. `*.jsonl` is licensed by nobody — §6 there |
@@ -125,8 +145,17 @@ bash logo/preview/build.sh                               # rebuild every README 
 python3 logo/gen_logo.py --monogram --sketch logo/kwcapture-mark-sketch.svg \
         --out logo/icon/kwcapture-mark-mono.svg
 python3 logo/validate_logo.py logo/icon/kwcapture-mark-mono.svg    # OK
-bash logo/icon/build.sh                                  # 23 images, .ico, avatar, card, sheet
+bash logo/icon/build.sh                                  # 24 images, .ico, avatar, card, sheet
+
+# and into the Python package (run from the repo root; stdlib only, no inkscape needed):
+python3 logo/sync_package_icons.py         # icon/ -> kwcapture/icons/ + COPYING.md
+python3 logo/sync_package_icons.py --check # drift only; exit 1. tests/test_icons.py runs this
 ```
+
+**`--check` is the part that keeps the promise.** A copied artefact is a second artefact: re-render
+the mark next month and the package is quietly shipping the old one (gotcha 36). The check runs
+inside `tests/test_icons.py`, which is a CI step, so the drift has to be fixed in the same change
+that introduces it.
 
 **Order matters in that last block**: `icon/build.sh` reads `icon/kwcapture-mark-mono.svg` and
 `../kwcapture-mark.svg` and *refuses to run* if either is missing — it does not generate them,
@@ -425,6 +454,8 @@ so a file has to satisfy both. Gotcha 25.
 The rule, without the story. **Full narratives: [`AGENTS.old.md` Part B](AGENTS.old.md).**
 Gotcha 29 is Round 10's and is told in full below, because it is still open. **31–35 are
 Round 11's** (the icon round), and all five arrived while building something, not while reading.
+**36–37 are Round 12's** (the desktop-icon round): their narrative is the Round 12 session-log
+entry at the bottom of this file until the next round moves it to the archive.
 
 1. The sketch shipped as an A4 page with ~36 mm of art off-centre: that is the "canvas size" bug. The fix is artboard→512² **and centring**, not scaling the drawing.
 2. Two sketch paths rendered **nothing**: a bare line with `fill` and no `stroke` has no area. Never assume a drawn path is visible — render it.
@@ -499,6 +530,20 @@ Round 11's** (the icon round), and all five arrived while building something, no
    `28f` and warns `unknown image property "%-"`. **Gotcha 30 one layer down**: the thing that
    reports on the artefacts can itself fail silently, so treat a report as a check — un-suppress
    its stderr and make sure its silence would mean something.
+
+36. **A copied artefact is a second artefact, and second artefacts rot.** `../kwcapture/icons/` is
+   a *copy* of `icon/`, so the day the mark is re-rendered the package ships the old drawing while
+   every check in this directory keeps printing OK — they only ever look at `logo/`. The answer is
+   one writer (`sync_package_icons.py`, byte-for-byte, never a resample), **one** source for the
+   size list (`kwcapture/_icons.PNG_SIZES`, read by the generator itself), and `--check` inside
+   `tests/test_icons.py`. The part that cost the most thinking: **a guard that runs only on the
+   machine that made the artefact guards nothing**, so that suite is now a CI step and CI also
+   asserts both built artefacts carry the 10 files.
+37. **An icon size is a theme's declaration, not a taste list.** The package ships 16/24/32/48/64/
+   128/256/512 because those are the directories `/usr/share/icons/hicolor/index.theme` declares;
+   `icon/` had no `glyph-256.png` until the desktop entry needed that directory, and a size that is
+   invented — or one the theme declares that you skipped — is an icon that exists on disk and still
+   never appears. Same animal as gotcha 30: a lookup driven by an `index.theme` nobody had read.
 
 ### 29 — impossible errors: re-run before you believe (Round 10)
 
@@ -615,6 +660,23 @@ contrast, computed from the hex values with the WCAG relative-luminance formula:
   #00ac4e vs #0d1117 6.32:1 | vs #ffffff 3.00:1 | #0000ff vs #00ac4e 2.87:1
 legibility of the mark's word, rendered (`preview/ladder-icon.png`):
   128 px legible | 64 px marginal | 48 px and below mush. The glyph still reads at 32 px.
+
+the copy that ships inside the Python package (Round 12: python3 logo/sync_package_icons.py;
+sha256 first 16 of the SOURCE, also written into kwcapture/icons/COPYING.md)
+hicolor/16x16/apps/kwcapture.png       504 B   c9af45fa75eaef0a   (== icon/glyph-16.png)
+hicolor/24x24/apps/kwcapture.png       741 B   c6e52328aa97027b
+hicolor/32x32/apps/kwcapture.png       936 B   2ed510f6f534d705
+hicolor/48x48/apps/kwcapture.png      1384 B   55e3038dab3f1d62
+hicolor/64x64/apps/kwcapture.png      1746 B   edfc8aae88c0d784
+hicolor/128x128/apps/kwcapture.png    3458 B   7980a68dc1ff39ff
+hicolor/256x256/apps/kwcapture.png    7343 B   74f29cc277d995ea   (icon/glyph-256.png, added for this)
+hicolor/512x512/apps/kwcapture.png   16111 B   46a9cddf7d54f458
+hicolor/scalable/apps/kwcapture.svg   1432 B   4eb2926d077078d9   (== icon/kwcapture-mark-mono.svg)
+sync_package_icons.py --check          "checked 9 icon files (0 written now)", exit 0
+tests/test_icons.py                    89 checks, 0 skipped  (no compositor; a CI step)
+probe/sabotage_icons.sh                10 sabotages, 10 detected, tree restored
+built wheel + sdist                    10 icon files each (8 png + 1 svg + COPYING.md);
+                                       `logo/` in neither — verified with unzip -l / tar tzf
 ```
 
 `validate_logo.py` exits non-zero on: a collision (< 1.5 px), ink outside the artboard,
@@ -777,8 +839,12 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
 * **Still open, and it is a human job:** GitHub's social-preview image is a web-UI upload — the
   REST and GraphQL APIs do not expose it (gotcha 34) — so `icon/github-social-preview.png` and
   `icon/github-avatar-400.png` sit in the repo **until someone clicks**. Steps in
-  `README.md` §8. There is also still no `pyproject` icon field / package favicon wired to
-  `icon/`; the docs header is the only automatic consumer.
+  `README.md` §8.
+* **The package wiring is done (Round 12); PyPI's display of it is not measured.** The glyph set
+  now ships inside the package (`../kwcapture/icons/`) and `kwcapture install-desktop` puts it in
+  the user's hicolor theme, so the artwork has a consumer that is not a README. Whether PyPI
+  renders a *project icon* from any of that is **untested** — do not write that it does. The docs
+  header remains the only displayed consumer verified end to end.
 * **Icons go through ImageMagick or Pillow, never Inkscape for `.ico`**: `inkscape x.svg -o x.ico`
   exits 0 and writes no file (verified) — the shipped way is `bash logo/icon/build.sh`, which
   makes `favicon.ico` at 16/24/32/48/64 from the glyph PNGs; the ad-hoc way is
@@ -794,41 +860,52 @@ Only this round's entry lives here. Rounds 1–9c (two recovered dead sessions, 
 the falsified fit table, the renderer matrix, the MSVG `rotate()` find) are
 [`AGENTS.old.md` Part C](AGENTS.old.md); Round 10's narrative is
 [`AGENTS.old.md` Part G](AGENTS.old.md) and its own summary of what moved is
-[Part F](AGENTS.old.md). Read them before arguing with any number above.
+[Part F](AGENTS.old.md); **Round 11's** (the icon round) is
+[`AGENTS.old.md` Part H](AGENTS.old.md). Read them before arguing with any number above.
 
-**Round 11 — 2026-10-11, the icon round.** The owner chose **`kwcapture-mark.svg` as the
-official logo** and asked for the formats GitHub consumes, pushed. What that turned out to need,
-in order of how much it taught:
+**Round 12 — 2026-10-11, the desktop-icon round.** The mark left this directory and went into
+the Python package: `kwcapture install-desktop` now installs it as an actual desktop icon. What
+that turned out to be, in the order it bit:
 
-* **A logo is not an icon.** `icon/` now holds 23 generated images plus the glyph SVG they all
-  come from: the mark at 1024/512/256/128, the glyph at eleven sizes down to 16, a `favicon.ico`,
-  Apple touch, PWA + maskable, a 400 px avatar, a 1280×640 social preview and a `contact.png`
-  review sheet. One command (`bash icon/build.sh`) and three Pillow builders that each verify
-  their own output.
-* **The split logo/glyph/tile was decided by two measurements, not by taste.** The word dies
-  (`preview/ladder-icon.png`: legible 128, marginal 64, mush 48 and below), and no single ground
-  clears 3:1 for both colours (blue 2.20 on dark, green 3.00 on white) — so small sizes ship the
-  glyph of the *same* drawing, and tiles are light. The avatar is the glyph because GitHub crops
-  to a circle and a circular crop amputates `TURE`.
-* **One of my own claims was too strong, and the contact sheet disproved it.** I had written in
-  `build.sh` that a transparent icon on dark "loses the blue entirely"; the dark cells of the
-  sheet show the strokes surviving fine at 2.20:1. The number stayed, the drama did not. That is
-  gotcha 22's lesson again — **draw the thing and look before you keep the sentence**.
-* **Gotchas 31–35** — Inkscape's `-b none` painting opaque white, ImageMagick compositing a blank
-  canvas while exiting 0, a card writing off its own canvas and printing its size approvingly,
-  the GitHub API having no image field at all, and `identify --format` (two dashes) making
-  `icon/build.sh`'s own report vanish behind a `2>/dev/null` — are one-liners above, full versions
-  in [`AGENTS.old.md` Part B](AGENTS.old.md). Four of the five are the same animal: **a tool that
-  succeeds at the wrong thing**. The fifth is the meta case, and the one to remember: the report
-  line that checked the artefacts was itself unchecked, so `build.sh` shipped a build whose
-  summary printed nothing. It is fixed (one dash, stderr un-suppressed) and `%-28f` turned out to
-  be unsupported by this ImageMagick in the process.
-* **Not done, by nature rather than by failure:** the two GitHub uploads are clicks in a web UI
-  (gotcha 34), and the `pyproject`/package icon wiring is untouched — this round touched assets
-  and docs, no code in `kwcapture/`.
-* **Checked after the push, because a pushed link is a claim:** the README header URL
-  (`raw.githubusercontent.com/tjandrasg/kwcapture/main/logo/icon/kwcapture-mark-256.png`)
-  answers **200 / 12 342 B**, byte-for-byte the file in `icon/`, and `logo/README.md` itself
-  serves 200. The social preview is **not** live: `usesCustomOpenGraphImage` is `false` and
-  `openGraphImageUrl` is still GitHub's generated placeholder — the honest status of the one item
-  this round could not finish, and the query to re-ask it is in `README.md` §8.
+* **A shipped copy is a second artefact, so it wants a rule and a check, not care.**
+  `logo/sync_package_icons.py` is now the only thing allowed to write `kwcapture/icons/`: a
+  byte-for-byte copy — it never resamples — with `--check` for drift, reading `PNG_SIZES` out of
+  `kwcapture/_icons.py` rather than repeating it, so the generator and the installer cannot
+  disagree about which sizes exist. `tests/test_icons.py` runs `--check`, so drift fails a build
+  instead of quietly shipping last month's logo (gotcha 36).
+* **A `--check` that runs only on the machine that made the copy is a note, not a gate.** That
+  suite is a CI step now (no compositor, no KDE, no hardware — it writes into a scratch
+  `$XDG_DATA_HOME` and restores the environment on the way out), and CI additionally asserts the
+  wheel and the sdist each carry the 10 files. Verified here before claiming it: `python -m build`
+  → 10 in each artefact and no `logo/` in the sdist; install the wheel in a throwaway venv, run it
+  **from `/tmp`** with a scratch `XDG_DATA_HOME` → 9 files installed, and the status line reads
+  *brand icons: 9 files in …, entry uses `Icon=kwcapture`*; uninstall → 9 gone and the same status
+  line says the entry would fall back to `accessories-screenshot-tool` — the first name this
+  desktop actually has installed.
+* **Sizes belong to the theme, not to taste.** `glyph-256.png` joined the set because hicolor
+  declares a `256x256/apps` directory and the desktop entry ships into it; every size in the
+  package is one that `/usr/share/icons/hicolor/index.theme` actually lists (gotcha 37).
+* **The `Icon=` findings belong to the root [`../AGENTS.md`](../AGENTS.md) gotchas** — the
+  six-release spec name that resolves in no theme, `;` being parsed by nobody (GLib and KService
+  both take the whole value as one name), and entries keyed per helper binary, which left two of
+  this desktop's three entries stale until `_desktop.refresh_entries()`. From this directory's
+  side only one thing matters, and it is a design statement: **the artwork ships as the glyph** —
+  the same drawing as `kwcapture-mark.svg` with the word dropped, not a second logo. THE RULE is
+  untouched by any of this: no letter was added, moved or repainted this round.
+* **The licence now travels with the bytes.** `kwcapture/icons/COPYING.md` is generated: CC BY 4.0
+  for the pictures against MIT for the code (the split this directory's
+  [`LICENSE.md`](LICENSE.md) makes), the attribution line the licence asks for, and the source
+  sha256 of every file — so an installed tree can be traced back to the sketch it came from.
+  `logo/` stays out of the sdist deliberately — **1.5 MB** on this checkout, 1.1 MB of it generated
+  review PNGs (`du -sb logo --exclude='*.jsonl'`, measured because the first draft of this line said
+  "~700 KB" and was wrong); the `--check` inside the test suite is the bridge back to it.
+* **A probe that proves the checks can fail:** `../probe/sabotage_icons.sh` breaks ten rules in
+  turn and requires the suite to notice — **10/10 detected** here, clean tree green — restoring
+  every file from a `trap`, because it edits tracked source and sessions here die mid-run. One
+  sabotage needed the *test* rewritten rather than the code: the test corrupted a PNG **header**,
+  so the module's IHDR check caught it and the guard under test (re-read after write) passed for
+  the wrong reason. Flipping a byte inside the IDAT is the version that only that guard can see.
+  Gotchas 22 and 24 in the wild, in a test written the same day.
+* **Not done:** the two GitHub uploads are still web-UI clicks (gotcha 34), and whether PyPI
+  renders a project icon out of the now-shipped artwork is **untested** — do not claim it. The
+  docs header stays the only displayed consumer that is verified.

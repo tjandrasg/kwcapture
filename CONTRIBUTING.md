@@ -24,7 +24,9 @@ make dev-install      # pip install -e . so `import kwcapture` is this checkout
 
 `make setup` creates `~/.local/share/applications/io.github.kwcapture-<hash>.desktop`. That is the
 *whole* of KWin's authorisation for the restricted screenshot interface — a plain text file you
-own. Remove all of them with:
+own. (`setup` and `install-desktop` also copy the brand icons into
+`~/.local/share/icons/hicolor/*/apps/kwcapture.*`; `--no-icons` skips them, and the automatic
+first-`Capture()` path never writes anything but the one entry.) Remove all of it with:
 
 ```bash
 .venv/bin/python -m kwcapture install-desktop --uninstall
@@ -41,7 +43,10 @@ make test                                                     # functional suite
 .venv/bin/python -X dev tests/test_kwcapture.py windows       # the per-window capture section only
 .venv/bin/python -X dev tests/test_ring_reader.py             # shared-memory protocol, NO compositor
 .venv/bin/python -X dev tests/test_ring_reader.py quick       # shorter concurrency race
-.venv/bin/python -m pytest tests/                             # both suites collect fine too
+make test-icons                                               # brand icons + the desktop entry, NO compositor
+.venv/bin/python -X dev tests/test_icons.py                   # ditto, and it is in CI too
+bash probe/sabotage_icons.sh                                  # proof the icon checks can fail (~2 min)
+.venv/bin/python -m pytest tests/                             # all three suites collect fine too
 ```
 
 Use `-X dev`: it turns on the warnings that have caught real problems here (undeclared ctypes use,
@@ -62,6 +67,11 @@ verify frames either** (see below), so your laptop is not uniquely disqualified.
   protocol against a synthetic ring: invalid descriptors, torn frames, a concurrent writer,
   bounds-checking of frame geometry before it becomes an offset. This is real coverage of the
   zero-copy read path and it runs anywhere.
+* **Also no compositor, and no KDE either:** `tests/test_icons.py` — 89 checks of the brand icons
+  and the desktop entry. Everything writes into a scratch `$XDG_DATA_HOME`, it never touches your
+  real `~/.local/share`, and it never pokes a live KDE service cache. Packaging changes are
+  covered here: `MANIFEST.in`, `pyproject.toml`'s package-data globs and the
+  `logo/icon/` → `kwcapture/icons/` sync are exactly what this suite notices first.
 * **Nested compositor, no monitor / GPU / login session:**
   `dbus-run-session -- bash probe/nested_kwin_test.sh` starts `kwin_wayland --virtual` inside a
   private D-Bus session, puts a client window in it and drives a full capture against it (~6 s on
@@ -84,9 +94,12 @@ evidence about capture**. Details in README → *How this is tested*.
 | `kwcapture/native/include/kwcapture_shm.h` | the shared-memory protocol: `KWC_MAGIC`, `KWC_VERSION` (currently 2) |
 | `kwcapture/__init__.py` | public API, `Capture`, the zero-copy ring reader, frame validation |
 | `kwcapture/_native.py` | finds the shipped helper or builds it from source |
-| `kwcapture/_desktop.py` | the KWin authorisation entry: install / uninstall / prune stale ones |
+| `kwcapture/_desktop.py` | the KWin authorisation entry: install / uninstall / prune stale ones, and refresh the ones that already exist |
+| `kwcapture/_icons.py` | the brand icons: the shipped set, install/uninstall into `$XDG_DATA_HOME/icons`, and resolving the entry's `Icon=` against the themes on this machine. **Stdlib only** — that is a rule, not an accident |
+| `kwcapture/icons/` | **generated** brand artwork in hicolor layout, shipped in the sdist and wheel. `logo/sync_package_icons.py` is the only thing allowed to write it |
 | `kwcapture/__main__.py` | the `kwcapture` CLI |
-| `tests/` | the two suites described above |
+| `logo/` | the artwork and its tooling: sketches → `gen_logo.py` → SVGs → `icon/` → `sync_package_icons.py` → `kwcapture/icons/`. Read [`logo/AGENTS.md`](logo/AGENTS.md) before touching it; it is in the repo but not in the sdist |
+| `tests/` | the three suites described above |
 | `probe/` | standalone reproducers and measurement tools. **A bug repro belongs here, not in `/tmp`** |
 | `AGENTS.md` | the working log: investigation notes, gotchas, the release checklist, and an *OPEN BUGS* section. Not written as onboarding — read the gotchas before touching the shared-memory protocol |
 
@@ -105,6 +118,12 @@ These are the ones that have actually caused rework, not a style guide:
   because a daemon that is *already running* gets paired with your new reader.
 * **A fix without a test is a guess.** Several bugs here were "fixed" once and came back; the ones
   that stayed fixed have a check in `tests/`.
+* **No new dependency in the icon/desktop path, and no PNG is ever hand-placed.**
+  `kwcapture/_icons.py` reads a PNG's size and colour type out of the IHDR with `struct`, because
+  the alternative is importing Pillow in a module that a plain `import kwcapture` pulls in. Every
+  file under `kwcapture/icons/` is generated from `logo/` by `make icons` (= `sync_package_icons.py`),
+  and `tests/test_icons.py` runs `--check`, so editing one by hand is a failing build, not a
+  secret.
 * **Non-source files go in `private/`** (gitignored): logs, captures, PNGs, transcripts, scratch
   notes. Run `git add -A --dry-run` and read it before committing.
 * **`CHANGELOG.md` gets an entry under *Unreleased***. Version numbers are bumped at release time,

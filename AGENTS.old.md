@@ -1309,3 +1309,36 @@ rule.
   `type` ∈ {markdown,textarea,input,dropdown,checkboxes}, markdown items need `attributes.value`,
   the rest `attributes.label`, dropdowns ≥2 options, and `validations.required` must never appear
   on `checkboxes`.
+
+---
+
+# ARCHIVED 2026-10-11 — the working file grew back past 60 KB during the icon round
+
+Moved out **verbatim**, same rules as the 2026-10-08 and 2026-10-09 passes: nothing rewritten,
+every moved line asserted present in this file before the summary replaced it in `AGENTS.md`
+(`private/archive_check.py`-style check, run before the edit, not after). The distilled version
+that stays in `AGENTS.md` is the *FRESH STATUS — v0.6.0 RELEASED* block; the durable lessons from
+this paragraph (docs are listed in `MANIFEST.in` **by name**, so a new root `.md` never ships
+automatically; no download badge) also live in that block's summary and in *Gotchas*.
+
+## Post-release housekeeping, 2026-10-09 (the day after v0.6.0)
+
+> **Post-release housekeeping, same day (`main` = `d57c837`, CI `build` green).** No library code
+> changed — this was repo/docs work: the README badge row (PyPI version + status + license + CI, and
+> two static badges *KDE Plasma: 6.x tested* / *Wayland: ScreenShot2*; **no download badge**, measured
+> reason below), the community files (`SECURITY.md`, the two issue forms + `config.yml`,
+> `PULL_REQUEST_TEMPLATE.md`, `dependabot.yml`), Dependabot's first PR merged (`2ec83eb`) **with the
+> release workflow rehearsed against it** (run 37881396351 — recipe in the community-files section),
+> then `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`. GitHub's community checklist: 7/7.
+> **Packaging gotcha found while doing it:** `MANIFEST.in` lists docs **by explicit name**, so
+> `SECURITY.md`, `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` were absent from the sdist until added
+> there — a new root `.md` never ships automatically. Fixed and verified by rebuilding the sdist;
+> the published 0.6.0 files are immutable, so this lands at the next release. Worth doing because
+> the people who run `pip install --no-binary` are exactly the ones who read `SECURITY.md`.
+> **Size note — trimmed the same day, 77 KB → 53 KB.** It had grown ~11 KB during this session, so the
+> superseded detail went to `AGENTS.old.md` **verbatim** (nothing deleted; every move listed under
+> *ARCHIVED* below): both 2026-10-08 day-logs, BUG-1's original analysis, BUG-2's full analysis,
+> BUG-4's bisect record, the completed `~~done~~` ideas, and a shorter community-files section — each
+> replaced by the distilled bullets that stay here. **What made this safe: the archive was written
+> first, and the script asserted every moved line was present in it before a summary replaced it.**
+> If you add a third FRESH STATUS, distil one out the same way rather than growing the file again.

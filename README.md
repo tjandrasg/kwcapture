@@ -183,7 +183,8 @@ kwcapture doctor [--fix] [--build]     # is everything OK? (--fix also authorise
 kwcapture doctor --allow-black         # ditto, for empty / locked / headless-nested sessions
                                        # where an all-black frame is the correct answer
 kwcapture setup                        # build the helper + authorise it
-kwcapture install-desktop [--uninstall]# manage the KWin authorisation file
+kwcapture install-desktop [--uninstall]# manage the KWin authorisation file (+ the brand icons)
+kwcapture install-desktop --no-icons   # ... and leave ~/.local/share/icons alone
 kwcapture screens                      # DP-1 2560x1440 @164.69Hz pos 0,0 scale 1
 kwcapture windows                      # every capturable window: handle, name, app, size
 kwcapture windows -f kcalc --json      # filter by name/app id; machine-readable
@@ -212,6 +213,39 @@ WINDOW HANDLE (id)                      NAME                          APP_ID    
 
 The last three are the ones KWin's own application-window list hides (`not-in-app-list`),
 each tagged with its window type — capturable, just not something a taskbar would show.
+
+### Brand icons
+
+`install-desktop` and `setup` also put the project's mark where the desktop can find it:
+
+```
+$XDG_DATA_HOME/icons/hicolor/{16x16,24x24,32x32,48x48,64x64,128x128,256x256,512x512}/apps/kwcapture.png
+$XDG_DATA_HOME/icons/hicolor/scalable/apps/kwcapture.svg
+```
+
+Nine files, copied byte-for-byte out of the package (`kwcapture/icons/`, generated from
+[`logo/`](logo) — see [`logo/README.md`](logo/README.md) §8), never re-rasterised at install time.
+They are the **glyph** — the same drawing as the logo with the word dropped — because
+`APTURE` is mush below ~64 px, and they are the ones with alpha, because an opaque square behind
+the mark on a dark panel is a bug people see.
+
+Two things worth knowing, both measured rather than assumed:
+
+* **The `Icon=` name in the desktop entry is resolved on your machine, when the entry is
+  written.** If these icons are installed the name is `kwcapture`; if they are not, it is the
+  first name that actually resolves in an installed theme (`accessories-screenshot-tool` on
+  KDE, `applets-screenshooter` on GTK naming). A `;` fallback chain is **not** a thing here:
+  GLib and KService both take the whole `Icon=` value as one name, so `Icon=a;b` resolves to
+  neither.
+* **Branding never breaks capture.** The automatic path — the first `Capture()` writing the one
+  file KWin needs — still writes exactly that one file and no icons, and if an icon install
+  fails the entry simply names your theme's own screenshot icon. `kwcapture doctor` tells you
+  which state you are in and `--fix` installs them.
+
+`install-desktop --uninstall` removes the icons as well as the entries — but only the files whose
+sha256 still matches what this package ships, so a `kwcapture.png` drawn by somebody else in that
+shared directory survives. The pictures are **CC BY 4.0** ([`logo/LICENSE.md`](logo/LICENSE.md)),
+the code MIT; trademark rights are not granted.
 
 ## Python API
 
@@ -581,17 +615,22 @@ kwcapture/
                          grab / demo / bench
   _native.py             find or compile the helper ($KWCAPTURE_BIN, wheel, cache, source)
   _desktop.py            the KWin authorisation desktop entry
+  _icons.py              the brand icons: the shipped set, install/uninstall, resolving Icon=
+  icons/                 GENERATED brand artwork in hicolor layout; logo/ upstream is the source
   native/kwcapture.c     the capture daemon (sd-bus + shm ring + output and window listing)
   native/include/kwcapture_shm.h   shared-memory protocol (asserted on both sides)
 tests/test_kwcapture.py  165 functional checks, live Plasma required (also `pytest tests/`)
 tests/test_ring_reader.py 37 checks of the shm protocol — no compositor needed
+tests/test_icons.py      89 checks of the icons + the desktop entry — no compositor needed
 bench.py                 comparison against mss and PIL.ImageGrab
 probe/                   experiments: nested-KWin headless test, Wayland global dumper,
                          non-normal-window enumeration (probe/non_normal_windows.py), etc.
 .github/workflows/       ci.yml (build + headless KWin), release.yml (wheels + release + PyPI)
 logo/                    the identity: 2 sketches -> 3 SVGs -> the shipped icon/ set, with
-                         gen_logo.py / validate_logo.py / render_agreement.py and its own
-                         AGENTS.md + README.md + LICENSE.md (see logo/README.md before editing)
+                         gen_logo.py / validate_logo.py / render_agreement.py /
+                         sync_package_icons.py (the only sanctioned path into kwcapture/icons/)
+                         and its own AGENTS.md + README.md + LICENSE.md — see logo/README.md
+                         before editing. In the repo, deliberately not in the sdist
 AGENTS.md                investigation log — how the KWin API and its auth really work
 SECURITY.md              what the helper does in security terms, and how to check it yourself
 CONTRIBUTING.md          setup, test modes, contributing without a KDE desktop, house rules
@@ -604,6 +643,8 @@ Development:
 python3 -m venv .venv && .venv/bin/pip install numpy pillow opencv-python-headless
 make setup          # build the helper into kwcapture/bin + authorise
 make test bench     # tests, then the comparison table
+make test-icons     # the icon / desktop-entry suite — no compositor, no hardware, ~1 s
+make icons          # re-sync kwcapture/icons/ from logo/icon/ after regenerating the artwork
 make wheel          # dist/*.whl
 ```
 
@@ -611,7 +652,7 @@ make wheel          # dist/*.whl
 
 | workflow | runs on | what it proves |
 |---|---|---|
-| [`ci.yml`](actions/workflows/ci.yml) | every push and PR | **`build`**: the helper really ends up in the wheel, the sdist builds and installs from scratch in a clean venv, and the 37 ring-reader checks (shared-memory protocol, torn-frame guards, concurrent writer) run with no compositor at all. **`headless KWin capture`**: a real Plasma 6 KWin, below. |
+| [`ci.yml`](actions/workflows/ci.yml) | every push and PR | **`build`**: the helper really ends up in the wheel, both artefacts really carry the 10 brand-icon files, the sdist builds and installs from scratch in a clean venv, the 37 ring-reader checks (shared-memory protocol, torn-frame guards, concurrent writer) and the 89 brand-icon checks (install/uninstall, the desktop entry, `kwcapture/icons/` still equal to `logo/icon/`) run with no compositor at all. **`headless KWin capture`**: a real Plasma 6 KWin, below. |
 | [`release.yml`](actions/workflows/release.yml) | `v*` tags | sdist + `manylinux` wheels via cibuildwheel, attached to the GitHub release; PyPI publishing is a separate job behind the `pypi` environment and an opt-in input. |
 
 **The headless job captures from a real KWin with no GPU, no monitor and nobody logged in** —
@@ -645,7 +686,14 @@ dbus-run-session -- bash probe/nested_kwin_test.sh
 
 The functional suite (`tests/test_kwcapture.py`) needs a live Plasma session and is not run in CI.
 Its per-output checks multiply, so the count follows the hardware: 172 on a 75 % + 125 % two-monitor
-desk, 165 on a single output at 100 %.
+desk, 165 on a single output at 100 %. The other two suites are hardware-independent — 37 and 89
+checks, the same numbers everywhere.
+
+`probe/sabotage_icons.sh` is the second half of the icon suite: it breaks each rule the icon code
+enforces, one at a time, runs the suite, and requires it to notice — **10/10 detected** on this
+machine, every file restored afterwards (a `trap` does that, because this probe edits tracked
+source). A check nobody has watched fail is not evidence; that lesson is
+[`logo/AGENTS.md`](logo/AGENTS.md) gotcha 24, paid for twice in one day.
 
 ## Troubleshooting
 

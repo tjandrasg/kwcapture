@@ -30,12 +30,14 @@ machine, and the house rules. Everything below is the part CI cannot check for y
 
 ## Testing
 
-The functional suite needs a **real KDE Plasma desktop** (KWin on Wayland). CI runs only the
-ring-reader suite plus a build/import smoke test.
+The functional suite needs a **real KDE Plasma desktop** (KWin on Wayland). CI runs the other two
+suites plus a build/import smoke test and an artefact check — useful, but still nothing about
+frames.
 
 ```
 make && .venv/bin/python -X dev tests/test_kwcapture.py   # needs a Plasma desktop
 .venv/bin/python -X dev tests/test_ring_reader.py         # no compositor needed
+make test-icons                                          # no compositor, no KDE, no hardware
 ```
 
 - [ ] Functional suite passes on a real desktop — Plasma/KWin version: ________, outputs and
@@ -44,6 +46,10 @@ make && .venv/bin/python -X dev tests/test_kwcapture.py   # needs a Plasma deskt
       pair — say which you ran, not how many passed, if you are not sure)
 - [ ] Ring-reader suite passes — this is the only automated coverage the zero-copy read path
       gets on machines without a compositor, so it is not optional
+- [ ] Icon/desktop-entry suite passes (`make test-icons`) — required if you touched
+      `kwcapture/_icons.py`, `kwcapture/_desktop.py`, `kwcapture/icons/`, `MANIFEST.in`,
+      `pyproject.toml` or `logo/`. If you changed the artwork: `make icons` first, then
+      `bash probe/sabotage_icons.sh` to show the checks still bite
 - [ ] Docs only, no code touched
 
 ## Compatibility
