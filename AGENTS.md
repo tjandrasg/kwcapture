@@ -719,6 +719,17 @@ know.
   quay.io. No `pip` section — `numpy` and the extras are deliberately unpinned, so bot PRs against
   open ranges are pure noise for one maintainer. An explicit `ignore` holds **cibuildwheel below 5**
   so a bot cannot step over a breaking major without a human reading `release.yml`'s comments.
+* **Second cycle (2026-10-11): PR #3, squash-merged as `d495ddb`** — `upload-artifact` v6→v7 and
+  `download-artifact` v7→v8, 2 lines in `release.yml`, CI green on the PR head and on `main`.
+  Read before reverting it in a hurry: **the majors still differ (upload v7, download v8) and that is
+  inherited, not introduced** — the file was already upload v6 / download v7, and the pairing that
+  matters is the artifact backend both sit on, not the two majors matching. Our usage is also the
+  boring kind that survives these bumps: **one artifact, named `dist`, uploaded with `path: dist/*`
+  and downloaded by that same name** — none of the same-name multi-artifact merging or `pattern`
+  globbing that made the v4→v5 jump break people. What CI did **not** prove: `ci.yml` never runs
+  `release.yml`, so the first real exercise of these two steps is the **next `v*` tag**. If the
+  `pypi` job then cannot find `dist/`, that is this bump — the release assets are already attached by
+  that point, so the fix is to re-run the job (or pin those two lines back), not to panic mid-release.
 * **First cycle (2026-10-09):** PR #2 grouped checkout v4→v7, setup-python v5→v7,
   upload-artifact v4→v6, download-artifact v4→v7, cibuildwheel untouched ✓. Squash-merged
   (`2ec83eb`), CI green — but **a PR runs `ci.yml`, which never touches the artefact actions**, so
