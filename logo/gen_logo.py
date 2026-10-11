@@ -59,14 +59,31 @@ FONT = "/usr/share/fonts/opentype/inter/Inter-ExtraBold.otf"   # ExtraBold match
 # PTURE.  Before 2026-10-10 the monogram was a blue-to-green gradient and the type was
 # black; --classic reproduces that exactly.
 DARK = "#000000"        # --classic type colour only
-GREEN = "#00ac4e"       # the W's green, i.e. the old gradient's end stop
-BLUE = "#0000ff"        # the C, the A, the letters; the old gradient's start stop
-                        # Why this blue and not a friendlier one: the C TOUCHES the green,
-                        # so blue-vs-green separation beats blue-vs-background. Measured
-                        # contrast ratios: BLUE vs white 8.59, vs #00ac4e 2.87, vs GitHub
-                        # dark #0d1117 2.20.  A lighter blue (#3b82f6) is better on dark
-                        # (5.15) but only 1.23 from the green, so the C would dissolve
-                        # into the W.  Dark mode stays an open item in AGENTS.md.
+# PALETTE P2, the owner's decision of 2026-10-11, applied 2026-10-11 (was #00ac4e/#0000ff).
+# Every number in these two comments is WCAG relative luminance against the two grounds a
+# reader actually meets -- white and GitHub dark #0d1117 -- and every one of them is printed
+# by `python3 logo/contrast_report.py`, which reads the constants below.  Do not hand-edit a
+# ratio here: re-run that and copy what it says.
+GREEN = "#008c46"       # the W's green, and the K's stem.  4.34 on white, 4.36 on #0d1117:
+                        # the balanced green of the four measured (4.34/4.36; #00ac4e was
+                        # 3.00/6.32 and failed white by a hair, #007a3d 5.45/3.47 reads as
+                        # forest, #007038 6.22/3.04 is the last green that clears dark).
+                        # It is no longer "the old gradient's end stop": P2 is a palette,
+                        # not a gradient, and the old stops live in --classic.
+BLUE = "#7f7fff"        # the C, the A, the letters.  3.29 on white, 5.75 on #0d1117 -- the
+                        # only single value measured that clears the 3:1 non-text floor on
+                        # BOTH grounds, which is why the palette changed: the #0000ff it
+                        # replaced was 8.59 on white but 2.20 on dark, and dark is where
+                        # GitHub and every terminal theme live.
+                        # What P2 costs, stated so nobody rediscovers it: the two halves are
+                        # now only 1.32:1 apart in LIGHTNESS (the old pair was 2.87).  The
+                        # C still separates from the W because it differs in HUE -- 240 deg
+                        # against the green's 150 -- not in value.  Two halves that are both
+                        # legal on both grounds must both sit in the luminance window
+                        # [0.1164, 0.3000], and inside that window 2.10:1 is the loudest
+                        # separation arithmetic allows; #3b82f6, the friendlier blue, is
+                        # 5.15 on dark but 1.18 from this green, and the C would dissolve
+                        # into the W.  Same instrument, `contrast_report.py`.
 C_PAINT = "solid"     # how the blue C is cut out: solid | mask | clip. Chosen by the
                       # RENDERER MATRIX, not by taste (validate_logo.py re-runs it):
                       #   clip  -- what shipped until 2026-10-10. QtSvg IGNORES clip-path
@@ -1106,6 +1123,10 @@ def kw_paint(kw_d, poly, green=GREEN, blue=BLUE, grad_defs=None, split=True,
 
 
 # ---------------------------------------------------------------------- build
+# NOT the palette: these are the two stops the sketch carries, kept verbatim so --classic
+# reproduces the retired 2026-10-10 look exactly.  Palette P2 changed GREEN and BLUE; it did
+# not touch this, and a diff of GRAD_SKETCH against the sketch is the check that --classic is
+# still honest.  (build_mark() reads the stops out of the sketch file for the same reason.)
 GRAD_SKETCH = ('    <linearGradient id="kw-grad" x1="51.549733" y1="114.89782"\n'
                '                    x2="87.126312" y2="114.89782"'
                ' gradientUnits="userSpaceOnUse">\n'
@@ -1252,8 +1273,10 @@ if __name__ == "__main__":
                          "than to rediscover)")
     ap.add_argument("--no-a", action="store_true", help="monogram + PTURE, no pointer")
     ap.add_argument("--monogram", action="store_true",
-                    help="bare monogram only, no pointer and no wordmark "
-                         "-> logo/kwcapture-mono.svg")
+                    help="bare monogram only, no pointer and no wordmark; needs an "
+                         "explicit --out, because there is no shipped kwcapture-mono.svg "
+                         "any more (deleted 2026-10-11: unofficial and historical, the "
+                         "owner's ruling -- see logo/AGENTS.md gotcha 38)")
     ap.add_argument("--mark", action="store_true",
                     help="build logo/kwcapture-mark.svg from kwcapture-mark-sketch.svg: "
                          "monogram + APTURE fitted inside the helper box drawn there, "
@@ -1314,8 +1337,11 @@ if __name__ == "__main__":
     # sane. This happened by following this folder's own documented commands, which is proof
     # enough that a note in a README is not a guard. Default output paths are still fine for
     # the default look; only a deliberate deviation needs --out (or --force).
-    shipped = {str(HERE / "kwcapture.svg"), str(HERE / "kwcapture-mono.svg"),
-               str(HERE / "kwcapture-mark.svg")}
+    # The shipped artefacts. kwcapture-mono.svg was here until 2026-10-11: the owner ruled the
+    # monogram unofficial and historical, so it is deleted, and a default output path that
+    # re-creates a deleted artefact is exactly the trap that made Round 12 ship the wrong
+    # drawing (gotcha 38). --monogram therefore REQUIRES --out, below.
+    shipped = {str(HERE / "kwcapture.svg"), str(HERE / "kwcapture-mark.svg")}
     # Which knobs deviate from the shipped look? Compared against argparse's OWN defaults,
     # so a knob added later cannot silently escape the list, and a change of default cannot
     # make the guard disagree with the help text.
@@ -1343,8 +1369,17 @@ if __name__ == "__main__":
             off.append(f"{flag} {got:g}")
     if a.sketch != str(SKETCH) and not a.mark:
         off.append(f"--sketch {a.sketch}")
-    guess = str(HERE / ("kwcapture-mark.svg" if a.mark else
-                        "kwcapture-mono.svg" if a.monogram else "kwcapture.svg"))
+    guess = str(HERE / ("kwcapture-mark.svg" if a.mark else "kwcapture.svg"))
+    if a.monogram and a.out is None:
+        raise SystemExit(
+            "--monogram needs an explicit --out: there is no shipped kwcapture-mono.svg to "
+            "write.\n"
+            "  a figure:  --monogram --out /tmp/mono.svg\n"
+            "  the mode is still here; the ARTEFACT is not. It was deleted 2026-10-11 (the "
+            "owner ruled\n  it unofficial and historical), and a monogram sitting next to the "
+            "approved artwork eventually\n  gets mistaken for it -- which is how Round 12's "
+            "icon set went wrong (gotcha 38).\n"
+            "  the file itself: git log --diff-filter=D -- logo/kwcapture-mono.svg")
     if a.out is None and off and not a.force and guess in shipped and Path(guess).exists():
         raise SystemExit(
             f"refusing to overwrite the shipped {Path(guess).name}: this run deviates from "
@@ -1400,7 +1435,7 @@ if __name__ == "__main__":
         print("written     :", out)
         raise SystemExit(0)
 
-    out = a.out or str(HERE / ("kwcapture-mono.svg" if a.monogram else "kwcapture.svg"))
+    out = a.out or str(HERE / "kwcapture.svg")          # --monogram already required --out
 
     word = "" if a.monogram else a.word
     svg, info = build(font=a.font, word=word, cap=a.cap, track=a.track,

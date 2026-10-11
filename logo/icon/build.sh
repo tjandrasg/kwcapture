@@ -21,12 +21,16 @@
 #       is still the mark at 16 px.
 #   tile  (the mark on a white square; 180 is rounded) apple-touch-icon, pwa-192, pwa-512,
 #         maskable-512, github-avatar-400
-#       The tile is a GROUND, not a different drawing: the type is #0000ff, which is 2.20:1
-#       against GitHub's #0d1117 and 8.59:1 on white, while the green is 6.32:1 / 3.00:1 — a
-#       light ground is the only one where both halves clear 3:1. maskable keeps the 80% safe
-#       zone; the avatar is the mark resized into 400x400 with no crop: GitHub's circular mask
-#       clips 9.1% of its ink (measured, worst 45.6 px beyond the inscribed circle of 200) and
-#       that is the host's masking, not a licence to ship another artwork.
+#       The tile is a GROUND, not a different drawing. It used to be justified by contrast: on
+#       the old palette the type was #0000ff at 2.20:1 against GitHub's #0d1117, and white was
+#       the only ground where both halves cleared 3:1. Palette P2 (2026-10-11) removed that
+#       reason -- green #008c46 is 4.34/4.36 and blue #7f7fff is 3.29/5.75 on white/#0d1117, so
+#       BOTH grounds are legal now (`python3 logo/contrast_report.py`). What is left of the
+#       argument is shape: these are squares that hosts mask, and the tile chooses the ground
+#       rather than letting the host choose it. maskable keeps the 80% safe zone; the avatar is
+#       the mark resized into 400x400 with no crop: GitHub's circular mask clips 9.1% of its ink
+#       (measured, worst 45.6 px beyond the inscribed circle of 200) and that is the host's
+#       masking, not a licence to ship another artwork.
 #   favicon.ico  16 24 32 48 64          browsers that still ask for .ico, built from the mark
 #   github-social-preview.png 1280x640   Settings -> Social preview (card.py)
 set -euo pipefail

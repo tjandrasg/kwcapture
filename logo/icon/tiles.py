@@ -10,12 +10,17 @@ squircle, maskable's safe zone) the artwork is scaled until **no ink falls under
 measured per tile below and asserted at the end of this script, because "it will probably survive
 the crop" is how the last revision ended up shipping a different logo.
 
-Why a tile at all: the logo's type is #0000ff, which is **2.20:1 against GitHub's #0d1117**
-(the number AGENTS.md keeps in its open list). A transparent icon in a dark browser tab, a
-dark home screen or GitHub's dark chrome therefore loses the blue half of the mark — the C,
-the A and the whole idea. A white tile fixes that without waiting for the dark-mode recolour
-decision, and both Apple and GitHub apply their own masking to a square icon anyway, so the
-square is the correct thing to ship.
+Why a tile at all — and note that this reason is NOT contrast any more. Until palette P2
+(2026-10-11) the type was #0000ff, **2.20:1 against GitHub's #0d1117**, and the white tile was
+the answer to that failure. It is no longer: the type is now #7f7fff, 5.75:1 on the same dark
+ground, and both halves of the mark clear the WCAG 3:1 non-text floor on *both* grounds
+(`python3 logo/contrast_report.py`). What is left of the argument is the shape: a browser tab,
+an iOS home screen, a PWA manifest slot and a GitHub avatar are all squares that get masked,
+and a mark with transparent corners inside a square that a host will round or circle is the
+same artwork with the host choosing its own background. The tile chooses it instead — white,
+the ground every cell of `contact.png` is reviewed on — and the transparent renders stay in
+the set for hosts that want them. If a future round wants the tile justified by arithmetic
+again, re-run `contrast_report.py` first: on today's palette it does not say that.
 
 The circular-crop arithmetic, measured rather than estimated (the mask GitHub applies is the
 inscribed circle): the mark at **full bleed loses 4 015 ink pixels, worst 45.6 px beyond the
@@ -28,8 +33,11 @@ blank grayscale canvas on this machine for every variation tried — white base,
 `magick composite`, `-layers flatten`, `-type TrueColor`. Pillow is deterministic and is
 already required by the render checks, so the compositing lives here.)
 
-    python3 logo/icon/tiles.py
+    python3 logo/icon/tiles.py           # build + verify
+    python3 logo/icon/tiles.py --sweep   # and report FIT's measured headroom per masked tile
 """
+import sys
+import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -66,6 +74,15 @@ def tile(size, out, art_size=None, radius=0, src=None):
 # rasteriser. 79 % is the largest single fraction that clears all three, and the mask check at
 # the end of this script fails the build if the artwork, the resampler or the mark ever changes
 # enough to break it. maskable additionally caps at its 80 % safe zone.
+#
+# THE NUMBER IS TIED TO THE RASTER, NOT TO THE GEOMETRY — and palette P2 proved that the
+# warning was not theoretical. The halo counted here is antialiasing, and antialiasing is a
+# blend of the ink colour with the ground: swap #0000ff for #7f7fff and the same edge produces
+# a different number of pixels over the alpha threshold, so a *recolour* can clip ink here
+# without a single coordinate moving. If the mask check below ever reports clipped px > 0 and
+# the sketch has not been touched, RE-MEASURE THIS CONSTANT (sweep the fraction, take the
+# largest that clears every tile) — do not crop a tile and do not ship a second drawing, which
+# is the decision that got `icon/` rebuilt in Round 13 (gotcha 38).
 FIT = 0.79
 BUILT = [
     tile(180, "apple-touch-icon.png", int(180 * FIT), radius=40),   # iOS squircles it
@@ -124,4 +141,43 @@ for name in ("github-avatar-400.png", "maskable-512.png", "apple-touch-icon.png"
         failing.append(name)
 if failing:
     print("refusing to ship tiles whose artwork the host would cut:", ", ".join(failing))
+    print("if the sketch did not move and only the PAINT did, FIT is the number that went "
+          "stale: re-measure it (`python3 tiles.py --sweep`), never crop the tile.")
     raise SystemExit(1)
+
+
+if "--sweep" in sys.argv:
+    # How much room is left between FIT and the first clipped pixel? Measured, because "0
+    # clipped px" says nothing about the margin, and the margin is what a recolour eats. The
+    # answer is a fraction per tile; FIT must clear the worst of them, and this prints the
+    # worst so the next round can see how close it is running.
+    print("\nFIT sweep (largest artwork fraction that still loses no ink):")
+    import shutil
+    tmp = Path(tempfile.mkdtemp(prefix="kw-fit-sweep-"))
+    worst_fit = 1.0
+    try:
+        for size, name in ((400, "github-avatar-400.png"), (512, "maskable-512.png"),
+                           (180, "apple-touch-icon.png")):
+            probe = tmp / "probe.png"
+
+            def clears(art):
+                tile(size, probe, art, radius=40 if "apple" in name else 0,
+                     src=HERE / "kwcapture-mark-1024.png")
+                return ink_outside_circle(probe)[0] == 0
+
+            # bisect: bigger artwork can only ever reach further out, so "clears" is monotone
+            lo, hi = int(size * FIT), size
+            if not clears(lo):
+                print(f"  {name:26} FIT ALREADY CLIPS at {lo}px — re-measure before shipping")
+                raise SystemExit(1)
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                lo, hi = (mid, hi) if clears(mid) else (lo, mid)
+            worst_fit = min(worst_fit, lo / size)
+            print(f"  {name:26} largest artwork that loses no ink: {lo}px of {size} "
+                  f"({lo / size:.3f}) — FIT {FIT:.3f} has {(lo - int(size * FIT))}px "
+                  f"/ {100 * (lo / size - FIT):+.1f} % of headroom")
+        print(f"  worst across the three: {worst_fit:.3f}; FIT = {FIT:.3f} "
+              f"({100 * (worst_fit - FIT):+.1f} % of the side in hand)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

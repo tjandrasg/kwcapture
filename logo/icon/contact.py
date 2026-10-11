@@ -12,11 +12,14 @@ Two things it settles by showing:
     ink lost (the previous revision claimed a circular crop "amputates TURE" and answered that by
     shipping the monogram. Measured at full bleed it does lose 4 015 px / 45.6 px overshoot — and
     the fix was the scale, not a second drawing: `tiles.py` asserts zero clipped ink);
-  * the grounds. Blue #0000ff is 2.20:1 against GitHub's #0d1117 — under the 3:1 WCAG figure
-    for graphical objects — while the green is 6.32:1 there. On white it is the green that is
-    borderline (3.00:1) and the blue that is strong (8.59:1). No ground wins both, so the
-    tiled icons pick the *light* ground (both halves clear 3:1) and the transparent renders
-    stay in the set for hosts that want them.
+  * the grounds. Since palette P2 (2026-10-11) **both grounds win both colours**: green
+    #008c46 is 4.34:1 on white and 4.36:1 here, blue #7f7fff is 3.29:1 and 5.75:1, every cell
+    over the 3:1 WCAG figure for graphical objects (`python3 logo/contrast_report.py` prints
+    the table and exits 1 if any cell is under). Before it, this sheet's whole point was that
+    no ground won both — #0000ff was 2.20:1 here and the green was 3.00:1 on white, one failure
+    per ground. The tiled icons still pick the light ground, because a masked square needs one
+    whatever the ratios say (see `tiles.py`), and the transparent renders stay in the set for
+    hosts that want them; but read this row as "both are legal now", not as a trade-off.
 
     python3 logo/icon/contact.py
 """
@@ -30,6 +33,10 @@ DARK = (13, 17, 23)
 LIGHT = (255, 255, 255)
 CELL, PAD, LAB = 168, 14, 44
 COLS = 6
+# The dark ground of this sheet is GitHub's canvas, not a brand colour: it is deliberately NOT
+# derived from the palette, and it is the same value the WCAG table is computed against
+# (contrast_report.DARK). If the two ever disagree, this figure is measuring the wrong ground.
+assert DARK == (13, 17, 23), DARK                              # == #0d1117
 
 # (file, label, ground, display size, circular crop?)
 CARDS = [

@@ -568,15 +568,113 @@ def _msvg_render(path, n=400):
     return _count(a)
 
 
-def _count(a):
-    a = np.asarray(a).astype(int)
+def palette():
+    """{'green': '#..', 'blue': '#..'} -- the brand colours AS THE ARTWORK DEFINES THEM.
+
+    Read out of gen_logo.py rather than repeated here, for the reason the whole 2026-10-11
+    recolour just demonstrated: `render_agreement.py` used to ask `fill.startswith("#00a")`,
+    which was true of the old green and false of the new one, so on the recoloured files it
+    compared NOTHING and printed "all engines agree with the path data" at exit 0.  A check
+    that quietly stops checking is worse than one that fails (gotcha 30), so nothing in this
+    file may hard-code a brand colour again, and `classify()` below refuses to guess.
+    """
+    if G is None:
+        return {}
+    out = {}
+    for name, attr in (("green", "GREEN"), ("blue", "BLUE")):
+        h = getattr(G, attr, None)
+        if isinstance(h, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", h):
+            out[name] = h.lower()
+    return out
+
+
+def _rgb(h):
+    h = h.lstrip("#")
+    return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], float)
+
+
+def _hue(rgb):
+    """HSV hue in degrees, or None for an achromatic colour."""
+    mx, mn = float(max(rgb)), float(min(rgb))
+    if mx - mn < 1e-9:
+        return None
+    r, g, b = rgb
+    if mx == r:
+        h = ((g - b) / (mx - mn)) % 6
+    elif mx == g:
+        h = (b - r) / (mx - mn) + 2
+    else:
+        h = (r - g) / (mx - mn) + 4
+    return 60.0 * h
+
+
+def classify(a, pal=None):
+    """{name: bool mask} over an RGB raster -- which pixels are which brand colour.
+
+    HUE, not nearest-colour, and not "channel X wins": mixing paint with a light ground moves
+    a pixel's value and saturation while barely moving its hue, which is the only reason an
+    antialiased edge is classifiable at all.  (Nearest-RGB gets it wrong here on purpose: a
+    50% wash of #008c46 on white is *numerically* closer to #7f7fff than to its own green.)
+
+    Pixels are paper unless they carry some saturation, so white, grey and black never count.
+    The two brand hues must be at least 30 deg apart or this raises: a palette of two nearby
+    hues would make the render check print confident numbers about a split it cannot see, and
+    "the instrument has gone blind" must be an error, never a percentage.
+    """
+    a = np.asarray(a).astype(float)
     if a.ndim != 3 or a.shape[2] < 3:
         # never let this surface as a bare IndexError: it means a renderer produced
         # something that is not an RGB raster, and the message should say which
         raise RuntimeError(f"expected an RGB raster, got shape {a.shape}")
-    R, Gc, B = a[:, :, 0], a[:, :, 1], a[:, :, 2]
-    return (int(((Gc > R + 25) & (Gc > B + 25)).sum()),
-            int(((B > R + 25) & (B > Gc + 25)).sum()))
+    pal = pal or palette()
+    if len(pal) != 2:
+        raise RuntimeError("cannot see the brand colours: gen_logo.py is not importable, "
+                           "so there is no palette to classify against -- the render check "
+                           "is not running, and saying so is the whole point")
+    hues = {}
+    for name, hexv in pal.items():
+        h = _hue(_rgb(hexv))
+        if h is None:
+            raise RuntimeError(f"brand colour {name} {hexv} is achromatic: it cannot be "
+                               f"told apart from the ground by hue, so no render check "
+                               f"can see it")
+        hues[name] = h
+    (n1, h1), (n2, h2) = list(hues.items())
+    apart = abs(h1 - h2) % 360
+    apart = min(apart, 360 - apart)
+    if apart < 30:
+        raise RuntimeError(f"the two brand hues are only {apart:.0f} deg apart "
+                           f"({n1} {pal[n1]} vs {n2} {pal[n2]}): a hue classifier cannot "
+                           f"separate them, so the render check would be meaningless")
+
+    mx = a[:, :, :3].max(axis=2)
+    mn = a[:, :, :3].min(axis=2)
+    chroma = mx - mn
+    sat = np.divide(chroma, mx, out=np.zeros_like(mx), where=mx > 0)
+    # hue per pixel, vectorised over the three max-channel cases
+    with np.errstate(invalid="ignore", divide="ignore"):
+        h_r = ((a[:, :, 1] - a[:, :, 2]) / chroma) % 6
+        h_g = (a[:, :, 2] - a[:, :, 0]) / chroma + 2
+        h_b = (a[:, :, 0] - a[:, :, 1]) / chroma + 4
+    hue = 60.0 * np.where(mx == a[:, :, 0], h_r, np.where(mx == a[:, :, 1], h_g, h_b))
+    hue %= 360.0
+
+    out, named = {}, {}
+    for name, hexv in pal.items():
+        d = np.abs(hue - hues[name])
+        d = np.minimum(d, 360 - d)
+        named[name] = d
+    lo = np.minimum(named[n1], named[n2])
+    paint = (sat >= 0.10) & (chroma >= 12)          # paper/grey/black are not paint
+    for name in pal:
+        out[name] = paint & (named[name] <= lo) & (named[name] <= 60)
+    return out
+
+
+def _count(a):
+    """(green, blue) pixel counts, via `classify()` -- palette-derived, see above."""
+    m = classify(a)
+    return (int(m["green"].sum()), int(m["blue"].sum()))
 
 
 RENDERERS = (("QtSvg   (Gwenview, Dolphin, QIcon)", _qt_render),
@@ -594,6 +692,8 @@ def render_check(target, overlays):
 
     Everything else here reads path data and does its own geometry, so it agrees with the
     generator by construction (gotcha 22). This check cannot: it asks what a viewer paints.
+    Which is also why it classifies by hue against `palette()` (see there): the classifier is
+    the one part of this file that could go blind on a recolour.
     It exists because `clip-path` shipped for a day while QtSvg silently ignores that
     attribute -- the monogram rendered 100% blue in Gwenview and in Dolphin's thumbnails,
     with the file valid, the generator happy and every other check green.
@@ -606,6 +706,10 @@ def render_check(target, overlays):
     if "kw" not in overlays:
         return []                       # one-tone output: nothing two-tone to verify
     out, seen = [], 0
+    pal = palette()
+    if len(pal) == 2:
+        print(f"  render palette: green {pal['green']} / blue {pal['blue']} "
+              f"(read off gen_logo.py, not repeated here)")
     for name, fn in RENDERERS:
         try:
             res = fn(target)
