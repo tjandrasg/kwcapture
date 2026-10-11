@@ -8,7 +8,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **94 543 bytes**
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **96 404 bytes**
 > — measured with `wc -c logo/AGENTS.md`, not remembered. It was **86 077** before Round 10's
 > archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
 > (every substantive line of the old file is present in one of the two files — checked, not
@@ -22,11 +22,11 @@ log, the falsified claims, the war story behind every gotcha.
 > payment was moving Round 11's narrative (3 019 bytes, verbatim) to
 > [`AGENTS.old.md` Part H](AGENTS.old.md) — asserted present in the archive *before* the summary
 > replaced it, the same way Round 10's pass was done. **A round that adds narrative also moves one
-> out.** **Round 13** (the one-artwork round) opened at **76 584** and closes at **94 543**, and it
+> out.** **Round 13** (the one-artwork round) opened at **76 584** and closes at **96 404**, and it
 > did *not* pay for itself: it moved Round 12's narrative out (4 070 bytes, verbatim — the moved
 > block's sha256 starts `cddb1ce7cb55b311`, and its presence in
 > [`AGENTS.old.md` Part I](AGENTS.old.md) was asserted by string search *before* the pointer
-> replaced it) and still grew by 17 959 bytes, because a round about *why a build script was not
+> replaced it) and still grew by 19 820 bytes, because a round about *why a build script was not
 > allowed to pick the artwork* spends its budget on reasoning: a verified block, gotchas 38 and 39,
 > the Files/Still-open corrections and its own log entry. The debt is the next round's, and the two
 > fattest candidates are the `icon/` expected-numbers block and Round 10's verification prose —
@@ -120,6 +120,13 @@ log, the falsified claims, the war story behind every gotcha.
 > `validate_logo.py logo/kwcapture-mark.svg` still prints **OK** (render QtSvg 53.6 % blue, MSVG
 > 50.3 %), so the Round 10 block stands; Round 11's and Round 12's icon-set claims do not, and are
 > annotated above rather than deleted.
+
+> **NEXT SESSION — one committed job: apply palette P2.** Green `#00ac4e → #008c46`, blue
+> `#0000ff → #7f7fff`, decided by the owner on 2026-10-11 from six rendered pairs and **not yet
+> applied**. Ordered checklist: **`/tmp/_storage/Next_Prompt.md`** (regenerate it from the
+> *Still open* item "PALETTE P2" if `/tmp` has been cleared). It changes paint only — THE RULE,
+> geometry, the fit and the two-colour split are untouched — and it ends with the owner re-uploading
+> the social preview, because GitHub stores that upload and the live one is the old palette.
 
 ---
 
@@ -903,9 +910,21 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   The ladder stays as the measurement of what that means and nothing in the pipeline may "fix" it —
   see gotcha 38. If a legible 16 px asset is ever wanted it is a **new mark from the owner**, not a
   crop, not a monogram, not a build-script default.
-* **Dark mode: the owner proposed a palette on 2026-10-11, it was measured, and it is NOT applied.
-  One half is a win and one half has a problem — awaiting the owner's call.** Proposed: green
-  `#00ac4e → #00ff00`, blue `#0000ff → #7f7fff`. Measured with the WCAG formula, and rendered
+* **PALETTE P2 — DECIDED by the owner, NOT YET APPLIED. This is the next session's job.** The
+  decision, taken 2026-10-11 after six pairs were rendered on white and on `#0d1117` and the owner
+  picked by eye: **green `#00ac4e → #008c46`, blue `#0000ff → #7f7fff`.** It wins because every cell
+  clears the WCAG 3:1 non-text floor on **both** grounds — green **4.34** white / **4.36** dark, blue
+  **3.29** white / **5.75** dark — which closes the dark-mode finding this folder has carried since
+  Round 10 (blue on `#0d1117` was **2.20:1**). Paint only: no geometry, no fit, no new variant.
+  **The full ordered checklist, including the paint-only `diff` proof, the `FIT` re-measure warning,
+  the docs whose ratios change, the `kwcapture-mono.svg` deletion folded in, the CI-log method and
+  the owner's re-upload action, is in `/tmp/_storage/Next_Prompt.md`.** `/tmp` does not survive a
+  reboot: if that file is gone, the checklist below and the item's measurements are enough to
+  rebuild it, and the owner's decision itself is not in doubt. Do not apply it as an afterthought in
+  some other round — it is a round of its own, with its own verified block.
+  The history of the decision, kept because the reasoning is the useful part:
+  the owner first proposed green `#00ac4e → #00ff00`, blue `#0000ff → #7f7fff`; it was measured, not
+  obeyed, and sent back with the awkward half included (gotcha 38 working as intended). Measured
   (`gen_logo.py --mark --green … --blue … --out /tmp/…`, never into a shipped path — the guard in
   `gen_logo.py` refuses that, and it held):
 
@@ -941,7 +960,9 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   still clears dark). Comparison renders: `/tmp/palette_four.png` on this machine (current /
   proposed / green-kept / `#008c46`, each on white and on `#0d1117`) — not committed, because a
   palette that is not decided is not an artefact.
-  **If a palette change is chosen, it is a real round, not a flag:** `gen_logo.py`'s `GREEN`/`BLUE`
+  **P2 is chosen, so what follows is a scheduled round, not an open question** — see
+  `/tmp/_storage/Next_Prompt.md`; regenerate it from this item if `/tmp` was cleared. The shape of
+  it: `gen_logo.py`'s `GREEN`/`BLUE`
   constants and their comments, the colour-split check's expectations, every image in `icon/` and
   `preview/`, the WCAG tables in `logo/README.md` §8 and `AGENTS.md` (three files quote these
   numbers), `logo/AGENTS.old.md`'s historical quotes stay as they are, the tiles' `FIT` may move
