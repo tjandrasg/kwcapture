@@ -41,6 +41,36 @@
 > separate, cached pipeline that lags a history rewrite. Lesson, twice over: **an untrue claim in a
 > commit does not stay in the commit** — it propagates into surfaces you do not control and cannot
 > clear, and the negative check you ran is only as good as the pipeline you actually queried.
+>
+> ### If it already happened: the fix is a default-branch cycle, not another history rewrite
+> Rewriting history removes the claim from git. It does **not** remove the contributor entry, and
+> no API call, no `gh` command and no force-push will: the widget is a separate cached derivation.
+> What worked on 2026-10-12, on this repo, first try:
+> 1. Set the default branch to a temporary branch at the same commit.
+> 2. Create a second scratch branch, point the default at it, **delete the real default branch**.
+> 3. Wait (~70 s).
+> 4. Recreate the default branch **from the saved commit SHA**, point the default back at it,
+>    delete the scratch refs.
+> Tags, releases and CI were untouched; the SHA came back byte-identical; the phantom contributor
+> was gone. Automate it rather than typing it: **`probe/github_refresh_contributors.sh`**
+> (`--dry-run` to see the plan, `--verify` to print the pipelines, `--wait N` to change the window).
+> **Two traps that script exists to prevent, both hit live during the first manual run:**
+> - **Recreate from the SHA, never from a branch ref.** The first attempt did
+>   `git push origin refs/heads/<default>-off:refs/heads/main`, and that ref existed only on the
+>   remote, not locally: the push failed, and the repo was left with the scratch branch as its
+>   default and no `main` for about a minute. `git ls-remote`/the saved SHA is the only trustworthy
+>   source here.
+> - **There is a window where the default branch does not exist.** Push-triggered CI, deploy hooks,
+>   Pages builds, open PRs and anyone cloning in that interval will fail or misbehave. Do not run
+>   it during activity, and never on a shared repo without saying so first.
+> **And verify in the right place.** REST `/contributors` and `/stats/contributors` reported the
+> correct two-contributor list the entire time the widget still showed three, and grepping the repo
+> page HTML found nothing because the widget is hydrated client-side. The verdict comes from the
+> sidebar in a **logged-out private window**, nowhere else.
+> If the cycle does not clear it, the cache outlived the rename or is indexing orphaned objects
+> that still resolve by SHA — and then it is GitHub Support, because there is genuinely no API for
+> this: `gh` has no support command, and `/support/tickets` 404s for a personal account (it is a
+> Premium/Enterprise feature). Template kept at `~/github-support-ticket.md` on the dev machine.
 > **Why this is in a file rather than left as a promise: a session cannot remember it.** Every
 > session here starts blank; a guarantee given in a chat transcript is worth nothing in the next
 > one, so the only thing that survives is this file, which each round reads first. That is also the

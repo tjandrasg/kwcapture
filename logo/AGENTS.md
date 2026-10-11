@@ -9,6 +9,10 @@ Work on `logo/` only after reading this. Everything here was paid for once alrea
 > trailers (Dependabot's) stay. Four commits that day claimed a name nothing had checked and had to
 > be rewritten with `filter-branch` + a force-push — the same error as a stale ratio, just in the
 > one place you cannot later re-render. Full rule: root `AGENTS.md`, *EVERY CLAIM MUST BE TRUE*.
+> If a false attribution already reached the GitHub **Contributors** sidebar, a history rewrite does
+> not clear it: cycle the default branch with `../probe/github_refresh_contributors.sh`, and read
+> the two traps first (recreate from the saved SHA, never from a branch ref; and the window where
+> the default branch does not exist) in the root file.
 
 Three files, three jobs. **This one is the working set**: the rules, the knobs, the numbers
 and the open items. [`README.md`](README.md) is the user manual for the three programs and
@@ -16,7 +20,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **118 859** bytes
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **119 211** bytes
 > — measured with `wc -c logo/AGENTS.md`, not remembered. **Round 14** (the palette round) opened at
 > **96 404** and closes at the number above. It paid for itself once, by moving Round 13's
 > session-log narrative out **verbatim** — 7 327 bytes, presence in
