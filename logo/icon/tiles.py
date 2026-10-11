@@ -84,13 +84,36 @@ def tile(size, out, art_size=None, radius=0, src=None):
 # largest that clears every tile) — do not crop a tile and do not ship a second drawing, which
 # is the decision that got `icon/` rebuilt in Round 13 (gotcha 38).
 FIT = 0.79
-BUILT = [
-    tile(180, "apple-touch-icon.png", int(180 * FIT), radius=40),   # iOS squircles it
-    tile(192, "pwa-192.png", int(192 * FIT)),
-    tile(512, "pwa-512.png", int(512 * FIT)),
-    tile(512, "maskable-512.png", min(int(512 * FIT), int(512 * 0.80))),  # safe zone caps it
-    tile(400, "github-avatar-400.png", int(400 * FIT)),             # GitHub crops to a circle
+
+# (size, name, artwork px, corner radius) — the shipped tile set, as DATA.
+SPEC = [
+    (180, "apple-touch-icon.png", int(180 * FIT), 40),    # iOS squircles it
+    (192, "pwa-192.png", int(192 * FIT), 0),
+    (512, "pwa-512.png", int(512 * FIT), 0),
+    (512, "maskable-512.png", min(int(512 * FIT), int(512 * 0.80)), 0),  # safe zone caps it
+    (400, "github-avatar-400.png", int(400 * FIT), 0),    # GitHub crops to a circle
 ]
+
+# `--sweep` is a DIAGNOSTIC and it must not touch the artefacts it is measuring.
+#
+# It used to: `BUILT` was a module-level list of `tile(...)` CALLS, so importing this file for
+# any reason — including `python3 tiles.py --sweep`, which only wants the FIT margin — re-saved
+# all five shipped PNGs through Pillow's own encoder. `build.sh` ends by re-encoding every PNG
+# in `icon/` (`magick -strip -define png:compression-level=9`), so a sweep run after a build
+# left five files that no longer match what the build produces: **same pixels, different
+# bytes**. That is exactly how Round 14 committed tile PNGs whose sizes disagreed with its own
+# expected-numbers block, and it is the same trap as gotcha 30 in a new costume — the tool that
+# measures is the tool that writes. Measured proof, before the fix: HEAD's `pwa-512.png` was
+# 34 836 B / one IDAT (Pillow) against the build's 34 044 B / two IDATs (ImageMagick), with
+# `ImageChops.difference().getbbox()` empty; and `build.sh` is itself byte-stable run to run,
+# which is what made the sweep the only remaining suspect.
+SWEEP_ONLY = "--sweep" in sys.argv
+if SWEEP_ONLY:
+    print("tiles: NOT written — `--sweep` measures and does not rebuild "
+          "(`bash icon/build.sh` does)")
+    BUILT = [(name, (size, size)) for size, name, _art, _r in SPEC]
+else:
+    BUILT = [tile(size, name, art, radius=rad) for size, name, art, rad in SPEC]
 
 # Verify what we just wrote, rather than trusting that a compositor composited: count ink
 # pixels and *chromatic* pixels straight off the file. A blank or grey tile is the failure
