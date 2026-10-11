@@ -50,14 +50,24 @@ of the entry's `Icon=` name, and **the owner's artwork rule**: the icon is `logo
 and only that, resized or re-rendered, never substituted for a monogram (an earlier revision of
 the same work shipped the monogram at small sizes; reverted, and now asserted against). Under
 *LOGO* below, user-facing in README → *Brand icons*, and in `CHANGELOG.md` → *Unreleased*. Nothing
-about capture changed; all three suites green here (165 + 37 + 98, 0 skips) plus
-`probe/sabotage_icons.sh` at **10/10 sabotages detected**. **CI, measured off the run log of the
+about capture changed; **37 + 98 green here, 0 skips**, plus `probe/sabotage_icons.sh` at
+**10/10 sabotages detected**. `tests/test_kwcapture.py` is **not** green on this desktop and was
+never green in this state: it measures **162 passed + 1 failed** (not 165), and there are now **two**
+unrelated environmental failures in it — FLAKE-2 (`alpha is opaque`, ~2 runs in 3) and **FLAKE-3**
+(the BUG-4 block, three different errors in seven runs, proven from a pristine `HEAD` worktree and
+reproduced **0 of 5** standalone). Both are reported rather than patched; see the two entries below.
+A suite count quoted as a single number is a claim about a machine, so from now on it is written as
+a measurement with its failure attached. **CI, measured off the run log of the
 push that changed the suite** (`34432a8`, run 38122958295, 2026-10-11): both jobs green —
 `build` and `headless KWin capture (Plasma 6, no GPU)` — and in `build`'s log the icon suite prints
 **97 passed + 1 skipped**, `RESULT: all icon tests passed (1 skipped)`, the skip being
 `[SKIP] desktop-file-validate  tool not installed` (announced, not silently passed), then
 **`wheel: 10 icon files`** and **`sdist: kwcapture-0.6.0.tar.gz 10 icon files`**. The previous
 suite's numbers were 88 + 1 on the same runner; the +9 is the one-artwork assertions.
+*Re-read on the palette push (`4fd386e`, run 38151616537, 2026-10-11): same **97 passed + 1
+skipped + 0 failed** in the icon step's slice, same `wheel: 10 icon files` / `sdist: … 10 icon
+files`. Counting `[PASS]` over that whole job log instead of the step's slice answers **134** —
+37 of those are the ring-reader suite, which is why the slice is the unit.*
 *Reading it: `GET /repos/…/actions/runs/<id>/jobs` gives job and step conclusions, and
 `…/actions/jobs/<id>/logs` follows a redirect to the log itself — `curl -sL` gets it where
 urllib's own redirect handling returns 401, and the per-suite count is `grep -c '\[PASS\]'` inside
@@ -353,6 +363,40 @@ that request). Assume a force-push does not un-publish anything.
 > see it, before you chase it.** Do not investigate first and write it up later — two
 > sessions have now lost findings that way. A half-paragraph with the symptom is worth more
 > than a perfect post-mortem that never gets typed. Mark unverified guesses `(unverified)`.
+
+### FLAKE-3 (test suite, not the library): the BUG-4 regression block fails in-suite with three *different* errors, and the harness cannot say where
+
+* **Seen 2026-10-11 ~00:15, found while re-running every suite the palette round was required to
+  re-run.** `tests/test_kwcapture.py` → *regression: BUG-4 zero-copy read path* reports
+  `[FAIL] BUG-4 regression ran` and the suite prints **162 passed + 1 failed** instead of 165.
+* **Three distinct failures, one block, across 7 runs of the same tree:**
+  `AttributeError: 'mmap.mmap' object has no attribute '_ring_slots'`,
+  `AttributeError: '_Hdr' object has no attribute '_hdr'`, and
+  `CaptureError: unhandled pixel format 6` — and that last one **cannot be true** as written,
+  because format 6 *is* in the allow-list at `kwcapture/__init__.py:1716`, so the value read out of
+  the descriptor is not the value the message prints.
+* **Proven not to be anything in the working tree**: a **pristine `git worktree add /tmp/pristine
+  HEAD`** — `git status --porcelain` empty, none of the palette or `tiles.py` changes present —
+  failed the same block on 1 of 3 runs (and `alpha is opaque` on 2 of 3). Standalone, the same
+  sequence run 5× against the live compositor with per-run shm tags: **0 of 5 failed**. So it is
+  **in-suite only** → cross-test interference, not the read path itself.
+* **The actual defect in the harness, and the reason this is still a mystery**: both guards are
+  `except Exception as e: check("BUG-4 regression ran", False, f"{type(e).__name__}: {e}")`, which
+  prints the *message* and throws the **traceback** away. A wrong-`self` `AttributeError` is
+  localisable in one line and cannot be localised from `type + str`. **The cheap fix belongs to a
+  round that owns `tests/`**: print `traceback.format_exc()` in that handler (and the BUG-3 one
+  above it), then the next occurrence names the frame instead of joining a list of unrepeatable
+  one-liners. Suspect to check first, in the same breath: the block uses the **non-unique**
+  `default_shm_path("bug4")`, while `unique_shm_path()` exists precisely because two `Capture`
+  objects must never share a ring file — and earlier blocks in this suite `restart()` and kill
+  daemons on purpose.
+* **Why it was reported and not patched**: this round's scope was paint (`logo/`), and the last two
+  bullets are a test-harness change plus a possible library question. Making a red suite green by
+  editing the assertion is what FLAKE-2's entry refuses to do, and the same rule applies when the
+  suite is red for a *new* reason. Owner's call, in order: (a) add the traceback to the two handlers
+  (small, no behaviour change, makes the next sighting diagnosable); (b) give the block its own
+  `unique_shm_path()` and re-run 20× to see if the interference goes away; (c) only then decide
+  whether anything in `_view()` is genuinely wrong.
 
 ### FLAKE-2 (test suite, not the library): `alpha is opaque` fails whenever a rounded-corner window is on screen
 

@@ -903,6 +903,10 @@ If the change was a **recolour**, three extra things are true and none of them i
 3. Re-measure the things that are paint-dependent and nothing else carries: the tile `FIT` headroom
    (`python3 icon/tiles.py --sweep` — antialiasing is ink, and ink colour is what antialiasing
    blends), the byte sizes, the sha256s, the `--c-paint` matrix, and the GitHub upload (above).
+   Run `bash icon/build.sh` **after** the sweep and before you commit, then `git status`: the sweep
+   prints a measurement and writes nothing, but if a rebuild still dirties `icon/` then something
+   outside the build wrote those files — which is exactly how a palette round nearly committed tiles
+   whose bytes were not the build's (`AGENTS.md`, gotcha 41).
 
 `build.sh` has no monogram step any more — deliberately: if you need a monogram for a *figure*,
 render one to `/tmp` with `gen_logo.py --monogram --sketch kwcapture-mark-sketch.svg`, which is

@@ -8,15 +8,18 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **108 525** bytes
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **116 712** bytes
 > — measured with `wc -c logo/AGENTS.md`, not remembered. **Round 14** (the palette round) opened at
 > **96 404** and closes at the number above. It paid for itself once, by moving Round 13's
 > session-log narrative out **verbatim** — 7 327 bytes, presence in
 > [`AGENTS.old.md` Part J](AGENTS.old.md) asserted by string search *before* the pointer replaced it,
 > the way Parts G/H/I were done — and still grew, because a recolour round spends its budget on
-> *proof*: a verified block, the corrected two-grounds arithmetic, the trade the palette made, a new
-> gotcha (**40**: a check keyed on a colour *literal* goes blind quietly), and re-measured numbers
-> throughout. That is what the round sells, so that is what it costs. The debt passes on, with one
+> *proof*: a verified block, the corrected two-grounds arithmetic, the trade the palette made, two
+> new gotchas (**40**: a check keyed on a colour *literal* goes blind quietly; **41**: a diagnostic
+> that writes the artefacts it measures makes a build lie about being reproducible), and re-measured
+> numbers throughout. That is what the round sells, so that is what it costs — including a resumption
+> that found gotcha 41 by re-running a build nobody had re-run, which is what the re-run rule is
+> for. The debt passes on, with one
 > new candidate: the P2 decision history under *Still open* is now a **closed** decision and belongs
 > in the archive the next time this file is trimmed. It was **86 077** before Round 10's
 > archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
@@ -175,8 +178,22 @@ log, the falsified claims, the war story behind every gotcha.
 > **requires `--out`**, and every figure that shows a monogram renders one into a temp directory.
 > `render_agreement.py` **still exits 1 on purpose** (gotcha 27, 26 px and 67 px, re-confirmed on
 > the new paint), and the validator still prints no `box check` line for the lockup — both caveats
-> from Round 10 stand. `tests/test_kwcapture.py` has a **new, unrelated** flake, reported rather
-> than patched: see the last bullet of *Still open*.
+> from Round 10 stand. `tests/test_kwcapture.py` is **not green on this desktop and not because of
+> the palette**: two unrelated environmental failures live in it, `alpha is opaque` (FLAKE-2) and the
+> **BUG-4 regression block (FLAKE-3, found by this round's re-run)**, measured at **162 passed + 1
+> failed** rather than 165. FLAKE-3 fails with three *different* errors in seven runs, reproduces on
+> a pristine `HEAD` worktree and **0 of 5** times standalone, and cannot be localised because the
+> harness prints `type(e): e` and discards the traceback. Both reported, neither patched — see
+> *Still open* here and **FLAKE-2 / FLAKE-3** in the root `AGENTS.md`.
+> **One more bug, found by re-running the build instead of trusting it (gotcha 41):**
+> `logo/icon/tiles.py` built its tiles in a module-level list of calls, so `--sweep` — a printed
+> margin, nothing more — re-saved all five tile PNGs through Pillow *after* `build.sh` had
+> re-encoded them with ImageMagick. The committed bytes therefore did not match what the build
+> produces (**identical pixels, different container**: 34 836 B / one IDAT against 34 044 B / two,
+> and four more of the same), which also meant the committed tiles disagreed with the byte sizes
+> this file quotes. Two back-to-back `build.sh` runs hashed identical, which is what cleared the
+> build and convicted the diagnostic. `--sweep` now writes nothing; the five tiles are committed at
+> the build's bytes, and the mask guard was shown still to fire on three sabotages of `FIT`.
 
 ---
 
@@ -226,7 +243,7 @@ nothing else — the geometry, the fit and this rule are untouched.
 | `README.md` | the manual: directory structure, every `*.py` program, the commands that make each image |
 | `LICENSE.md` | artwork **CC BY 4.0**, tooling **MIT** (the package's own [`../LICENSE`](../LICENSE)), Inter **OFL-1.1** referenced. `*.jsonl` is licensed by nobody — §6 there |
 | `AGENTS.old.md` | the archive: superseded numbers, the full gotchas, the 2026-10-10 session log. History, not instruction |
-| `*.jsonl` | the design-session transcripts (here, as of 2026-10-11 evening: `unfinished_job.jsonl`, **1 110 676 B** — `wc -c`, measured because this row said `prev_logo.jsonl`, 2.0 MB, and both the name and the size had gone stale). **A different name every session**; **never committed** (`logo/*.jsonl` is gitignored — re-checked this round with `git check-ignore -v` and `git add -A --dry-run`); **never read whole** — see *Reading the transcript* |
+| `*.jsonl` | the design-session transcripts (here, as of 2026-10-11 late: `almost_done.jsonl`, **1 024 018 B** — `wc -c`, measured; the previous occupant of this row, `unfinished_job.jsonl` at 1 110 676 B, had itself been replaced and renamed by the next export, which is the point of the row). **A different name every session**; **never committed** (`logo/*.jsonl` is gitignored — re-checked this round with `git check-ignore -v` and `git add -A --dry-run`); **never read whole** — see *Reading the transcript* |
 | `__pycache__/` | appears because `validate_logo.py` imports `gen_logo` to reuse the box geometry. Gitignored |
 
 ## Regenerating
@@ -696,6 +713,23 @@ entry at the bottom of this file until the next round moves it to the archive.
    when the palette cannot be found. Corollary for anyone adding a colour assertion anywhere in this
    folder: **the palette may be read, never repeated** — and the reason a recolour is cheap to prove
    is that the geometry checks do not mention colour at all.
+41. **A diagnostic that writes the artefacts it measures makes the build lie about being
+   reproducible** (Round 14, found by re-running a build nobody had re-run). `tiles.py` built the
+   five tiles in a **module-level** list of calls, so *importing* it built them — which meant
+   `python3 tiles.py --sweep`, the read-only-looking instrument that prints the FIT margin, also
+   re-saved all five PNGs through Pillow. `build.sh` then re-encodes every PNG in `icon/`
+   (`magick -strip -define png:compression-level=9`), so a sweep run *after* a build left five
+   files that `build.sh` no longer reproduces: **identical pixels, different bytes**
+   (`ImageChops.difference().getbbox()` empty, 34 836 B / one IDAT committed against the build's
+   34 044 B / two IDATs), and `logo/AGENTS.md` was quoting the build's sizes while git held the
+   sweep's. Diagnosis by elimination, not by guesswork: two back-to-back `build.sh` runs hashed
+   **identical**, so the build was never the nondeterministic one — the suspect was the thing that
+   runs *outside* it. Fixed by making `--sweep` read-only (`SWEEP_ONLY` skips the writes and the
+   tile verification still runs on the files on disk). Two rules fall out: **a measurement tool may
+   not mutate its inputs**, and "the build is reproducible" means *rebuilding from a clean tree
+   returns the committed bytes*, not *rebuilding twice returns the same bytes* — the second is
+   easier to satisfy and does not catch a writer outside the build. Same family as gotcha 30: the
+   tool nobody thinks of as a writer is the one that wrote it.
 
 ### 29 — impossible errors: re-run before you believe (Round 10)
 
@@ -825,7 +859,19 @@ contact.png              1106x240 TrueColor 49 728 B      (6 cells x 1 row)
 build.sh's own guard:    "all nine mark PNGs are pixel-identical to a fresh render of
                            kwcapture-mark.svg" (exit 1 otherwise - gotcha 38)
 tiles.py's mask guard:   clipped px 0 on avatar / maskable / apple-touch, else exit 1
-FIT sweep (`python3 logo/icon/tiles.py --sweep`, run on both palettes with the same instrument):
+byte reproducibility:    `build.sh` run twice back to back hashes **identical** across all 17
+                           images -- and that is NOT the check that matters. The check is
+                           *rebuild from the committed tree and compare with git*, and it was
+                           FAILING for these five tiles when gotcha 41 was found: `tiles.py --sweep`
+                           was rewriting them with Pillow after the build's ImageMagick pass, so
+                           git held 11 676 / 11 032 / 34 836 / 34 836 / 26 027 B while the build
+                           -- and the block above -- said 11 446 / 10 775 / 34 044 / 34 044 /
+                           25 293 B. Same pixels both ways (`ImageChops.difference().getbbox()`
+                           empty), so nothing shipped was wrong; what was wrong was that the
+                           numbers and the bytes disagreed. After making `--sweep` read-only the
+                           rebuild matches the committed bytes for every file in `icon/`.
+FIT sweep (`python3 logo/icon/tiles.py --sweep`, run on both palettes with the same instrument;
+  read-only since gotcha 41 -- it prints the margin and writes nothing):
   largest artwork that loses no ink: 322/400 (0.805), 413/512 (0.807), 143/180 (0.794) -> the
   worst of the three is 0.794, so FIT 0.790 has 1 px / +0.4 % of the side in hand. THE ANSWER DID
   NOT MOVE with the recolour -- but it was re-measured, not assumed: antialiasing is a blend of
@@ -883,6 +929,13 @@ tests/test_icons.py                     98 checks, 0 skipped here (89 + the 9 on
                                        the skip being `[SKIP] desktop-file-validate  tool not
                                        installed`, printed rather than passed quietly. The
                                        89-check version measured 88 + 1 on the same runner.
+                                       Re-read off the log of the P2 push (4fd386e, run
+                                       38151616537, job 114506066261) on 2026-10-11: the same
+                                       **97 passed + 1 skipped + 0 failed**, sliced between that
+                                       step's own markers (log lines 310..433), because a count
+                                       over the whole log answers **134** — 37 of those belong to
+                                       the ring-reader suite (gotcha: the total is a number that
+                                       happens to be wrong).
 probe/sabotage_icons.sh                10 sabotages, 10 detected, tree restored
 built wheel + sdist                    10 icon files each (8 png + 1 svg + COPYING.md) and CI
                                        says so too (`wheel: 10 icon files`, `sdist:
@@ -952,9 +1005,12 @@ edit can be read straight back out). To find a word without reading a range:
 `grep -o '"content":"[^"]\{0,240\}anchor[^"]\{0,240\}' "$T"`. Traps: the first object is a
 session header with no `message` key and `wc -l` under-reports by one (no trailing newline) —
 that is the file, not a bug; a regex containing `"` cannot go inside a `python3 -c '…'`
-one-liner, because the first `"` closes the Python string.
+one-liner, because the first `"` closes the Python string. **And arguments truncate too**: a
+session that dies mid-call leaves invalid JSON (`Unterminated string in JSON at position 1049`,
+Round 14), so read them as a hint at the *intent*, not as a patch to re-apply — the `old_text`
+anchor usually survives even when `new_text` does not, which is enough to find where it was going.
 
-**Resuming a session that died out of tokens** (happened twice, Rounds 6 and 9): find the last
+**Resuming a session that died out of tokens** (Rounds 6, 9, and twice in Round 14): find the last
 real user brief — `role == "user"` and **not** `isSynthetic` (the "Set working directory to…"
 lines are synthetic); then read the tail's `reasoningContent`, which is usually further ahead
 than any file it managed to touch; then **re-run everything it claimed**. A dead session's
@@ -1103,6 +1159,20 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   a transcript lands here every session under a *different* name, and the root rule
   `chat_his*.jsonl` matched exactly one of them — see the 2026-10-06 incident in the root
   `AGENTS.md`, which is why this line exists.
+* **`tests/test_kwcapture.py` carries TWO failures on this desktop, neither of them a logo bug
+  (both found 2026-10-11, Round 14, both reported rather than patched).** Measured together:
+  **162 passed + 1 failed**, not 165 — the failing check is the BUG-4 block's catch-all
+  (`[FAIL] BUG-4 regression ran`), which *replaces* two checks with one, or `alpha is opaque` on
+  its own runs. Full write-ups are **FLAKE-2** and **FLAKE-3** in the root `AGENTS.md`; the parts
+  that belong to this folder's rules are the method and the restraint. Method: each was proven
+  pre-existing from a **pristine `git worktree add … HEAD`** carrying none of the round's changes,
+  and FLAKE-3 additionally fails **0 of 5** standalone, which localises it to cross-test
+  interference rather than to the zero-copy read path. Restraint: FLAKE-3's third error,
+  `CaptureError: unhandled pixel format 6`, is *impossible as printed* — 6 is in the allow-list at
+  `kwcapture/__init__.py:1716` — which says the value in the message is not the value that was
+  checked, and the honest response to an error message that cannot be true is to make the harness
+  print the traceback (one line, in a round that owns `tests/`), not to pick a number that makes
+  the suite green.
 * **`tests/test_kwcapture.py`'s `alpha is opaque` is failing on this desktop, and it is not a
   logo bug (found 2026-10-11, Round 14, reported rather than patched).** The check is
   `check("alpha is opaque", int(arr[..., 3].min()) == 255)` on a live full-screen grab, and KWin is
@@ -1233,3 +1303,20 @@ replace, re-render, done. So this round is mostly the proving.
   changes. Nothing under `kwcapture/` or `tests/` was touched by P2, so the test stays as it is and
   the finding goes to the owner (*Still open*). A green suite you had to edit is worth less than a
   red one you understand.
+* **The build was convicted by running it, not by reading it (gotcha 41).** Re-running
+  `bash icon/build.sh` after the commit dirtied five tile PNGs. Two back-to-back builds hashed
+  *identical* — so the build is reproducible and something else had written those files: `tiles.py`
+  built its tiles at import time, so the `--sweep` diagnostic had re-saved them with Pillow after
+  the build's ImageMagick pass. Identical pixels, different container, and git was holding bytes
+  that this file's own byte table did not describe. Fixed by making `--sweep` read-only, and the
+  mask guard was shown still to refuse on three sabotaged `FIT` values before the change was
+  believed. The line worth keeping: **"the build is reproducible" is a claim about `git`, not about
+  the build** — rebuilding twice proves only that the build is self-consistent.
+* **Two sessions of this round died out of tokens, and the second died *inside* a tool call.** Its
+  `edit_file` arguments are truncated mid-string (`Unterminated string in JSON at position 1049`),
+  so the *new* text was unrecoverable and only the `old_text` anchor survived — which is still
+  enough to know what it was recording: the CI count for the P2 push. Re-derived from the run log
+  rather than reconstructed from the fragment (see *Reading the transcript*). The recovery rule held:
+  re-run everything the dead session claimed before writing any of it down. Every claim in the
+  verified block above was measured again in this resumption; one of them turned out to be false,
+  which is the entire argument for the rule.

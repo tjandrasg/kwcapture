@@ -690,8 +690,10 @@ dbus-run-session -- bash probe/nested_kwin_test.sh
 
 The functional suite (`tests/test_kwcapture.py`) needs a live Plasma session and is not run in CI.
 Its per-output checks multiply, so the count follows the hardware: 172 on a 75 % + 125 % two-monitor
-desk, 165 on a single output at 100 %. The other two suites do not depend on hardware: 37 and 98
-checks. The icon suite's one machine-dependent check is `desktop-file-validate`, which reports
+desk, 165 on a single output at 100 % — and a run can legitimately report **163** if the BUG-4
+block aborts early, because its catch-all replaces two checks with one failure line. Treat the
+count as a measurement of that run, not as a constant. The other two suites do not depend on
+hardware: 37 and 98 checks. The icon suite's one machine-dependent check is `desktop-file-validate`, which reports
 **SKIP** when the tool is absent. Measured off the CI log of the push that grew the suite to 98
 checks: **97 passed + 1 skipped** on `ubuntu-latest` (`[SKIP] desktop-file-validate  tool not
 installed`), against **98 + 0** on the KDE desktop it was written on; the earlier 89-check version

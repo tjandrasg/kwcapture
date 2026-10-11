@@ -102,6 +102,25 @@ here runs at import time, and nothing here can make a screenshot slower.
   drawing; the figures that use a monogram render one into a temp directory, and doing that made it
   visible that the figures were drawing **two different monograms** (the original sketch's and the
   mark's) from one file name — they are separate now.
+- **`logo/icon/tiles.py --sweep` no longer rewrites the icons it is measuring.** The five tiles were
+  built by a module-level list of calls, so *importing* the module built them: `--sweep`, whose whole
+  job is to print how much room `FIT` has left, also re-saved `apple-touch-icon.png`, `pwa-192.png`,
+  `pwa-512.png`, `maskable-512.png` and `github-avatar-400.png` through Pillow — *after*
+  `icon/build.sh` had re-encoded every PNG in `icon/` with ImageMagick. The result was a set whose
+  committed bytes were not what the build produces: **identical pixels, different container**
+  (34 836 B in one `IDAT` against the build's 34 044 B in two), so `git status` went dirty on a
+  clean rebuild while nothing shipped was wrong. `--sweep` now measures and writes nothing. No
+  artwork, no size and no `FIT` value changed; the guard that refuses a clipped tile was shown to
+  still fire, on three sabotaged values of the constant.
+- **A second in-suite failure, also reported rather than patched:** the
+  *regression: BUG-4 zero-copy read path* block reports `[FAIL] BUG-4 regression ran` on some runs,
+  so the suite measures **162 passed + 1 failed** rather than 165. It fails with three different
+  errors in seven runs — two `AttributeError`s naming the wrong object as `self`, and a
+  `CaptureError: unhandled pixel format 6` that cannot be true as printed, because 6 is in the
+  allow-list it cites. It reproduces from a **pristine `HEAD` worktree** and **0 of 5** times when
+  the same sequence is run standalone, so it is cross-test interference, not the read path — and the
+  reason it cannot be pinned down is that the harness prints `type(e): e` and discards the
+  traceback. See `AGENTS.md` → **FLAKE-3**.
 - **A live-desktop flake, reported rather than patched:** `tests/test_kwcapture.py`'s
   `alpha is opaque` fails on ~96 % of grabs on this machine — **4 pixels at alpha 253/254**, in the
   bottom corners of a rounded-corner window KWin is compositing — and it reproduces from a pristine
