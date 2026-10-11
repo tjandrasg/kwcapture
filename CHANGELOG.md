@@ -70,6 +70,44 @@ here runs at import time, and nothing here can make a screenshot slower.
 - **Packaging:** `MANIFEST.in` and `[tool.setuptools.package-data]` carry `kwcapture/icons/` into
   sdist and wheel — **one glob per theme directory** (`icons/hicolor/*/apps/*`), because
   setuptools globs do not cross `/`, which a `icons/**`-style pattern quietly fails to do.
+- **The mark was recoloured, and the recolour is provably *only* paint.** Palette **P2**, the
+  owner's decision of 2026-10-11: green `#00ac4e → #008c46`, blue `#0000ff → #7f7fff`. Chosen
+  because every half now clears the WCAG **3:1** floor for non-text content on *both* grounds a
+  reader meets — green **4.34** on white / **4.36** on GitHub dark `#0d1117`, blue **3.29** /
+  **5.75** — where the pair it replaces failed twice (blue **2.20:1** on dark, green 3.00:1 on
+  white). The proof is a command, not an adjective: strip every 6-digit hex from both sides of
+  `diff` against the previous commit and **nothing is left** — no path, no `transform`, no `#type`
+  matrix — and `gen_logo.py --mark` still reproduces the shipped SVG **byte-identically** from the
+  changed constants (a paint variant aimed at a shipped path is still refused, so the artwork stays
+  reproducible from generator state rather than from a command line). Everything downstream was
+  rebuilt and re-measured: 17 images in `logo/icon/`, every README figure, the packaged copies, the
+  installed theme files (all byte-identical to the artwork), and every ratio, byte size and sha256
+  in the logo docs. What it traded is stated in `logo/README.md` §8 rather than buried: the two
+  halves are now **1.32:1** apart instead of 2.87, so the C reads on **hue** and would collapse in
+  greyscale.
+- **New `logo/contrast_report.py`, and a check that had quietly gone blind.** Every ratio this
+  project quotes now comes from one file that reads the palette out of `gen_logo.py` and prints the
+  2×2 against white and `#0d1117`, the half-vs-half split, the luminance window **[0.1164,
+  0.3000]** that decides what "legal on both grounds" can even mean, and a dichromatic estimate;
+  `--min` makes it a gate (exit 1) so a palette regression cannot ship by accident, and passing the
+  old hexes reproduces the old numbers. It exists because `render_agreement.py` had been
+  identifying the green half with `fill.startswith("#00a")` — true of `#00ac4e`, false of
+  `#008c46`, so the recolour switched off the only check that can see *where* an engine paints,
+  at exit 0, with a clean report. The palette is now **read, never repeated**, the pixel classifier
+  matches by hue, and it refuses to guess when it cannot find the palette.
+- **`logo/kwcapture-mono.svg` is deleted** (the owner ruled the monogram "unofficial variant and
+  historical value only"), so the committed artwork is `kwcapture.svg`, `kwcapture-mark.svg` and the
+  two sketches. `gen_logo.py --monogram` stays as a **mode** and now **requires `--out`**, because a
+  mode whose default path re-creates a deleted artefact is how an icon set once shipped the wrong
+  drawing; the figures that use a monogram render one into a temp directory, and doing that made it
+  visible that the figures were drawing **two different monograms** (the original sketch's and the
+  mark's) from one file name — they are separate now.
+- **A live-desktop flake, reported rather than patched:** `tests/test_kwcapture.py`'s
+  `alpha is opaque` fails on ~96 % of grabs on this machine — **4 pixels at alpha 253/254**, in the
+  bottom corners of a rounded-corner window KWin is compositing — and it reproduces from a pristine
+  `HEAD` worktree with none of the above changes, so it is not the recolour. The assertion is left
+  alone; see `AGENTS.md` → *OPEN BUGS* **FLAKE-2** for why loosening it would retire a real question
+  about the alpha channel of a compositor grab.
 - **`tests/test_icons.py`: 98 checks, no compositor needed**, now a CI step next to the
   ring-reader suite — and `probe/sabotage_icons.sh`, which breaks each guard in turn, restores it
   and compares the outcome with what it expected: **10/10 detected** here, clean tree green. It
@@ -80,6 +118,13 @@ here runs at import time, and nothing here can make a screenshot slower.
   `theme_has_icon()` is graded against an independent `find`-based oracle, because its first
   version assumed hicolor's `16x16/apps/` layout and therefore reported Breeze's own screenshot
   icon — which lives in `apps/48/` — as missing **on a KDE desktop**.
+
+**Not in this repo's hands:** the GitHub **social preview** is a stored upload, not a render of the
+repository, so the live card is still the previous palette. Re-uploading
+`logo/icon/github-social-preview.png` (1280×640, now 84 871 B) from *Settings → Social preview* is
+an owner action — no API can do it, which was probed rather than assumed — and the re-upload should
+be verified by fetching the URL and comparing **pixels**, because `usesCustomOpenGraphImage: true`
+proves only that *an* image is set, not which palette it is in.
 
 **Behaviour change, for anyone scripting it:** `kwcapture install-desktop` now also writes files
 under `$XDG_DATA_HOME/icons`, and `install-desktop --uninstall` removes them again (hash-checked,

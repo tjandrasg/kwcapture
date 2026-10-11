@@ -1668,3 +1668,94 @@ that turned out to be, in the order it bit:
 * **Not done:** the two GitHub uploads are still web-UI clicks (gotcha 34), and whether PyPI
   renders a project icon out of the now-shipped artwork is **untested** — do not claim it. The
   docs header stays the only displayed consumer that is verified.
+
+
+---
+
+# Part J — Round 13's session log, moved verbatim (2026-10-11, by Round 14)
+
+**Nothing here is a current instruction.** Moved out of `AGENTS.md` §*Session log* under this
+folder's size rule — *a round that adds narrative also moves one out*. Source: `logo/AGENTS.md`
+at commit `e5d1663`, sha256 starting `d1aef7c04a9fff65`, lines 1043–1121, 7379 bytes, extracted by
+line range and not edited. `AGENTS.md`'s Round 14 entry points here and carries the current state
+of the artwork, which is the same artwork: Round 14 changed paint, not drawing.
+
+**Round 13 — 2026-10-11, the one-artwork round.** The owner's brief was one sentence long and
+about a mistake: the previous session picked the **wrong drawing** — the monogram — for the shipped
+icons, "the chosen official icon and logo for kwcapture is only `kwcapture-mark.svg`; no other
+variant allowed except resizing or re-rendering". Fixing it cost 13 deleted files, 5 new ones, a
+sweep through nine documents, and it produced the most transferable gotcha in this file:
+
+* **A build script has no authority to make a branding decision (gotcha 38).** Round 12's glyph was
+  not carelessness, it was a *measurement*: `APTURE` is legible at 128 px, marginal at 64, mush at
+  48 and below, and a full-bleed mark loses 4 015 px under GitHub's circular crop. That measurement
+  went into `icon/build.sh` as a **selection rule** — ship the drawing without the word at small
+  sizes — which is an owner's decision expressed in a place with no authority to make it. The fix
+  is not "the measurement was wrong"; the measurement is still true, still on the page, and is now
+  written as a **consequence the owner accepted** (`README.md` §8) instead of a reason to substitute
+  artwork. Generalises to anything with an owner: **when a number appears to contradict a decision,
+  document the number and ask — never route around the decision in a Makefile.**
+* **What the change actually is.** `icon/build.sh` renders the mark at nine sizes (16/24/32/48/64
+  are new; the mark had never existed below 128 — gotcha 37 is exactly this gap, seen from the other
+  side), `tiles.py` grounds those renders on white at **79 %** of the tile, `favicon.ico` is built
+  from the mark PNGs (`frame[0]` is pixel-identical to `kwcapture-mark-16.png`), and
+  `sync_package_icons.py` copies `logo/kwcapture-mark.svg` **verbatim** as the package's scalable
+  entry. Out went `icon/glyph-*.png` (12 files) and `icon/kwcapture-mark-mono.svg`. `icon/` is
+  **17 images of one artwork**, and `bash logo/icon/build.sh` is reproducible: all 21 files matched
+  their pre-build sha256 after a full rebuild.
+* **Two guards, because the reason it happened is that nothing stopped it.** `build.sh` now ends by
+  re-rendering the mark at all nine sizes and comparing **pixels** — a byte comparison would fail on
+  the `-strip` re-encode and a name check would pass a hand-swapped file, so it compares the thing
+  that matters — and `tests/test_icons.py` gained nine checks: the packaged SVG **is**
+  `logo/kwcapture-mark.svg` byte for byte, every packaged PNG is that mark's render of the size its
+  directory promises, and a tile that comes out grey or blank fails. 89 → **98 checks**, 0 skipped
+  here, and `probe/sabotage_icons.sh` still reports **10/10 detected**, which is the difference
+  between a suite that asserts and a suite that is decorated.
+* **The legibility ladder stays, demoted to what it always was: a control** — and rebuilding it
+  caught a new gotcha (39). `preview/build.sh` now renders the monogram row into `$T` on the fly
+  instead of reading a file in `icon/`, deliberately: a monogram sitting in the shipped-icon
+  directory reads like an approved icon, which is how the last round got its artwork wrong. The
+  figure's title has to say *NOT an icon*, which meant writing a title — and `montage -title` drew
+  it wider than the canvas and cropped characters off **both** ends at exit 0, in the version that
+  had been in the README all along ("…d mark (top) vs the monog…"). A tool this folder uses for
+  presentation turned out to be the one tool nobody measured: the title is now drawn with Pillow at
+  a size solved from its own metrics and asserted to fit, labels are sized against the tile, and the
+  build prints the ink extents. Verified by measurement, not by looking: title ink spans x 80..622
+  of 704, so 80 px of air each side.
+* **The install path is byte-exact again.** After `install-desktop` on this desktop: nine installed
+  files whose sha256 equals the mark render for that size, `scalable` equal to
+  `logo/kwcapture-mark.svg`, `desktop-file-validate` silent, `doctor` green, and wheel + sdist still
+  carrying 10 icon files each with `logo/` in neither. Nothing in `kwcapture/` changed except
+  `_icons.py`'s docstring, which had been advertising the abandoned design.
+* **Docs were swept, not patched.** Root `AGENTS.md`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`,
+  `logo/README.md` §8, `logo/LICENSE.md`, `logo/AGENTS.md`, `logo/icon/build.sh`, `logo/preview/build.sh`
+  and `logo/sync_package_icons.py` all said, in so many words, that the small-size artwork *is* the
+  glyph; every one of those sentences now says the mark, and the reason keeps its place as a cost
+  rather than being deleted with the mistake. Round 11's and Round 12's **verified blocks were
+  annotated, not rewritten** — they are dated claims, and that this project believed the other story
+  for two rounds is part of the record (the archive's rule: move, never correct in place).
+* **Checked after the push, because "the tests pass" on the machine that wrote them is half a
+  claim.** Run 38122958295 on `34432a8`: `build` and `headless KWin capture (Plasma 6, no GPU)`
+  both **success**, and read off the log rather than inferred from the green tick — the icon suite
+  printed **97 passed + 1 skipped** (`[SKIP] desktop-file-validate  tool not installed`, announced,
+  not silently passed), and the artefact step printed **`wheel: 10 icon files`** and
+  **`sdist: kwcapture-0.6.0.tar.gz 10 icon files`**. One method note, because it cost a detour: the
+  `/actions/runs/<id>/jobs` endpoint gives conclusions but no output, `…/actions/jobs/<id>/logs`
+  answers **401 to urllib** where `curl -sL` gets 200 — the log lives behind a redirected signed URL
+  that urllib's redirect handling does not carry the credential across — and the per-suite count is
+  `grep -c '[PASS]'` inside the *step's own slice* of the log: the whole log had 134 PASS lines,
+  because the ring-reader suite ran first, and reporting that would have been a number that happens
+  to be wrong.
+* **Asked, answered, closed the same day — which is what this round's lesson is for.** Round 13
+  ended by *asking* three things instead of deciding them in code, and the owner answered all three
+  within one exchange: the social preview is **uploaded and verified live** (`true`, a
+  `repository-images…` URL, 0 of 51 681 sampled pixels differing from `icon/github-social-preview.png`);
+  `kwcapture-mono.svg` is **unofficial and historical, safe to delete** — so it leaves the tree and
+  `--monogram` becomes a figure/`/tmp` tool, nothing more; and the unreadable word at 16 px is
+  **accepted with a shrug** — *"Why bother? There's no way it would be readable at that low
+  resolution"* — so the small sizes are settled and no future round may "rescue" them with other
+  artwork. The fourth answer (a palette of `#00ff00` + `#7f7fff`) is the one this round had to push
+  back on rather than apply, because measuring it showed the green is a *brightening* that fails on
+  white — the ground every tile in `icon/` is built on. It is written up under *Still open* with the
+  numbers, unapplied. That is the difference between gotcha 38 obeyed and gotcha 38 memorised: the
+  measurement goes **back** to the owner, with the awkward half included, before anything ships.

@@ -108,17 +108,31 @@ the step's own slice of the log, not a guess from the total.*
 > **The owner decided it, on 2026-10-11:** [`logo/kwcapture-mark.svg`](logo/kwcapture-mark.svg)
 > — the geometric KW monogram whose junction is the **C**, the mouse pointer as the **A**, and
 > `PTURE` in type — is the project's logo. `logo/` had been untracked since it was started;
-> it is now in git: **57 files** — two Inkscape sketches (inputs, never written to), three
-> generated SVGs, four tools (`gen_logo.py`, `validate_logo.py`, `render_agreement.py`,
-> `sync_package_icons.py`), the shipped `icon/` set, the documentation `preview/` set, and
-> `AGENTS.md` / `README.md` / `LICENSE.md`. **Read [`logo/AGENTS.md`](logo/AGENTS.md) before touching anything in there**: it
-> carries THE RULE (`WORD = "PTURE"`, never `CAPTURE`), the knob table, the expected numbers and
-> 37 gotchas — several paid for by sessions that ran out of tokens.
+> it is now in git: **49 files** — two Inkscape sketches (inputs, never written to), **two**
+> generated SVGs, five tools (`gen_logo.py`, `contrast_report.py`, `validate_logo.py`,
+> `render_agreement.py`, `sync_package_icons.py`), the shipped `icon/` set, the documentation
+> `preview/` set, and `AGENTS.md` / `README.md` / `LICENSE.md`. (`wc -l` on `git ls-files logo`,
+> counted 2026-10-11 after the monogram deletion, not remembered from the 57 this note used to
+> say: `kwcapture-mono.svg` is gone and `contrast_report.py` arrived.) **Read
+> [`logo/AGENTS.md`](logo/AGENTS.md) before touching anything in there**: it carries THE RULE
+> (`WORD = "PTURE"`, never `CAPTURE`), the knob table, the expected numbers and 40 gotchas — several
+> paid for by sessions that ran out of tokens.
 
 > **Licence, and why two:** artwork (SVGs, sketches, every PNG) **CC BY 4.0**; the tooling in
 > `logo/*.py` **MIT**, matching the package's own [`LICENSE`](LICENSE); the Inter face
 > **OFL-1.1**, referenced not shipped. Trademarks are **not** granted by CC BY — the artwork is
 > free to copy, the name and mark as a *brand* are not. See [`logo/LICENSE.md`](logo/LICENSE.md).
+
+> **Palette P2 is the mark's paint, applied 2026-10-11**: green `#008c46`, blue `#7f7fff` (was
+> `#00ac4e` / `#0000ff`), the owner's choice from six rendered pairs. It changed *paint only* — the
+> diff against the previous commit, with hex strings stripped from both sides, is empty — and it is
+> worth one line here because it is the reason `logo/contrast_report.py` exists: every ratio this
+> project quotes is now re-runnable (`python3 logo/contrast_report.py`, exit 1 if a cell falls under
+> the WCAG 3:1 non-text floor) instead of being copied out of a doc. Measured: green **4.34** on
+> white / **4.36** on GitHub dark `#0d1117`, blue **3.29** / **5.75** — every cell legal on both
+> grounds, which closes the finding that the old blue was **2.20:1** on dark. What it traded:
+> the two halves are **1.32:1** apart instead of 2.87, so the C separates by **hue** and would
+> collapse in greyscale. `logo/AGENTS.md` §*Still open* has the arithmetic and the argument.
 
 > **The README header is the mark now**, embedded as an absolute
 > `raw.githubusercontent.com/tjandrasg/kwcapture/main/logo/icon/kwcapture-mark-256.png` URL —
@@ -141,10 +155,15 @@ the step's own slice of the log, not a guess from the total.*
 > — measured **`false`** earlier on 2026-10-11, then **`true`** after the owner clicked, with
 > `openGraphImageUrl` → `https://repository-images.githubusercontent.com/1406948211/dc44cc05-…`.
 > And the check goes one step further than the flag, because `true` only proves *an* image: fetching
-> that URL returns **1280×640, 84 565 B** with **0 of 51 681 sampled pixels differing** from
+> that URL returned **1280×640, 84 565 B** with **0 of 51 681 sampled pixels differing** from
 > `logo/icon/github-social-preview.png`. GitHub stores the upload rather than re-rendering it, so a
-> future recolour of the mark means **re-uploading it** — that is now a step in the recolour path,
-> not something the repo can do for you.
+> recolour of the mark means **re-uploading it** — not something the repo can do for you.
+> **And the recolour happened the same day**: palette P2 landed, `icon/github-social-preview.png` is
+> now **84 871 B** in the new paint, and the live preview is still the `#0000ff`/`#00ac4e` card.
+> `usesCustomOpenGraphImage: true` is therefore *misleading right now* — an image is set, and it is
+> the old one. **Owner action: re-upload** that file from *Settings → Social preview*, then re-run
+> the query **and** the pixel comparison (the flag alone proves nothing about which palette is
+> live). Same for the optional user profile picture (`icon/github-avatar-400.png`, 25 293 B).
 
 > **The mark is installed on the desktop now, not just displayed** (2026-10-11). `kwcapture
 > install-desktop` / `setup` copy the **mark itself** — `logo/kwcapture-mark.svg`, rendered at each
@@ -334,6 +353,28 @@ that request). Assume a force-push does not un-publish anything.
 > see it, before you chase it.** Do not investigate first and write it up later — two
 > sessions have now lost findings that way. A half-paragraph with the symptom is worth more
 > than a perfect post-mortem that never gets typed. Mark unverified guesses `(unverified)`.
+
+### FLAKE-2 (test suite, not the library): `alpha is opaque` fails whenever a rounded-corner window is on screen
+
+* **Seen 2026-10-11 ~20:40, most runs** — `check("alpha is opaque", int(arr[..., 3].min()) == 255)`
+  on a live full-screen grab. Measured: **24 of 25 grabs** carry **4 pixels** at alpha **253/254**,
+  at (284,1144), (2275,1144), (289,1149), (2270,1149). Those are exactly the **bottom corners of the
+  System Monitor window** (`1992x907+284+243` → bottom edge y=1149, corners x=284 / x=2275): where
+  KWin rounds a window corner, the composited screenshot comes back very slightly non-opaque.
+* **Not a recolour bug, and proven that way**: the same check fails **7 of 8** grabs from a
+  **pristine `git worktree add /tmp/pristine HEAD`** carrying none of the working tree's changes,
+  and palette P2 touches nothing under `kwcapture/` except `icons/` (data). The suite is otherwise
+  green: **165 checks**, the 164 others passing.
+* **Why it was reported instead of fixed**: the assertion is about the *compositor*, not about this
+  library, and the interesting question is unanswered — is a screenshot's alpha channel allowed to
+  be non-opaque at a rounded corner, and does anything downstream (`save`, PNG encoding, the ring
+  reader, `nunif`) assume 255? Tightening the check to `>= 250` or masking the corners would retire
+  a real question to buy a green tick (the `logo/` house rule: a measurement that contradicts a
+  claim gets reported, not routed around). Owner's call; the cheap honest option is to assert
+  opacity on a controlled surface and keep a *separate*, explicitly-labelled check for the live
+  desktop, which is what FLAKE-1's fix note argues for too.
+* **Count note while someone is here**: 165 checks on this desk (single output DP-1 2560×1440 @
+  100 %, per `kwcapture monitors`), matching FLAKE-1's note below; the count moves with outputs.
 
 ### FLAKE-1 (test suite, not the library): `area_in='physical' grabs the device region it names` fails when the screen is animating
 

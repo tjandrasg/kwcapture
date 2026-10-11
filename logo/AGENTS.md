@@ -8,8 +8,17 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **96 404 bytes**
-> — measured with `wc -c logo/AGENTS.md`, not remembered. It was **86 077** before Round 10's
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **108 525** bytes
+> — measured with `wc -c logo/AGENTS.md`, not remembered. **Round 14** (the palette round) opened at
+> **96 404** and closes at the number above. It paid for itself once, by moving Round 13's
+> session-log narrative out **verbatim** — 7 327 bytes, presence in
+> [`AGENTS.old.md` Part J](AGENTS.old.md) asserted by string search *before* the pointer replaced it,
+> the way Parts G/H/I were done — and still grew, because a recolour round spends its budget on
+> *proof*: a verified block, the corrected two-grounds arithmetic, the trade the palette made, a new
+> gotcha (**40**: a check keyed on a colour *literal* goes blind quietly), and re-measured numbers
+> throughout. That is what the round sells, so that is what it costs. The debt passes on, with one
+> new candidate: the P2 decision history under *Still open* is now a **closed** decision and belongs
+> in the archive the next time this file is trimmed. It was **86 077** before Round 10's
 > archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
 > (every substantive line of the old file is present in one of the two files — checked, not
 > asserted; the archive's header carries the sha256 it was cut from); **59 077** when Round 11
@@ -54,6 +63,10 @@ log, the falsified claims, the war story behind every gotcha.
 > file untouched), so the old "the habit is the guard" line is obsolete.
 > The two caveats above are the honest part: a doc that says "everything prints OK" about a
 > tool that intermittently crashes is how Round 9b died.
+> *Round 14 annotation, same policy as Round 13's: `kwcapture-mono.svg` no longer exists, so that
+> command list is now two shipped SVGs plus a monogram rendered to `/tmp`. Everything else in this
+> block — byte-identical regeneration, `xmllint` clean, `render_agreement.py` exiting 1 on purpose
+> — was re-run on palette P2 on 2026-10-11 and reads as written.*
 
 > **Verified 2026-10-11 (Round 11 — the icon round), by running it.** The owner chose
 > **`kwcapture-mark.svg` as the official logo of the project**, and `icon/` is the shipped icon
@@ -71,6 +84,10 @@ log, the falsified claims, the war story behind every gotcha.
 > command and the "glyph form" in this block no longer describe `icon/`. That file is deleted, and
 > nothing in `icon/` is a monogram any more (gotcha 38). The byte-identical regeneration of
 > `kwcapture-mark.svg` itself still holds — re-checked 2026-10-11 (`--out /tmp`, `cmp`: identical).*
+> *Round 14 annotation, same policy: the four contrast ratios in this block are the **old**
+> palette's and are now superseded — they were true of `#00ac4e`/`#0000ff` and are kept because
+> that is what Round 11 measured. Palette P2's numbers are in the Round 14 block below and in
+> *Expected numbers*; re-run `python3 logo/contrast_report.py` rather than copying either.*
 
 > **Verified 2026-10-11 (Round 12 — the desktop-icon round), by running it.** `bash icon/build.sh`
 > rebuilds **24 images** now: `glyph-256.png` was added because the desktop entry ships into
@@ -120,13 +137,46 @@ log, the falsified claims, the war story behind every gotcha.
 > `validate_logo.py logo/kwcapture-mark.svg` still prints **OK** (render QtSvg 53.6 % blue, MSVG
 > 50.3 %), so the Round 10 block stands; Round 11's and Round 12's icon-set claims do not, and are
 > annotated above rather than deleted.
+> *Round 14 annotation: those two render percentages are the **old palette**'s and are superseded —
+> P2 measures **53.3 % / 49.8 %** on the same file with the same instrument. Every other number in
+> this block is geometry or wiring, and all of it was re-run on P2 without moving; that is the
+> difference between a claim and a check.*
 
-> **NEXT SESSION — one committed job: apply palette P2.** Green `#00ac4e → #008c46`, blue
-> `#0000ff → #7f7fff`, decided by the owner on 2026-10-11 from six rendered pairs and **not yet
-> applied**. Ordered checklist: **`/tmp/_storage/Next_Prompt.md`** (regenerate it from the
-> *Still open* item "PALETTE P2" if `/tmp` has been cleared). It changes paint only — THE RULE,
-> geometry, the fit and the two-colour split are untouched — and it ends with the owner re-uploading
-> the social preview, because GitHub stores that upload and the live one is the old palette.
+> **Verified 2026-10-11 (Round 14 — the palette round), by running it.** Palette **P2** is applied:
+> green `#00ac4e → #008c46`, blue `#0000ff → #7f7fff`, the owner's decision of 2026-10-11. It is
+> paint and nothing else, and the proof is mechanical, not a claim: with every 6-digit hex string
+> stripped out of both shipped SVGs, `diff` against `HEAD` is **empty** — no path, no transform, no
+> `#type` line moved. `gen_logo.py --mark` and plain `gen_logo.py` reproduce `kwcapture-mark.svg`
+> and `kwcapture.svg` **byte-identically** from the new constants (`cmp`, 2/2), and the paint
+> variant guard still refuses to write one to a shipped path (`--mark --green '#00ff00'` → exit 1,
+> file untouched). Why the palette changed, measured by `python3 logo/contrast_report.py`, the new
+> instrument that reads `GREEN`/`BLUE` out of `gen_logo.py` so a doc can never quote a ratio the
+> artwork disagrees with: every cell clears the WCAG 3:1 non-text floor on **both** grounds — green
+> **4.34** white / **4.36** dark, blue **3.29** white / **5.75** dark — closing the finding this
+> folder has carried since Round 10 (blue on `#0d1117` was **2.20:1**). What it costs: the halves
+> are now **1.32:1** apart in lightness, not 2.87; the C reads on **hue** (240° vs 150°) and would
+> collapse in greyscale. Everything downstream was rebuilt and re-measured, not trusted: `bash
+> icon/build.sh` (17 images; *all nine mark PNGs pixel-identical to a fresh render*; tiles clipped
+> **0 px**; `FIT 0.790` survives with **+0.4 %** headroom, worst tile 0.794, swept on both
+> palettes), `bash preview/build.sh`, `sync_package_icons.py --check` clean, `tests/test_icons.py`
+> **98 checks 0 skipped**, `probe/sabotage_icons.sh` **10/10**, `python -m build` → **10 icon files
+> in the wheel and 10 in the sdist**, `logo/` in neither, and every wheel icon byte-identical to
+> `logo/icon/`. Installed here after `install-desktop`: 9 files byte-identical to the mark renders,
+> `scalable` byte-identical to `logo/kwcapture-mark.svg`, `desktop-file-validate` silent, `doctor`
+> green, `tests/test_ring_reader.py` **37/37**. The validator's render numbers moved as a recolour
+> must move them — mark **53.3 %** QtSvg / **49.8 %** MSVG blue (was 53.6 / 50.3), lockup **44.0 /
+> 44.8**, mono **39.3 / 39.5** — and every *geometry* number in the Expected-numbers block is
+> unchanged, which is the check that says "paint-only" instead of asserting it. Two real changes
+> came out of doing it rather than describing it: `render_agreement.py` had been identifying the
+> green half with `fill.startswith("#00a")` — true of the old green, false of the new one, so on
+> the recoloured files it was **comparing nothing and exiting 0** — and `validate_logo.py`'s
+> classifier is now hue-based against `palette()`, read from the generator. `kwcapture-mono.svg`
+> was deleted in this round as scheduled (see *Still open*): `--monogram` is a mode that now
+> **requires `--out`**, and every figure that shows a monogram renders one into a temp directory.
+> `render_agreement.py` **still exits 1 on purpose** (gotcha 27, 26 px and 67 px, re-confirmed on
+> the new paint), and the validator still prints no `box check` line for the lockup — both caveats
+> from Round 10 stand. `tests/test_kwcapture.py` has a **new, unrelated** flake, reported rather
+> than patched: see the last bullet of *Still open*.
 
 ---
 
@@ -163,11 +213,11 @@ nothing else — the geometry, the fit and this rule are untouched.
 |---|---|
 | `kwcapture.svg` | the logo. 512×512, generated. **Edit the sketch or the knobs, never this file** |
 | `kwcapture-mark.svg` | generated **from the mark sketch**: the redrawn monogram + `APTURE` fitted into the helper box, stretched ×1.753 across the baseline. The one that reads at small sizes |
-| `kwcapture-mono.svg` | bare monogram only (still two-tone), for favicons / ≤64 px where `APTURE` is mush. Built by `--monogram`. **There is no `-mono-sketch.svg`**: it comes from `kwcapture-sketch.svg`, and the validator's fallback knows that |
+| ~~`kwcapture-mono.svg`~~ | **deleted 2026-10-11 (Round 14)**, on the owner's ruling that the monogram is "unofficial variant and historical value only". The committed SVGs are now `kwcapture.svg`, `kwcapture-mark.svg` and the two sketches. `--monogram` survives as a **mode** and now requires `--out`; the figures that need a monogram render one into a temp directory. `gen_logo.py --monogram --out /tmp/mono.svg` reproduces the file byte for byte and `git log --diff-filter=D -- logo/kwcapture-mono.svg` recovers it. Gotcha 38's lesson one folder up: an artefact beside the approved artwork eventually *is* the approved artwork |
 | `kwcapture-sketch.svg` | the **original** hand-drawn source (Inkscape, A4): the first monogram + the mouse pointer. **Input. Never written to by any tool.** Keep it forever — the pointer (the A) still comes from here |
 | `kwcapture-mark-sketch.svg` | the **second, redrawn monogram** (cleaner, geometric) plus the black helper box, drawn in Inkscape. **Input. Never written to.** Its `#kw` is *not* the same path as the original sketch's |
 | `gen_logo.py` | the generator: sketch + knobs → the SVGs. Manual: `README.md` §gen_logo.py |
-| `validate_logo.py` | the gate: ink bounds, clearances, centring, the A-vs-cap **type check**, the **box check**, the **colour split check** (the only check that can see paint) and the **render check** (it rasterises with QtSvg and MSVG, so a *viewer* decides). One path argument, default `kwcapture.svg` |
+| `contrast_report.py` | **every WCAG number this folder quotes**, from the two hex values and nothing else: the 2×2 of palette against white / GitHub dark `#0d1117`, the half-vs-half split, the luminance window that makes "legal on both grounds" and "a loud two-tone split" fight each other, and a dichromatic estimate. Reads `GREEN`/`BLUE` out of `gen_logo.py` (parsed, not imported — it must run without fontTools), so the report and the artwork cannot drift. `--min` makes it a gate: exit 1 when a cell falls under the floor. Added in Round 14 because two rounds of docs had been quoting ratios nobody could re-run | the gate: ink bounds, clearances, centring, the A-vs-cap **type check**, the **box check**, the **colour split check** (the only check that can see paint) and the **render check** (it rasterises with QtSvg and MSVG, so a *viewer* decides). One path argument, default `kwcapture.svg` |
 | `render_agreement.py` | **diagnostic, not a gate**: per engine, the ink box it paints vs the box the path data implies, per colour. Found the MSVG `rotate()` bug. Exits 1 today **on purpose** (gotcha 27) |
 | `sync_package_icons.py` | **the only sanctioned path from `icon/` into the package**: copies the nine mark renders and `../kwcapture-mark.svg` itself into `../kwcapture/icons/` (hicolor theme layout, one directory per declared size), generates `kwcapture/icons/COPYING.md` with the licence + provenance sha256s, and `--check` fails on any drift. Copies only — it never rasterises or resamples — and it reads the size list from `kwcapture/_icons.py`, so generator and installer cannot disagree (gotcha 36) |
 | `preview/` | generated PNGs for `README.md`, plus `build.sh` (one command rebuilds all of them) and `anatomy.py`. Derived artefacts: regenerate, never hand-edit |
@@ -176,7 +226,7 @@ nothing else — the geometry, the fit and this rule are untouched.
 | `README.md` | the manual: directory structure, every `*.py` program, the commands that make each image |
 | `LICENSE.md` | artwork **CC BY 4.0**, tooling **MIT** (the package's own [`../LICENSE`](../LICENSE)), Inter **OFL-1.1** referenced. `*.jsonl` is licensed by nobody — §6 there |
 | `AGENTS.old.md` | the archive: superseded numbers, the full gotchas, the 2026-10-10 session log. History, not instruction |
-| `*.jsonl` | the design-session transcripts (here: `prev_logo.jsonl`, 2.0 MB). **A different name every session**; **never committed** (`logo/*.jsonl` is gitignored); **never read whole** — see *Reading the transcript* |
+| `*.jsonl` | the design-session transcripts (here, as of 2026-10-11 evening: `unfinished_job.jsonl`, **1 110 676 B** — `wc -c`, measured because this row said `prev_logo.jsonl`, 2.0 MB, and both the name and the size had gone stale). **A different name every session**; **never committed** (`logo/*.jsonl` is gitignored — re-checked this round with `git check-ignore -v` and `git add -A --dry-run`); **never read whole** — see *Reading the transcript* |
 | `__pycache__/` | appears because `validate_logo.py` imports `gen_logo` to reuse the box geometry. Gitignored |
 
 ## Regenerating
@@ -184,7 +234,8 @@ nothing else — the geometry, the fit and this rule are untouched.
 ```bash
 python3 logo/gen_logo.py                       # -> logo/kwcapture.svg
 python3 logo/gen_logo.py --mark                # -> logo/kwcapture-mark.svg   (helper box mode)
-python3 logo/gen_logo.py --monogram            # -> logo/kwcapture-mono.svg
+python3 logo/gen_logo.py --monogram --out /tmp/mono.svg  # the MODE; there is no shipped mono file
+python3 logo/contrast_report.py                # the palette's WCAG table; exit 1 under --min
 python3 logo/gen_logo.py --out /tmp/x.svg --classic       # the old look: gradient mono, black type
 python3 logo/gen_logo.py --out /tmp/x.svg --no-c-split    # CONTROL: "is colour what makes the C read?"
 python3 logo/gen_logo.py --out /tmp/x.svg --a-size 1.15   # experiment; repo untouched
@@ -192,6 +243,9 @@ python3 logo/gen_logo.py --mark --out /tmp/x.svg --no-height-fill   # the pre-Ro
 python3 logo/gen_logo.py --mark --out /tmp/x.svg --max-stretch 1.35 # the mild fill
 python3 logo/validate_logo.py                            # checks kwcapture.svg
 python3 logo/validate_logo.py logo/kwcapture-mark.svg    # type check + BOX check
+# (a recolour: change GREEN/BLUE in gen_logo.py and re-run these -- NEVER pass --green/--blue
+#  into a shipped path. The guard refuses, and it is right: the artwork must be reproducible
+#  from the constants, and it is `cmp`-identical to them, which is the check.)
 python3 logo/render_agreement.py                         # exits 1; that is the finding, not a bug
 xmllint --noout logo/*.svg                               # must be silent
 bash logo/preview/build.sh                               # rebuild every README image
@@ -264,8 +318,8 @@ tools are reported and skipped, not silently passed.
 | `CANVAS`/`PAD` | `512` / `44 px` | square artboard, icon-safe. The art is wider than tall (35.58 × 30.13 mm), so vertical padding ends up larger (76 px) — correct, not a bug |
 | `C_PAINT` | `solid` | how the blue C is cut: `solid` \| `mask` \| `clip`. Chosen by the **renderer matrix**, not taste; `validate_logo.py` re-runs the matrix on every build. See *Which cut-out* |
 | `MAX_STRETCH` | `2.00 ×` cap | ceiling on the height fill — a **taste guard, not geometry**: the shipped box wants 1.753 and is not stopped by it. It exists because the box is the owner's drawing and next week it may be twice as tall, and Inter at ×3 is a cage of vertical strokes. 0 = `--no-height-fill` |
-| `GREEN` | `#00ac4e` | the K's stem and the W: the old gradient's end stop, so the palette did not change, only its job — colour now carries meaning (monogram vs word) |
-| `BLUE` | `#0000ff` | the C, the pointer-A and `PTURE`. Chosen against its **neighbour**, not the page: 2.87:1 vs `#00ac4e` (a prettier `#3b82f6` is only 1.23 — the C dissolves into the W); 8.59 vs white; **2.20 vs GitHub dark `#0d1117`**, which still fails (black was 1.11) |
+| `GREEN` | `#008c46` | the K's stem and the W. Palette **P2**, the owner's decision of 2026-10-11 (was `#00ac4e`, the old gradient's end stop). The balanced one of the four greens measured: **4.34** on white / **4.36** on `#0d1117`, i.e. it clears 3:1 on both grounds, which `#00ac4e` did not (3.00 on white) |
+| `BLUE` | `#7f7fff` | the C, the pointer-A and `PTURE`. Was `#0000ff`: 8.59 on white but **2.20** on GitHub dark, the oldest accessibility finding in this folder. `#7f7fff` is 3.29 white / **5.75** dark — the only single value measured that clears both. What it gives up: **1.32:1** against the green instead of 2.87, so the C separates by **hue** (240° vs 150°), not lightness; `#3b82f6` is 5.15 on dark but 1.18 from this green and the C dissolves into the W. Every number in these two rows is printed by `contrast_report.py` |
 
 ## The helper box — `--mark` mode
 
@@ -427,13 +481,19 @@ stem is green, that bracket is blue, and `APTURE` shares the blue.
 ### Which cut-out: `--c-paint solid|mask|clip` — measured, not opinion
 
 Three ways to paint the same C, and **renderers disagree about all of them**. Measured on this
-machine, monogram ink as % blue (the truth is 39.1–39.8%):
+machine on palette P2 (2026-10-11) with `validate_logo.py`'s own hue classifier, monogram ink as
+% blue (the truth is 38.4–39.5%): the pre-recolour table read 39.1–39.8% for the same geometry,
+which is the point of re-measuring a table like this per palette rather than trusting it to carry
+over:
 
 | renderer | `solid` | `mask` | `clip` |
 |---|---|---|---|
-| Inkscape / librsvg | 39.5% ✅ | 39.1% ✅ | 39.1% ✅ |
-| **QtSvg** — Gwenview, Dolphin thumbnails, `QIcon`, KDE's image plugin | 39.4% ✅ | 39.1% ✅ | **100% blue ❌** |
-| **ImageMagick internal MSVG** | 39.8% ✅ | **0% blue ❌** | 39.6% ✅ |
+| Inkscape / librsvg | 39.3% ✅ | 38.4% ✅ | 38.4% ✅ |
+| **QtSvg** — Gwenview, Dolphin thumbnails, `QIcon`, KDE's image plugin | 39.3% ✅ | 38.5% ✅ | **100% blue ❌** |
+| **ImageMagick internal MSVG** | 39.5% ✅ | **0% blue ❌** | 39.3% ✅ |
+
+The two failure modes are renderer bugs and they came through a recolour untouched: Qt still
+drops `clip-path` and paints the whole monogram blue, MSVG still hides a mask it cannot parse.
 
 * **`clip` shipped for a day and is wrong in Qt.** QtSvg **ignores `clip-path`** — not a quirk
   of our file: Qt 6.10.2 drops even a canonical `<circle>` clip. The blue copy of the *whole*
@@ -625,6 +685,17 @@ entry at the bottom of this file until the next round moves it to the archive.
    Found by looking at the image and then by measuring ink extents per row band with PIL — not by an
    exit code, which is the point: gotcha 24 and gotcha 30 again, in the one tool this folder uses for
    *presentation*. **A figure is an artefact: check its pixels like any other.**
+40. **A check keyed on a colour *literal* goes blind on a recolour, and it goes blind quietly.**
+   `render_agreement.py` decided which path was "the green half" with `fill.startswith("#00a")`.
+   That is true of `#00ac4e` and false of `#008c46` — so the first thing the P2 recolour did was
+   switch off the only check that can see *where* an engine paints, and it did so at exit 0, with a
+   clean report, on the files that were supposed to be the reason for running it. `validate_logo.py`
+   had the same class of assumption in its pixel classifier. Repaired structurally, not by updating
+   the literal (which would go blind again at the next palette): `palette()` reads `GREEN`/`BLUE` out
+   of `gen_logo.py`, the classifier matches **hue** rather than a prefix, and it refuses to guess
+   when the palette cannot be found. Corollary for anyone adding a colour assertion anywhere in this
+   folder: **the palette may be read, never repeated** — and the reason a recolour is cheap to prove
+   is that the geometry checks do not mention colour at all.
 
 ### 29 — impossible errors: re-run before you believe (Round 10)
 
@@ -686,8 +757,10 @@ type check   : A height 39.33 px vs cap 39.83 px (ratio 0.987)
 colour split : solid 10 pts == C_RING from kwcapture-sketch.svg, 100.0% on ink,
                stem area 0.00% blue (one run said 0.03%: gotcha 29), samples stem 3/3 green |
                C 6/6 blue | W 3/3 green
-render       : QtSvg 44.3% blue | MSVG 45.4% blue  (both colours present in both)
-   fills     : #kw #00ac4e, #kw-c + #a + #wordmark #0000ff
+render       : QtSvg 44.0% blue | MSVG 44.8% blue  (both colours present in both)
+   fills     : #kw #008c46, #kw-c + #a + #wordmark #7f7fff   (palette P2, 2026-10-11;
+               was #00ac4e / #0000ff -- geometry identical, these two lines are the only
+               ones in this block that moved)
 box check    : NO LINE AT ALL, and that is correct here - kwcapture-sketch.svg has no helper
                box, so box_check returns [] without printing (gotcha 30). A missing line is
                also what a mis-named or absent sketch produces, which is why absence is not
@@ -712,60 +785,96 @@ type check   : height fill x1.753 off #type, along-baseline factor 1.0000; then,
                cap line +0.01, baseline -0.64
 colour split : solid 10 pts == C_RING from kwcapture-mark-sketch.svg, 100.0% on ink,
                stem area 0.00% blue, samples stem 3/3 green | C 6/6 blue | W 3/3 green
-render       : QtSvg green 20319 blue 23506 -> 53.6% blue
-               MSVG  green 20602 blue 20870 -> 50.3% blue
-               (mono 39.4% / 39.8%; ~0% of either colour in some renderer = that renderer is
-                ignoring a feature, gotcha 25, not that the logo is wrong)
+render       : palette line first -- green #008c46 / blue #7f7fff, read off gen_logo.py
+               QtSvg green 20460 blue 23315 -> 53.3% blue
+               MSVG  green 20796 blue 20625 -> 49.8% blue
+               (mono, from `--monogram --out /tmp/…`: 39.3% / 39.5%; ~0% of either colour in
+                some renderer = that renderer is ignoring a feature, gotcha 25, not that the
+                logo is wrong. Round 13 measured 53.6 / 50.3 on the old palette: the geometry
+                lines above are byte-identical to that round's, which is what a "paint-only"
+                change looks like in this table)
 sweeps       : --inset 0.25 / 0.5 / 1.0 -> x1.731 / x1.708 / x1.660 (all inside)
                --max-stretch 1.35 -> 75.7% of the height; --min-clear >= 0.9 -> smaller cap,
                still centred, still inside (AGENTS.old.md A.3 has the table)
                --no-height-fill -> byte-identical to the pre-fill mark (lam = 0 is identity)
 
-icon/ - the shipped set, ONE artwork (Round 13: bash logo/icon/build.sh, then magick identify)
+icon/ - the shipped set, ONE artwork (Round 14: bash logo/icon/build.sh, then magick identify.
+       Every byte size below is palette-dependent and every one was re-measured on P2; the Round
+       13 numbers were 5 836 / 12 342 / 27 201 / 59 849 for 128/256/512/1024)
 kwcapture-mark-{16,24,32,48,64,128,256,512,1024}.png
-                         719 / 1 133 / 1 549 / 1 943 / 2 658 / 5 836 / 12 342 / 27 201 / 59 849 B
+                         719 / 1 133 / 1 553 / 2 197 / 3 056 / 6 610 / 14 010 / 30 485 / 66 631 B
                          16 is PaletteAlpha, above that TrueColorAlpha; corner alpha 0 ==
                            real transparency (gotcha 31: -b none would have made it 255 + white)
-favicon.ico              16 / 24 / 32 / 48 / 64 px, 34 494 B, PaletteAlpha at 16 and
+favicon.ico              16 / 24 / 32 / 48 / 64 px, 34 494 B (unchanged: an indexed 16 px frame
+                           and a container -- a recolour that does not add a colour to the 16 px
+                           palette does not change its size), PaletteAlpha at 16 and
                          TrueColorAlpha above (five sub-images is the point of an .ico;
                            frame[0] is pixel-identical to kwcapture-mark-16.png - verified with
                            `magick compare -metric AE`, 0 differing pixels)
-apple-touch-icon.png     180x180 TrueColorAlpha 11 722 B   (mark at 142 = 79%, corner alpha 0)
-pwa-192.png              192x192  (mark at 151)   pwa-512.png 512x512 34 589 B (mark at 404)
-maskable-512.png         512x512 TrueColorAlpha 34 589 B   (mark at 404: inside the 80% safe
+apple-touch-icon.png     180x180 TrueColorAlpha 11 446 B   (mark at 142 = 79%, corner alpha 0;
+                           ink 6 971 px, of which 5 857 chromatic)
+pwa-192.png              192x192 10 775 B (mark at 151; ink 7 790 / 6 634 chromatic)
+pwa-512.png              512x512 34 044 B (mark at 404; ink 48 623 / 45 113 chromatic)
+maskable-512.png         512x512 TrueColorAlpha 34 044 B   (mark at 404: inside the 80% safe
                            zone, which caps at 410 - byte-identical to pwa-512 by construction)
-github-avatar-400.png    400x400 TrueColorAlpha 25 765 B   (mark at 316; clipped ink under
-                           GitHub's inscribed circle: 0 px. Full bleed: 4 015 px, 45.6 overshoot)
-github-social-preview    1280x640 TrueColor 84 565 B      (GitHub's limit is 1 MB)
-contact.png              1106x240 TrueColor 49 635 B      (6 cells x 1 row)
+github-avatar-400.png    400x400 TrueColorAlpha 25 293 B   (mark at 316; clipped ink under
+                           GitHub's inscribed circle: 0 px, on P2 as on the old palette.
+                           ink 30 607 / 27 840 chromatic. Full bleed: 4 015 px, 45.6 overshoot)
+github-social-preview    1280x640 TrueColor 84 871 B      (GitHub's limit is 1 MB)
+contact.png              1106x240 TrueColor 49 728 B      (6 cells x 1 row)
 build.sh's own guard:    "all nine mark PNGs are pixel-identical to a fresh render of
                            kwcapture-mark.svg" (exit 1 otherwise - gotcha 38)
 tiles.py's mask guard:   clipped px 0 on avatar / maskable / apple-touch, else exit 1
-contrast, computed from the hex values with the WCAG relative-luminance formula:
-  #0000ff vs #0d1117 2.20:1 | vs #ffffff 8.59:1
-  #00ac4e vs #0d1117 6.32:1 | vs #ffffff 3.00:1 | #0000ff vs #00ac4e 2.87:1
+FIT sweep (`python3 logo/icon/tiles.py --sweep`, run on both palettes with the same instrument):
+  largest artwork that loses no ink: 322/400 (0.805), 413/512 (0.807), 143/180 (0.794) -> the
+  worst of the three is 0.794, so FIT 0.790 has 1 px / +0.4 % of the side in hand. THE ANSWER DID
+  NOT MOVE with the recolour -- but it was re-measured, not assumed: antialiasing is a blend of
+  ink with ground, so a different green is a different halo, and this is the constant that a
+  paint-only change could have quietly broken (the warning is in tiles.py above the constant).
+contrast -- re-measured on P2 by `python3 logo/contrast_report.py`, which reads the constants out
+  of gen_logo.py and exits 1 if any cell drops under --min (default 3.0). Run the old pair
+  through the same tool to reproduce Round 11's numbers: `contrast_report.py '#00ac4e' '#0000ff'`.
+  #008c46 vs #ffffff 4.34:1 | vs #0d1117 4.36:1 | L 0.1920
+  #7f7fff vs #ffffff 3.29:1 | vs #0d1117 5.75:1 | L 0.2691
+  #008c46 vs #7f7fff 1.32:1   (the split; hue carries it, not lightness)
+  both halves inside the legal-on-both window [0.1164, 0.3000], whose ceiling is 2.10:1 of split
 legibility of the word, rendered (`preview/ladder-icon.png`; the monogram row is the CONTROL in
 that figure, not a shippable icon):
   128 px legible | 64 px marginal | 48 px and below mush -- and the mark ships there anyway.
   That cost is the owner's to accept; substituting a drawing is not the build's to choose.
-that figure's own pixels (gotcha 39): 704x500, title ink x 80..622 of 704 -- 80 px of air each
+that figure's own pixels (gotcha 39): 704x512, title ink x 80..622 of 704 -- 80 px of air each
                            side, measured per row band with PIL, because `montage -title` had
                            been cropping it at BOTH ends at exit 0. Labels 128px-art tiles at
                            pointsize 18 (Pillow-measured); the title is drawn by Pillow at 20,
-                           widest line 546 px of 704.
+                           widest line 546 px of 704. (Re-measured on P2: the ink extents are the
+                           Round 13 numbers exactly; the canvas grew 12 px because every title in
+                           the script now goes through the same `draw_title()` band, which is
+                           2 lines here and was 1 line in the figure Round 13 shipped.)
+the other figures, same guard, same session: ladder-kwcapture 950x302 (title 671 px of 950),
+                           ladder-mono 950x302 (830 px of 950 -- the honest caption is long),
+                           on-dark 864x458 (657 px of 864), and all three print their measured
+                           extents at build time. on-dark's title is generated from
+                           contrast_report.py: `green 4.36:1 blue 5.75:1 (on white 4.34 / 3.29)`,
+                           and build.sh REFUSES to draw it if any cell is under 3:1 -- a caption
+                           that can go stale is a caption that will, so the number in the picture
+                           is computed by the tool that draws the picture.
 
 the copy that ships inside the Python package (Round 13: python3 logo/sync_package_icons.py;
 sha256 first 16 of the SOURCE, also written into kwcapture/icons/COPYING.md)
-hicolor/16x16/apps/kwcapture.png       719 B   b65e21b3654a0e51   (== icon/kwcapture-mark-16.png)
-hicolor/24x24/apps/kwcapture.png      1 133 B  6f8a0f32cad06495
-hicolor/32x32/apps/kwcapture.png      1 549 B  b77329e6690708e7
-hicolor/48x48/apps/kwcapture.png      1 943 B  3c3401d501667c2b
-hicolor/64x64/apps/kwcapture.png      2 658 B  341145818e9d89da
-hicolor/128x128/apps/kwcapture.png    5 836 B  ac05cb4d09e1e447
-hicolor/256x256/apps/kwcapture.png   12 342 B  553d545c4ad7dd05
-hicolor/512x512/apps/kwcapture.png   27 201 B  afe3da1c7e2dbb01
-hicolor/scalable/apps/kwcapture.svg   3 797 B  9663cec799efbbe7   (== logo/kwcapture-mark.svg,
-                           the logo itself, copied verbatim -- asserted by tests/test_icons.py)
+(the Round 13 hashes are in this file's history and in kwcapture/icons/COPYING.md's previous
+revision; these are P2's, from `python3 logo/sync_package_icons.py` on 2026-10-11)
+hicolor/16x16/apps/kwcapture.png       719 B   bfa24ffcff355d2b   (== icon/kwcapture-mark-16.png)
+hicolor/24x24/apps/kwcapture.png      1 133 B  971edc2459731859
+hicolor/32x32/apps/kwcapture.png      1 553 B  8a10ce882a45b21e
+hicolor/48x48/apps/kwcapture.png      2 197 B  bec1f331e2a35f43
+hicolor/64x64/apps/kwcapture.png      3 056 B  48610cbfeabb9bc7
+hicolor/128x128/apps/kwcapture.png    6 610 B  52ff201781b802ac
+hicolor/256x256/apps/kwcapture.png   14 010 B  71a9c08c81063a79
+hicolor/512x512/apps/kwcapture.png   30 485 B  eebdc9b3057bd6df
+hicolor/scalable/apps/kwcapture.svg   3 797 B  3c6ee5d0d964ba09   (== logo/kwcapture-mark.svg,
+                           the logo itself, copied verbatim -- asserted by tests/test_icons.py.
+                           Same byte count as the old palette, different bytes: the SVG's only
+                           content that changed is two `fill=` attributes and a comment)
 sync_package_icons.py --check          "checked 9 icon files (0 written now)", exit 0
 tests/test_icons.py                     98 checks, 0 skipped here (89 + the 9 one-artwork
                                        assertions). CI, measured off the log of the push that
@@ -778,7 +887,10 @@ probe/sabotage_icons.sh                10 sabotages, 10 detected, tree restored
 built wheel + sdist                    10 icon files each (8 png + 1 svg + COPYING.md) and CI
                                        says so too (`wheel: 10 icon files`, `sdist:
                                        kwcapture-0.6.0.tar.gz 10 icon files`); `logo/` in neither,
-                                       verified locally with unzip -l / tar tzf as well
+                                       verified locally with unzip -l / tar tzf as well, and on
+                                       P2 also byte-compared: every PNG in the wheel `cmp`s to its
+                                       `logo/icon/kwcapture-mark-<N>.png` and the wheel's scalable
+                                       entry `cmp`s to `logo/kwcapture-mark.svg`
 ```
 
 `validate_logo.py` exits non-zero on: a collision (< 1.5 px), ink outside the artboard,
@@ -863,7 +975,12 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   measures from, and the same-path-data invariant. **(b) is the recommendation**: it buys the
   compatibility without spending an invariant, exactly as `--c-paint solid` did.
   `python3 logo/render_agreement.py` is the instrument and **exits 1 until this is decided**, so
-  the finding cannot be quietly forgotten. Re-confirmed 2026-10-11: 26 px and 67 px.
+  the finding cannot be quietly forgotten. Re-confirmed 2026-10-11: 26 px and 67 px, and re-confirmed
+  again the same day **on palette P2** — a recolour cannot touch this bug, because a renderer that
+  mis-applies `rotate()` does not care what colour it is rotating. What a recolour *can* touch is
+  the instrument: `render_agreement.py` identified the green half with `fill.startswith("#00a")`,
+  which the new green defeats, so it had been comparing nothing while exiting 0. It reads the
+  palette out of `gen_logo.py` now, so the next palette cannot disarm it either (gotcha 30).
 * **The flake (gotcha 29): cause still not established — but it is no longer "unreproducible".**
   Both historic messages came back on 2026-10-11 in a code path that never touches fonts, and
   in a pure-Python extract with no third-party imports, plus one CPython-level
@@ -890,84 +1007,68 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   notice), `1.5`, and the shipped full fill — see `preview/variants-type.png`. Fold into the
   stranger test above: ask what the mark says **and** whether the third glyph is a letter or a
   mouse.
-* **The two monograms: ruled (2026-10-11) — `kwcapture-mono.svg` is unofficial and historical,
-  and it is going.** The owner's words: *"Unofficial variant and historical value only, safe to
-  delete if you prefer."* That settles the question Round 11 opened and Round 13 narrowed: the
-  monogram is not an icon, not a second voice to explain to users, and not a deliverable — it is a
-  generator mode (`--monogram`) plus a **control** in the legibility figures. So it is being
-  deleted with the next re-render rather than kept in `logo/` looking like an artefact: the
-  committed SVGs become `kwcapture.svg`, `kwcapture-mark.svg` and the two sketches, and
-  `preview/build.sh` / `render_agreement.py` will render the monogram into `$T` on the fly the way
-  the ladder already does (gotcha 38's lesson applied one folder up: **an artefact that sits next
-  to the approved artwork will eventually be mistaken for the approved artwork**). History is not
-  lost — `gen_logo.py --monogram --out /tmp/mono.svg` reproduces it byte for byte, and
-  `git log --diff-filter=D -- logo/kwcapture-mono.svg` recovers the file itself. Not done in the
-  same commit as the palette question below, because both mean re-rendering every image and the
-  round should re-render once.
+* **The two monograms: ruled and now executed (Round 14, 2026-10-11) —
+  `logo/kwcapture-mono.svg` is deleted.** The owner's words: *"Unofficial variant and historical
+  value only, safe to delete if you prefer."* So the committed SVGs are `kwcapture.svg`,
+  `kwcapture-mark.svg` and the two sketches, and nothing else: the monogram is a **mode**
+  (`--monogram`) and a **control** in the legibility figures, not a deliverable. `--monogram` now
+  **requires `--out`** and says why in its refusal, because a mode whose default path re-creates a
+  deleted artefact is gotcha 38 waiting to happen again. `preview/build.sh` and
+  `render_agreement.py` render it into a temp directory, and doing that exposed a thing the single
+  file name had been hiding: the figures were using **two different monograms** — the original
+  drawing (`kwcapture-sketch.svg`) in the size ladders, the redrawn mark's monogram
+  (`kwcapture-mark-sketch.svg`) as the ladder-icon control row. They are `mono-orig` and `mono-mark`
+  now, each with its own `--sketch`, because two names that are one file is how a figure ends up
+  measuring something other than what it says. History is intact:
+  `gen_logo.py --monogram --out /tmp/mono.svg` reproduces the drawing byte for byte, and
+  `git log --diff-filter=D -- logo/kwcapture-mono.svg` recovers the file.
 * **Small sizes: ruled, and closed (2026-10-11).** Asked whether the unreadable `APTURE` at 16 px
   was worth anything, the owner's answer was *"Why bother? There's no way it would be readable at
   that low resolution."* So: the mark ships at 16 px with the word mush, permanently, by decision.
   The ladder stays as the measurement of what that means and nothing in the pipeline may "fix" it —
   see gotcha 38. If a legible 16 px asset is ever wanted it is a **new mark from the owner**, not a
   crop, not a monogram, not a build-script default.
-* **PALETTE P2 — DECIDED by the owner, NOT YET APPLIED. This is the next session's job.** The
-  decision, taken 2026-10-11 after six pairs were rendered on white and on `#0d1117` and the owner
-  picked by eye: **green `#00ac4e → #008c46`, blue `#0000ff → #7f7fff`.** It wins because every cell
-  clears the WCAG 3:1 non-text floor on **both** grounds — green **4.34** white / **4.36** dark, blue
-  **3.29** white / **5.75** dark — which closes the dark-mode finding this folder has carried since
-  Round 10 (blue on `#0d1117` was **2.20:1**). Paint only: no geometry, no fit, no new variant.
-  **The full ordered checklist, including the paint-only `diff` proof, the `FIT` re-measure warning,
-  the docs whose ratios change, the `kwcapture-mono.svg` deletion folded in, the CI-log method and
-  the owner's re-upload action, is in `/tmp/_storage/Next_Prompt.md`.** `/tmp` does not survive a
-  reboot: if that file is gone, the checklist below and the item's measurements are enough to
-  rebuild it, and the owner's decision itself is not in doubt. Do not apply it as an afterthought in
-  some other round — it is a round of its own, with its own verified block.
-  The history of the decision, kept because the reasoning is the useful part:
-  the owner first proposed green `#00ac4e → #00ff00`, blue `#0000ff → #7f7fff`; it was measured, not
-  obeyed, and sent back with the awkward half included (gotcha 38 working as intended). Measured
-  (`gen_logo.py --mark --green … --blue … --out /tmp/…`, never into a shipped path — the guard in
-  `gen_logo.py` refuses that, and it held):
-
-  | pair | green/white | blue/white | green/dark | blue/dark | half-vs-half |
-  |---|---|---|---|---|---|
-  | current `#00ac4e` + `#0000ff` | **3.00** | 8.59 | 6.32 | **2.20** | 2.87 |
-  | proposed `#00ff00` + `#7f7fff` | **1.37** | 3.29 | 13.79 | 5.75 | 2.40 |
-
-  **The blue is right.** `#7f7fff` is the only single value here that clears the 3:1 non-text floor
-  on *both* grounds (3.29 white / 5.75 dark), and it fixes the finding `preview/on-dark.png` exists
-  to show: the blue half goes **2.20 → 5.75** on GitHub-dark. Take it.
-  **The green is the problem, and the word "darken" is the clue.** `#00ff00` is not darker than
-  `#00ac4e`, it is far lighter — relative luminance **0.715 vs 0.301**, the brightest green a byte
-  can hold. Against white that is **1.37:1**, and white is not an edge case: it is the ground of
-  every tile in `icon/` (`apple-touch-icon`, `pwa-192`, `pwa-512`, `maskable-512`, `github-avatar-400`
-  — `tiles.py` composites on `WHITE`), of `card.py`'s social preview (`BG = white`), of the contact
-  sheet, of the README header on GitHub-light and of PyPI. Measured on renders, the green half's ink
-  under 3:1 against white goes from 48 % → 50 % at 512 px but the *invisible* part grows worst at
-  small sizes: pixels under **1.5:1** against white go **1.6 % → 47.9 %** at 512 px and
-  **20.5 % → 57.5 %** at 16 px. In the montage the KW does not just lose weight, it dissolves into
-  the tile. And the two halves get closer in colour-blind vision too: normal-vision separation does
-  improve (1.01 → 1.29) and deuteranopia 0.62 → 0.69, but that gain is worthless if one half is
-  1.37:1 on the ground most hosts use.
-  **The structural fact**, worth knowing before picking again: a colour clears 3:1 on *both* white
-  and `#0d1117` only if its relative luminance sits in **[0.115, 0.300]** — a window barely wider
-  than an octave. Two colours inside that window can separate by at most **2.12:1**, so "both halves
-  legal on both grounds" and "a strong two-tone split" are in tension *by arithmetic, not by taste*.
-  Today's split is strong precisely because the blue sits outside the window, too dark for dark
-  grounds. That is the trade to make consciously; options measured so far, all keeping `#7f7fff`:
-  `#00ac4e` (status quo green: 3.00/6.32, split 1.10 — every cell ≥ 3:1, weakest split),
-  `#008c46` (4.34/4.36 — the balanced one, split 1.32), `#007a3d` (5.45/3.47 — split 1.66, green
-  starts to read as forest rather than brand), `#007038` (6.22/3.04, split 1.89, the last green that
-  still clears dark). Comparison renders: `/tmp/palette_four.png` on this machine (current /
-  proposed / green-kept / `#008c46`, each on white and on `#0d1117`) — not committed, because a
-  palette that is not decided is not an artefact.
-  **P2 is chosen, so what follows is a scheduled round, not an open question** — see
-  `/tmp/_storage/Next_Prompt.md`; regenerate it from this item if `/tmp` was cleared. The shape of
-  it: `gen_logo.py`'s `GREEN`/`BLUE`
-  constants and their comments, the colour-split check's expectations, every image in `icon/` and
-  `preview/`, the WCAG tables in `logo/README.md` §8 and `AGENTS.md` (three files quote these
-  numbers), `logo/AGENTS.old.md`'s historical quotes stay as they are, the tiles' `FIT` may move
-  because a different green changes the antialiasing the mask check counts — and the GitHub social
-  preview has to be re-uploaded, since the live one is today's palette, verified byte-for-byte.
+* **PALETTE P2 — APPLIED (Round 14, 2026-10-11), and the dark-mode finding it closed is
+  closed.** Green `#00ac4e → #008c46`, blue `#0000ff → #7f7fff`; the owner picked the pair from
+  six rendered on white and on `#0d1117`, this round applied it and re-measured everything paint
+  can move. The numbers, from `python3 logo/contrast_report.py` (which reads the constants out of
+  `gen_logo.py`, exits 1 if a cell falls under `--min`, and reproduces the old pair if you hand it
+  the old hexes): green **4.34** white / **4.36** dark, blue **3.29** / **5.75**, split **1.32**;
+  every cell clears the WCAG 3:1 non-text floor on both grounds, where the pair it replaced had
+  two failures (blue **2.20** on dark, green 3.00 on white). Paint only, and proved as paint only:
+  the hex-stripped diff against the previous commit is empty.
+  **What P2 bought and what it paid, because the trade is the thing to remember:** it bought a mark
+  that is legal on every ground a host uses, and it paid split strength, **2.87 → 1.32**. The C
+  now separates from the green by **hue** (240° against 150°) and not by lightness — so in
+  greyscale, or through any pipeline that flattens saturation, the two halves become near-identical
+  and the first letter of CAPTURE goes with the distinction. `contrast_report.py` prints a
+  dichromatic estimate (Viénot/Brettel LMS — a smoke test, not a person): ΔE76 117 / 116 /
+  33 and ratios 1.15 / 1.27 / 1.08 for protan / deuteran / tritan, i.e. the split survives the
+  simulation by hue while the lightness separation does not. If a future round ever needs the loud
+  two-tone back, it is an owner decision about *which ground to fail on*, not a recolour to be
+  slipped in — and this is why.
+  **The arithmetic that was mistaken for a law, now corrected in `README.md` §8.** That section
+  said *"no ground wins both colours"*, which was true of the pair it measured and read as if no
+  pair could. A colour clears 3:1 on white at L ≤ **0.3000** and on `#0d1117` at L ≥ **0.1164**;
+  the window **[0.1164, 0.3000]** is not empty — both P2 halves are inside it (0.1920, 0.2691).
+  What the window really forbids is *loudness*: two colours inside it can separate by at most
+  **2.10:1**. "Both halves legal on both grounds" and "a strong two-tone split" are in tension by
+  arithmetic; the old split was strong precisely because its blue sat **outside** the window, too
+  dark for dark grounds.
+  The greens measured before the owner chose, all keeping `#7f7fff`, kept because the reasoning is
+  the useful part and because someone will propose a fifth green: `#00ac4e` 3.00/6.32, split 1.10
+  (fails white); `#008c46` 4.34/4.36, split 1.32 — **chosen**, the balanced one; `#007a3d`
+  5.45/3.47, split 1.66 (starts to read as forest rather than brand); `#007038` 6.22/3.04, split
+  1.89, the last green that still clears dark. And the proposal that started it, `#00ff00`: not the
+  *darkening* the owner asked for but the brightest green a byte holds (L 0.715 vs the old 0.301),
+  **1.37:1** on white — and white is the ground of every tile in `icon/`, of the social card, of
+  GitHub-light and of PyPI. Measured: pixels under 1.5:1 against white went 1.6 % → 47.9 % at
+  512 px and 20.5 % → 57.5 % at 16 px. It was measured rather than obeyed and sent back with the
+  awkward half included (gotcha 38 working as intended); the owner then chose from six pairs, which
+  is the correct order of operations.
+  **Still owed by this palette, and not by this round:** the GitHub social preview is a stored
+  **upload**, so the live one is still the *old* palette until the owner re-uploads
+  `icon/github-social-preview.png` — see the item below, and the root `AGENTS.md`.
 * **`--c-paint`'s `--help` text is wrong** (says `mask (default)`, claims mask ≡ solid). The
   default is `solid` and the matrix above is the truth. One-line fix in `gen_logo.py`; left
   alone in a documentation round so the code stays byte-stable while its docs are re-checked.
@@ -1002,16 +1103,39 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
   a transcript lands here every session under a *different* name, and the root rule
   `chat_his*.jsonl` matched exactly one of them — see the 2026-10-06 incident in the root
   `AGENTS.md`, which is why this line exists.
-* **GitHub social preview: DONE, and verified as done (2026-10-11).** The owner clicked
-  *Settings → Social preview*; `usesCustomOpenGraphImage` is now **`true`** and
-  `openGraphImageUrl` is a `repository-images.githubusercontent.com/…` URL, and the bytes that URL
-  serves are 1280×640 and **0 of 51 681 sampled pixels differ** from
-  `icon/github-social-preview.png` — the upload is this artwork, not a re-encode of it. That closes
-  the item gotcha 34 said no script could close. What is left of it: `icon/github-avatar-400.png`
-  can still become the owner's **user profile picture** — a personal account has no org and no repo
-  avatar (a repository's picture *is* its social preview), so that one is an account setting, and
-  optional. Re-run the query in `README.md` §8 any time; if the preview is ever replaced, that's
-  what "still true" looks like.
+* **`tests/test_kwcapture.py`'s `alpha is opaque` is failing on this desktop, and it is not a
+  logo bug (found 2026-10-11, Round 14, reported rather than patched).** The check is
+  `check("alpha is opaque", int(arr[..., 3].min()) == 255)` on a live full-screen grab, and KWin is
+  returning **alpha 253/254** at exactly four pixels — (284,1144), (2275,1144), (289,1149),
+  (2270,1149) — which are the bottom corners of the System Monitor window
+  (`1992x907+284+243`, so its bottom edge is y=1149 and its corners are x=284 and x=2275): the
+  rounded-corner composite bleeds sub-opaque alpha into the screenshot. It is there in **24 of 25**
+  grabs while that window is up; the suite therefore fails ~2 runs in 3 and passes when the desktop
+  happens not to have such a window. Proven unrelated to this round: the same check fails 7 of 8
+  times from a **pristine `git worktree` of `HEAD`** with none of the recolour's changes, and
+  nothing under `kwcapture/` or `tests/` is modified by P2 (only `kwcapture/icons/`, which is data).
+  **Not touched, on purpose**: tightening an assertion to make a red suite green is how a real
+  bug — is the alpha channel of a compositor grab *allowed* to be non-opaque at a window corner,
+  and does anything downstream assume 255? — gets archived as a passing test. Owner's call, in
+  order: (a) leave the check and treat the failure as environmental, which costs a red suite every
+  time a rounded window is on screen; (b) assert what the code actually guarantees on a controlled
+  surface (a solid capture, or `min()` over a grab of a known-opaque region) and add a separate,
+  explicitly-labelled check for the live-desktop case; (c) investigate whether KWin's BGRA grab
+  alpha at rounded corners is expected, and write the answer down. (b) is the recommendation, and
+  whichever way it goes belongs in a round that owns `tests/`, not in a recolour.
+* **GitHub social preview: the mechanism is DONE, the image is STALE — owner, re-upload it.**
+  Round 13 verified the whole loop end to end: *Settings → Social preview* was clicked,
+  `usesCustomOpenGraphImage` is `true`, `openGraphImageUrl` is a
+  `repository-images.githubusercontent.com/…` URL, and the bytes that URL served were 1280×640
+  and **0 of 51 681 sampled pixels differed** from `icon/github-social-preview.png`. That closed the
+  item gotcha 34 said no script could close — and palette P2 has just reopened it, because what
+  GitHub stores is the **upload**, not a render of the repo. The file in this folder is the P2 card
+  (**84 871 B**); the live card is still `#0000ff`-and-`#00ac4e`. **Action:** re-upload
+  `logo/icon/github-social-preview.png`, then re-run the query in `README.md` §8 *and* the pixel
+  comparison — the flag only proves *an* image is set, the pixels prove it is *this* one, and
+  right now a `true` flag would mislead exactly as a stale caption does (gotcha 39). Same story for
+  the optional user profile picture (`icon/github-avatar-400.png`, P2: 25 293 B): an account
+  setting, no check can reach it, and no script pretends to (gotcha 34).
 * **The package wiring is done (Rounds 12–13); PyPI's display of it is not measured.** The mark
   set — nine renders plus the SVG itself — now ships inside the package (`../kwcapture/icons/`) and
   `kwcapture install-desktop` puts it in the user's hicolor theme, so the artwork has a consumer
@@ -1038,84 +1162,74 @@ the falsified fit table, the renderer matrix, the MSVG `rotate()` find) are
 [`AGENTS.old.md` Part H](AGENTS.old.md); **Round 12's** (the desktop-icon round) is
 [`AGENTS.old.md` Part I](AGENTS.old.md) — moved verbatim by Round 13, which left its **wiring**
 standing and deleted its **artwork**, so read Part I for how the icon reaches a desktop and this
-round's entry for what the artwork is. Read them before arguing with any number above.
+round's entry for what the artwork is. **Round 13's** (the one-artwork round) is
+[`AGENTS.old.md` Part J](AGENTS.old.md), moved verbatim by Round 14 under the same rule; Round 14's
+did not change the artwork, so Round 13's *conclusions* all still stand and are not amended there.
+Read them before arguing with any number above.
 
-**Round 13 — 2026-10-11, the one-artwork round.** The owner's brief was one sentence long and
-about a mistake: the previous session picked the **wrong drawing** — the monogram — for the shipped
-icons, "the chosen official icon and logo for kwcapture is only `kwcapture-mark.svg`; no other
-variant allowed except resizing or re-rendering". Fixing it cost 13 deleted files, 5 new ones, a
-sweep through nine documents, and it produced the most transferable gotcha in this file:
+**Round 13 — 2026-10-11, the one-artwork round.** Moved verbatim to
+[`AGENTS.old.md` Part J](AGENTS.old.md), with its authority intact: the owner's rule that the icon
+of kwcapture is `kwcapture-mark.svg` and the only permitted transforms are resize and re-render is
+still *the* rule; gotcha 38 (*a build script has no authority to make a branding decision*) is the
+one this folder still runs on; gotcha 39 (*never trust `montage -title`*) is still why every title
+in `preview/build.sh` is drawn by Pillow. Read Part J for the story of the deleted glyphs, and the
+entry below for what the round after it measured.
 
-* **A build script has no authority to make a branding decision (gotcha 38).** Round 12's glyph was
-  not carelessness, it was a *measurement*: `APTURE` is legible at 128 px, marginal at 64, mush at
-  48 and below, and a full-bleed mark loses 4 015 px under GitHub's circular crop. That measurement
-  went into `icon/build.sh` as a **selection rule** — ship the drawing without the word at small
-  sizes — which is an owner's decision expressed in a place with no authority to make it. The fix
-  is not "the measurement was wrong"; the measurement is still true, still on the page, and is now
-  written as a **consequence the owner accepted** (`README.md` §8) instead of a reason to substitute
-  artwork. Generalises to anything with an owner: **when a number appears to contradict a decision,
-  document the number and ask — never route around the decision in a Makefile.**
-* **What the change actually is.** `icon/build.sh` renders the mark at nine sizes (16/24/32/48/64
-  are new; the mark had never existed below 128 — gotcha 37 is exactly this gap, seen from the other
-  side), `tiles.py` grounds those renders on white at **79 %** of the tile, `favicon.ico` is built
-  from the mark PNGs (`frame[0]` is pixel-identical to `kwcapture-mark-16.png`), and
-  `sync_package_icons.py` copies `logo/kwcapture-mark.svg` **verbatim** as the package's scalable
-  entry. Out went `icon/glyph-*.png` (12 files) and `icon/kwcapture-mark-mono.svg`. `icon/` is
-  **17 images of one artwork**, and `bash logo/icon/build.sh` is reproducible: all 21 files matched
-  their pre-build sha256 after a full rebuild.
-* **Two guards, because the reason it happened is that nothing stopped it.** `build.sh` now ends by
-  re-rendering the mark at all nine sizes and comparing **pixels** — a byte comparison would fail on
-  the `-strip` re-encode and a name check would pass a hand-swapped file, so it compares the thing
-  that matters — and `tests/test_icons.py` gained nine checks: the packaged SVG **is**
-  `logo/kwcapture-mark.svg` byte for byte, every packaged PNG is that mark's render of the size its
-  directory promises, and a tile that comes out grey or blank fails. 89 → **98 checks**, 0 skipped
-  here, and `probe/sabotage_icons.sh` still reports **10/10 detected**, which is the difference
-  between a suite that asserts and a suite that is decorated.
-* **The legibility ladder stays, demoted to what it always was: a control** — and rebuilding it
-  caught a new gotcha (39). `preview/build.sh` now renders the monogram row into `$T` on the fly
-  instead of reading a file in `icon/`, deliberately: a monogram sitting in the shipped-icon
-  directory reads like an approved icon, which is how the last round got its artwork wrong. The
-  figure's title has to say *NOT an icon*, which meant writing a title — and `montage -title` drew
-  it wider than the canvas and cropped characters off **both** ends at exit 0, in the version that
-  had been in the README all along ("…d mark (top) vs the monog…"). A tool this folder uses for
-  presentation turned out to be the one tool nobody measured: the title is now drawn with Pillow at
-  a size solved from its own metrics and asserted to fit, labels are sized against the tile, and the
-  build prints the ink extents. Verified by measurement, not by looking: title ink spans x 80..622
-  of 704, so 80 px of air each side.
-* **The install path is byte-exact again.** After `install-desktop` on this desktop: nine installed
-  files whose sha256 equals the mark render for that size, `scalable` equal to
-  `logo/kwcapture-mark.svg`, `desktop-file-validate` silent, `doctor` green, and wheel + sdist still
-  carrying 10 icon files each with `logo/` in neither. Nothing in `kwcapture/` changed except
-  `_icons.py`'s docstring, which had been advertising the abandoned design.
-* **Docs were swept, not patched.** Root `AGENTS.md`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`,
-  `logo/README.md` §8, `logo/LICENSE.md`, `logo/AGENTS.md`, `logo/icon/build.sh`, `logo/preview/build.sh`
-  and `logo/sync_package_icons.py` all said, in so many words, that the small-size artwork *is* the
-  glyph; every one of those sentences now says the mark, and the reason keeps its place as a cost
-  rather than being deleted with the mistake. Round 11's and Round 12's **verified blocks were
-  annotated, not rewritten** — they are dated claims, and that this project believed the other story
-  for two rounds is part of the record (the archive's rule: move, never correct in place).
-* **Checked after the push, because "the tests pass" on the machine that wrote them is half a
-  claim.** Run 38122958295 on `34432a8`: `build` and `headless KWin capture (Plasma 6, no GPU)`
-  both **success**, and read off the log rather than inferred from the green tick — the icon suite
-  printed **97 passed + 1 skipped** (`[SKIP] desktop-file-validate  tool not installed`, announced,
-  not silently passed), and the artefact step printed **`wheel: 10 icon files`** and
-  **`sdist: kwcapture-0.6.0.tar.gz 10 icon files`**. One method note, because it cost a detour: the
-  `/actions/runs/<id>/jobs` endpoint gives conclusions but no output, `…/actions/jobs/<id>/logs`
-  answers **401 to urllib** where `curl -sL` gets 200 — the log lives behind a redirected signed URL
-  that urllib's redirect handling does not carry the credential across — and the per-suite count is
-  `grep -c '[PASS]'` inside the *step's own slice* of the log: the whole log had 134 PASS lines,
-  because the ring-reader suite ran first, and reporting that would have been a number that happens
-  to be wrong.
-* **Asked, answered, closed the same day — which is what this round's lesson is for.** Round 13
-  ended by *asking* three things instead of deciding them in code, and the owner answered all three
-  within one exchange: the social preview is **uploaded and verified live** (`true`, a
-  `repository-images…` URL, 0 of 51 681 sampled pixels differing from `icon/github-social-preview.png`);
-  `kwcapture-mono.svg` is **unofficial and historical, safe to delete** — so it leaves the tree and
-  `--monogram` becomes a figure/`/tmp` tool, nothing more; and the unreadable word at 16 px is
-  **accepted with a shrug** — *"Why bother? There's no way it would be readable at that low
-  resolution"* — so the small sizes are settled and no future round may "rescue" them with other
-  artwork. The fourth answer (a palette of `#00ff00` + `#7f7fff`) is the one this round had to push
-  back on rather than apply, because measuring it showed the green is a *brightening* that fails on
-  white — the ground every tile in `icon/` is built on. It is written up under *Still open* with the
-  numbers, unapplied. That is the difference between gotcha 38 obeyed and gotcha 38 memorised: the
-  measurement goes **back** to the owner, with the awkward half included, before anything ships.
+**Round 14 — 2026-10-11, the palette round: P2 applied.** One decision handed over written down
+— green `#00ac4e → #008c46`, blue `#0000ff → #7f7fff`, the owner's pick from six rendered
+pairs — with the instruction *"do not re-litigate the colour: it is chosen; your job is to apply
+it completely and prove nothing broke"*. Applying a palette is the easiest round to fake: search,
+replace, re-render, done. So this round is mostly the proving.
+
+* **"Paint only" is a diff, not an adjective.** Strip every 6-digit hex from both sides
+  (`sed -E "s/#[0-9a-fA-F]{6}//g"`) and `diff` against `HEAD` is **empty** — no coordinate, no
+  `transform`, no `#type` matrix, not one comment re-wrapped. Two constants moved and the artwork
+  moved with them: `gen_logo.py --mark` and plain `gen_logo.py` reproduce `kwcapture-mark.svg` and
+  `kwcapture.svg` byte-identically, and the variant guard still refuses `--mark --green '#00ff00'`
+  on a shipped path. That guard is exactly why a recolour goes through the **constants**: an SVG
+  written by `--green` on a command line is an artwork no generator state reproduces.
+* **The check that had gone blind was found by reading the checker, not the picture.**
+  `render_agreement.py` identified the green half with `fill.startswith("#00a")` — a property of
+  `#00ac4e`, not of green. On the recoloured files it matched nothing, so the tool that exists to
+  catch an engine painting in the wrong place was comparing NOTHING and would have printed "all
+  engines agree" at exit 0: gotcha 30, live, on the first change it would have missed. Repaired by
+  deleting the hard-coded colour — the palette is read out of `gen_logo.py`, and
+  `validate_logo.py` classifies rendered pixels **by hue** against it and refuses to guess when it
+  cannot find it. Same reason, new file: `contrast_report.py`, because two rounds of docs had been
+  quoting ratios no file could re-compute. It prints the 2x2 against white and `#0d1117`, the
+  split, the window and a dichromatic estimate, and it exits 1 under `--min` so a palette
+  regression cannot ship by accident.
+* **Every number that could move, moved — so it was re-measured; the ones that could not, did
+  not.** Render split: mark 53.6/50.3 → **53.3/49.8** % blue (QtSvg/MSVG), lockup 44.3/45.4
+  → **44.0/44.8**, mono → **39.3/39.5**; every byte size in `icon/`; every sha256 in the
+  package block; the `--c-paint` matrix re-run, where the two renderer bugs came through untouched
+  (Qt still paints `clip` **100 % blue**, MSVG still swallows a `mask`). Geometry — ink bounds,
+  clearances, the type check, the box check, the fit, the taper — is identical to Round 13's
+  line for line. That half of the proof is the half a colour diff cannot give you.
+* **`FIT = 0.79` was the trap, and it was measured rather than trusted.** Tiles count antialiasing
+  as ink; antialiasing is a blend of ink with ground; the ground of every tile is white. So a
+  recolour can clip ink while no coordinate moves. `tiles.py --sweep` on both palettes with the
+  same instrument: worst tile 0.794 against FIT 0.790 — **+0.4 %** of the side in hand, clipped
+  px 0 everywhere. It survived. Had it not, the answer was to re-measure the constant, never to
+  crop a tile or ship a second drawing (gotcha 38 is the round that learned that).
+* **What the palette was *for*, measured:** green **4.34** white / **4.36** dark, blue **3.29** /
+  **5.75** — every cell over the 3:1 non-text floor, closing the oldest open finding in this
+  folder (blue **2.20:1** on `#0d1117`, since Round 10). The sentence `README.md` §8 had been
+  carrying — *"no ground wins both colours"* — was arithmetic about one pair of hex values,
+  mistaken for a law: the window **[0.1164, 0.3000]** is not empty, both P2 halves sit in it. What
+  the arithmetic really says is that two colours inside it cannot separate by more than **2.10:1**,
+  so P2 buys legality by spending split strength (**2.87 → 1.32**) and the C now reads on
+  **hue** (240° against 150°) rather than value. In greyscale it collapses, and that
+  dependency is written down now instead of discovered in a year.
+* **The monogram deletion folded in, as scheduled.** `git rm logo/kwcapture-mono.svg`;
+  `--monogram` now **requires `--out`** instead of defaulting at a path that would resurrect a
+  deleted artefact; `preview/build.sh` and `render_agreement.py` render the monogram into a temp
+  directory the way the ladder already did. Doing it surfaced a real ambiguity: the script had
+  been using *two different drawings* — the original monogram and the mark's monogram — from
+  one file name, so they are `mono-orig` and `mono-mark` now, each with its own `--sketch`.
+* **Reported, not routed around.** `tests/test_kwcapture.py`'s `alpha is opaque` fails on this
+  desktop: 4 px at alpha 253/254 in the bottom corners of a window KWin composites there, ~96 % of
+  grabs, and it reproduces on a **pristine `git worktree` of `HEAD`** carrying none of this round's
+  changes. Nothing under `kwcapture/` or `tests/` was touched by P2, so the test stays as it is and
+  the finding goes to the owner (*Still open*). A green suite you had to edit is worth less than a
+  red one you understand.
