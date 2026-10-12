@@ -1342,3 +1342,155 @@ automatically; no download badge) also live in that block's summary and in *Gotc
 > replaced by the distilled bullets that stay here. **What made this safe: the archive was written
 > first, and the script asserted every moved line was present in it before a summary replaced it.**
 > If you add a third FRESH STATUS, distil one out the same way rather than growing the file again.
+
+# ARCHIVED 2026-10-12 — v0.7.0 is out; `AGENTS.md` trimmed 91039 B -> 85930 B (5109 B moved out)
+
+> Trim pass after the v0.7.0 release: the v0.6.0 `FRESH STATUS` day-log, the whole
+> `SESSION STATUS — 2026-10-08 → released as v0.6.0` section, BUG-2's full hunt (fixed two
+> releases ago) and the dependabot second-cycle narrative, all moved **verbatim** below and
+> replaced in `AGENTS.md` by the conclusions that still matter. The v0.7.0 `FRESH STATUS` is
+> now the only day-log in the working file, per its own "distil on the third" rule.
+> Method, same as every pass here: the archive was written first, and the script asserted
+> every moved line was present in it before a summary replaced it.
+
+
+## FRESH STATUS — 2026-10-09 ~08:20 — v0.6.0 RELEASED to GitHub + PyPI
+
+*moved verbatim from `AGENTS.md` lines 187-226 on 2026-10-12; the summary that replaces it is in the working file.*
+
+## FRESH STATUS — 2026-10-09 ~08:20 — **v0.6.0 RELEASED to GitHub + PyPI: the hidden-window enumeration is out**
+
+> **What shipped**: tag `v0.6.0` → `cdb0458` on `main` = the non-normal-window work of the session
+> below (dialogs/docks/desktop via the KWin scripting route) plus the headless-CI work already on
+> `main`. `ci.yml` `build` and `release.yml` both **success** (runs 37868257712 / 37868258136).
+> GitHub release 407395393 carries the CI sdist, the CI `manylinux_2_28` wheel and the locally built
+> `linux_x86_64` wheel — same three assets as v0.3.0–v0.5.0. PyPI 0.6.0 carries **two** files: the
+> sdist and the manylinux wheel, taken **off the GitHub release** first, so PyPI's sha256
+> (`b2683129743983c3…` whl / `610205d2bc3ef1c0…` tar.gz) are byte-identical to the release assets.
+> The `linux_x86_64` wheel is a GitHub asset only — PyPI rejects that tag, as the checklist says.
+
+> **Verified, in the order done**: 165/165 functional + 37/37 ring-reader under `-X dev` on this
+> desk (one output at 100 %, so the fractional-scaling checks sit in their degenerate branches —
+> see FLAKE-1 for why 165 here vs 172 on the two-output desk); the locally built wheel installed in
+> a throwaway venv **from `/tmp`** really captures (2560x1440, 99.7 % non-black) and lists
+> desktop + dock + the Winamp dialog; the sdist carries no `private/`, no `*.jsonl`, no credential
+> — **a loose `ghp_`/`pypi-AgEIcHlwaS` grep hits this very file's checklist text**, so re-grep for a
+> long token-shaped run (`ghp_[A-Za-z0-9]{20,}`) before believing a hit; `pip install --no-cache-dir
+> kwcapture` in a clean venv outside the checkout gives 0.6.0 and `kwcapture doctor` answers *"full
+> window enumeration works via KWin scripting: 3 window(s) outside KWin's own app-window list
+> (desktop, dialog, dock)"*. Release notes were PATCHed into the body (CI leaves only the
+> `**Full Changelog**` stub — a body with just that stub means the run is unfinished).
+
+> **Worth watching, unverified**: the wider default list is a behaviour change for downstream —
+> `iw3-desktop` (nagadomi/nunif, see DOWNSTREAM above) calls `list_windows()` without `all_types=`,
+> so it now sees panels and the desktop as well, and a name that used to resolve uniquely can raise
+> `AmbiguousWindow`. Nothing in this tree shows that breaking anything, but it is the first thing to
+> ask about if a downstream report arrives.
+
+> **Post-release housekeeping, 2026-10-09** (day-log verbatim in
+> [`AGENTS.old.md`](AGENTS.old.md) → *ARCHIVED 2026-10-11*): the README badge row (and **no
+> download badge** — measured reason, see *README badges* below), the community files
+> (`SECURITY.md`, two issue forms + `config.yml`, `PULL_REQUEST_TEMPLATE.md`, `dependabot.yml`),
+> Dependabot's first PR merged (`2ec83eb`) **with the release workflow rehearsed against it**, then
+> `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` → GitHub's community checklist 7/7. Two durable
+> findings: **`MANIFEST.in` lists docs by explicit name**, so a new root `.md` is invisible to the
+> sdist until it is added there (`SECURITY.md`/`CONTRIBUTING.md`/`CODE_OF_CONDUCT.md` all shipped
+> missing from 0.6.0 that way — the published files are immutable, so the fix lands next release);
+> and a re-grep for a *token-shaped* run (`ghp_[A-Za-z0-9]{20,}`) before believing a secret scan,
+> because this file's own checklist text contains the literal prefixes.
+
+
+## SESSION STATUS — 2026-10-08 ~23:50 → released as v0.6.0
+
+*moved verbatim from `AGENTS.md` lines 473-501 on 2026-10-12; the summary that replaces it is in the working file.*
+
+## SESSION STATUS — 2026-10-08 ~23:50 → **released as v0.6.0** (log archived)
+
+> Full session log: the `SESSION STATUS — 2026-10-08 ~23:50` day-log in `AGENTS.old.md` (under
+> *ARCHIVED 2026-10-09*). Feature list in
+> `CHANGELOG.md` 0.6.0, user docs in README → *Per-window capture*, security treatment in
+> `SECURITY.md`. What a future session must not have to re-derive:
+
+* **Why krunner was not enough:** `windowsrunnerinterface.cpp` skips `!window->isNormalWindow()` in
+  every branch of `Match()`, and `CaptureWindow` resolves only `QUuid` handles that come from
+  `Window::internalId()` = `QUuid::createUuid()` — random, so not derivable from an X11 window id.
+  `getWindowInfo` takes a uuid only; `queryWindowInfo` is the interactive picker. **Conclusion: the
+  scripting interface is the only API in Plasma 6 that reaches the full window list.**
+  KWin source reference: `invent.kde.org/plasma/kwin/-/archive/v6.6.6/...` (fetch it before
+  answering any "does KWin expose X?" question).
+* **The mechanism:** `org.kde.kwin.Scripting.loadScript(path, plugin)` is unauthenticated and takes
+  a plain path — nothing has to be installed under `~/.local/share`. JS `workspace.windowList()` is
+  `workspace()->windows()`, unfiltered. Plasma 6 has no `registerDBusAdaptor`, so the reply comes
+  back through `Script::callDBus` **to our own unique bus name**, nonce-guarded. `Script::run()`
+  early-returns while running ⇒ load once per query + `unloadScript`, never `run()` in a loop.
+  Measured load+run+reply ≈ **0.5 ms**.
+* **Implemented in** `kwcapture/native/kwcapture.c` ("full window enumeration"): `collect_windows()`
+  = krunner pass + `collect_windows_script()`; failures are a stderr note plus the old list, never a
+  failed call. Flags `--normal-only`, `--require-full` (exit 3); JSON gains `window_type_name` +
+  `krunner_listed`. Probes: `non_normal_windows.py`, `kwin_script_enumerate.py`,
+  `kwin_script_failure_path.py`.
+* **Behaviour change that will generate reports:** a *name* can now match its own dialog too, so a
+  lookup that used to resolve can raise `AmbiguousWindow`. That is the honest answer; `--normal-only`
+  / `all_types=False` restores the old list.
+
+
+
+## BUG-2 — the full hunt section, replaced by its conclusion
+
+*moved verbatim from `AGENTS.md` lines 647-660 on 2026-10-12; the summary that replaces it is in the working file.*
+
+### BUG-2 (`sched_yield()` in the grab hot path) — fixed in v0.4.0; kept here for the hunt, not because it is open
+
+A lazy ctypes init inside `grab()`'s busy-wait caught only `OSError`, but a missing libc symbol
+raises **`AttributeError`** — so on musl or odd SONAMEs every capture died, not one code path.
+Fixed in v0.4.0: catch both, keep the fallback a real named function, and guard the cache with
+`callable()` rather than `is None`, with a regression test (`regression: BUG-2 sched_yield`).
+
+The author's remembered `TypeError: 'int' object is not callable` was **never reproduced and is not
+in the tree or its history**; `libc.sched_yield()` returns int 0, so a stray paren
+(`= libc.sched_yield()`) caches 0 and produces exactly that message from far away — a hypothesis,
+not a finding, and the same family is covered by BUG-4 (environmental). If it reappears:
+`grep -rn "sched_yield" kwcapture/`, rerun under `python -X dev -X faulthandler` for a full
+traceback, and remember the *frame above* is where an int came from. Full analysis, the AST scan
+that came up empty, and the three verified branches: `AGENTS.old.md` (*BUG-2: sched_yield*).
+
+
+## Community files — the dependabot second-cycle narrative
+
+*moved verbatim from `AGENTS.md` lines 972-988 on 2026-10-12; the summary that replaces it is in the working file.*
+
+* **Second cycle (2026-10-11): PR #3, squash-merged as `d495ddb`** — `upload-artifact` v6→v7 and
+  `download-artifact` v7→v8, 2 lines in `release.yml`, CI green on the PR head and on `main`.
+  Read before reverting it in a hurry: **the majors still differ (upload v7, download v8) and that is
+  inherited, not introduced** — the file was already upload v6 / download v7, and the pairing that
+  matters is the artifact backend both sit on, not the two majors matching. Our usage is also the
+  boring kind that survives these bumps: **one artifact, named `dist`, uploaded with `path: dist/*`
+  and downloaded by that same name** — none of the same-name multi-artifact merging or `pattern`
+  globbing that made the v4→v5 jump break people. What CI did **not** prove: `ci.yml` never runs
+  `release.yml`, so `release.yml` was rehearsed as PR #2 was — `workflow_dispatch` at `main` with
+  `publish: false` (run **38132030536**): manylinux wheels built, smoke test passed,
+  **`Run actions/upload-artifact@v7 → success`**, and the `publish` job **skipped** by its own `if:`
+  (it needs `publish: true`), which is also why nothing went near PyPI. That leaves
+  **`download-artifact@v8` still unexercised** — it exists only inside `publish`, so its first real
+  run is the next `v*` tag (or a dispatch with `publish: true` once the PyPI trusted publisher is
+  configured). If the
+  `pypi` job then cannot find `dist/`, that is this bump — the release assets are already attached by
+  that point, so the fix is to re-run the job (or pin those two lines back), not to panic mid-release.
+
+
+## Community files — the dependabot first-cycle narrative
+
+*moved verbatim from `AGENTS.md` lines 989-1000 on 2026-10-12; the summary that replaces it is in the working file.*
+
+* **First cycle (2026-10-09):** PR #2 grouped checkout v4→v7, setup-python v5→v7,
+  upload-artifact v4→v6, download-artifact v4→v7, cibuildwheel untouched ✓. Squash-merged
+  (`2ec83eb`), CI green — but **a PR runs `ci.yml`, which never touches the artefact actions**, so
+  `release.yml` was rehearsed with `workflow_dispatch` at `publish: false` (run 37881396351): sdist +
+  manylinux wheel built, ring-reader tests ran, `upload-artifact@v6` produced `dist`, smoke test said
+  `wheel ok 0.6.0`, and the release-attach + publish steps were *skipped* as designed. **That
+  dispatch is the way to verify release tooling without a release** — no `gh` needed:
+  `curl -X POST -H "Authorization: Bearer $TOK" -d '{"ref":"main","inputs":{"publish":false}}'
+  …/actions/workflows/release.yml/dispatches`. **Still untested by anything: `download-artifact@v7`**
+  — it lives only in the `publish` job, which this process does not use (PyPI upload is local `twine`
+  against the release assets). Dormant, not proven: if trusted publishing is ever turned on, verify
+  it against TestPyPI first, never mid-release.
