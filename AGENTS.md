@@ -149,6 +149,41 @@ files`. Counting `[PASS]` over that whole job log instead of the step's slice an
 urllib's own redirect handling returns 401, and the per-suite count is `grep -c '\[PASS\]'` inside
 the step's own slice of the log, not a guess from the total.*
 
+## FRESH STATUS — 2026-10-12 ~09:20 — **v0.7.0 RELEASED to GitHub + PyPI: the brand icons ship inside the package**
+
+> **What shipped**: tag `v0.7.0` → `38a3e62` on `main` = the whole brand-icon round (icons in the
+> wheel and sdist, `install-desktop` writing an `Icon=` name that actually resolves,
+> `refresh_entries()`, `doctor` reporting them, palette P2, `tests/test_icons.py` as a CI step)
+> plus the logo work (`anatomy.png` at five rows, `contrast_report.py`) and the closing of
+> FLAKE-2/FLAKE-3 as this desktop's environment. Bumped **minor on purpose**: additive — a new
+> `kwcapture/_icons.py`, 10 new package-data files, a new `--no-icons` — with nothing removed, and
+> ten new files under `site-packages` is not something to hand a packager under a patch number.
+> `kwcapture/native/*.c` is unchanged since v0.6.0, so the rebuilt wheel carries the same binary;
+> it still had to be rebuilt, because it now carries the icons.
+> **CI green**: `ci.yml` run 38194884254 and `release.yml` run 38194884227, whose `build` job is
+> success and whose `publish` job is **skipped** — PyPI publishing is opt-in, so the upload was the
+> manual `twine` path in the checklist above.
+> **GitHub release 410074208** carries three assets, the same shape as every release since v0.3.0:
+> the CI sdist (288 745 B), the CI `manylinux_2_28` wheel (185 528 B) and the locally built
+> `linux_x86_64` wheel (182 517 B), attached by hand because PyPI rejects that one. The body was
+> written, not left as CI's `**Full Changelog**` stub.
+> **PyPI 0.7.0** carries exactly two files and they are **the same bytes** as the GitHub release's
+> — downloaded from it, which is the point of the step — wheel sha256 `7badc3ef7d2d1561…`, sdist
+> `752a5377d94a557d…`. Checked with the version-specific endpoint (`/pypi/kwcapture/0.7.0/json`,
+> never the Fastly-cached aggregate) and then with a real `pip install --no-cache-dir kwcapture` in
+> a throwaway venv **outside the checkout**: 0.7.0, **10 icon files** in `site-packages`, helper
+> found, a real 2560×1440 grab, and `install-desktop` into a scratch `XDG_DATA_HOME` reporting
+> **9 files** and `Icon=kwcapture`. The project's own `.venv` now runs that PyPI 0.7.0 (0.6.0
+> uninstalled); from the repo root `import kwcapture` still lands on the source tree first — the
+> shadowing trap the wheel step in `ci.yml` already documents, so verify installed-package claims
+> from `/tmp`.
+> **Verified on the real desktop before tagging, under `-X dev`: 165/165 functional, 37/37
+> ring-reader (full and quick), 98 brand-icon checks / 0 failed / 0 skipped.** The ring number is
+> quoted with its run, because the FIRST ring-reader run of that session died with the FLAKE-3
+> family error closed the same day (`TypeError: 'Capture' object is not subscriptable`) and the
+> re-run was clean — which is precisely the ruling's point. `make` reported the helper up to date,
+> so nothing was recompiled between the failing run and the passing one.
+
 ## FRESH STATUS — 2026-10-09 ~08:20 — **v0.6.0 RELEASED to GitHub + PyPI: the hidden-window enumeration is out**
 
 > **What shipped**: tag `v0.6.0` → `cdb0458` on `main` = the non-normal-window work of the session
