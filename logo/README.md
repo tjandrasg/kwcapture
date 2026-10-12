@@ -49,10 +49,25 @@ The mark spells **CAPTURE**, and only one third of it is type:
 ![how the mark is assembled](preview/anatomy.png)
 
 ```
-  C     <-  the junction of the hand-drawn K and W   (#kw / #kw-c, the monogram)
-  A     <-  the hand-drawn mouse pointer             (#a, laid out as a letter)
-  PTURE <-  the only typeset letters                 (#wordmark)
+  K     <-  the monogram's first letter: stem, arm, leg       (a subset of #kw, no element)
+  W     <-  the monogram's second letter: four strokes        (the same outline again)
+  C     <-  the junction of the hand-drawn K and W            (#kw / #kw-c, the monogram)
+  A     <-  the hand-drawn mouse pointer                      (#a, laid out as a letter)
+  PTURE <-  the only typeset letters                          (#wordmark)
 ```
+
+**K and W are not elements, and neither is the C.** `#kw` is *one* closed 19-vertex outline and
+the three letters are index **subsets** of it — `K_RING`, `W_RING` and `C_RING` in
+`gen_logo.py`, the owner's numbering of the drawing. The figure's K and W boxes are min/max of
+`x,y` over those vertices mapped by `#logo`'s own transform, which is exact geometry: it
+reproduces `validate_logo.py`'s `#kw` ink box to **0.004 px** and the painted C — a box whose
+authority *is* path data — to **0.05 px**. Vertices **3, 4, 13 and 14 belong to K and W at
+once**, so the K's leg *is* the W's first stroke and the two boxes cover the same 135 × 169 px
+of the artboard: one outline, three readings, not three letters whose boxes happen to collide.
+Each of the two rows therefore draws the other letter's box **dashed**, and the dotted points
+are the shared vertices. Nor can the boxes be read off the picture: connected-component
+labelling of the 512 px render finds the whole monogram as **one** component — the letters
+touch. See `AGENTS.md` §*Still open*, ANATOMY ROUND.)
 
 So `WORD = "PTURE"`. **Setting `WORD="CAPTURE"` renders `CACAPTURE`.** The blue bracket in
 the K↔W junction is not decoration — it is the first letter, and it is the reason the mark is
@@ -795,6 +810,17 @@ greyscale print, or any pipeline that loses saturation, the two halves become ne
 the first letter of the word goes with the distinction. `contrast_report.py` prints the
 dichromatic estimate too (ΔE76 117 / 116 / 33 for protan / deuteran / tritan, ratios 1.15 / 1.27 /
 1.08) — an LMS-space estimate of a rough topic, a smoke test and not a person.
+
+The same arithmetic governs the **annotations**, not just the artwork. `preview/anatomy.png`
+boxes parts of the mark, and a mid-tone line on a half that is only 1.32:1 from the other
+vanishes into the ink: the three annotation colours that figure shipped until 2026-10-12
+measure **1.11–1.72:1** against the two halves (`#d0021b`, `#7e57c2`, `#0277bd` — chosen to
+read against white, where they are 4.8–5.7:1). All five rows now use colours that clear **3:1
+against green, against blue and against the white ground** — vs green 3.10–3.13, vs blue
+4.09–4.13, vs white 13.46–13.60 — measured by `contrast_report.py` from inside
+`preview/anatomy.py`, which stops the build if any row falls under the floor. Clearing both
+halves means sitting under **L 0.031**, which is why the annotation hues are dark: the same
+window arithmetic, this time applied against the ink instead of against the grounds.
 
 The mark *is* visible on dark — the strokes are thick and `contact.png` shows it — which is why
 the stronger claim this section first carried ("a transparent icon loses the blue entirely") was

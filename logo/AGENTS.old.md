@@ -1759,3 +1759,129 @@ sweep through nine documents, and it produced the most transferable gotcha in th
   white — the ground every tile in `icon/` is built on. It is written up under *Still open* with the
   numbers, unapplied. That is the difference between gotcha 38 obeyed and gotcha 38 memorised: the
   measurement goes **back** to the owner, with the awkward half included, before anything ships.
+
+
+---
+
+# Part K — the ANATOMY ROUND plan, moved verbatim (2026-10-12)
+
+**Nothing here is a current instruction — and, unlike every other part of this file, none of
+it was ever committed.** Moved out of `logo/AGENTS.md` §*Still open* once the round it plans
+had been executed, under this folder's size rule (*a round that adds narrative also moves one
+out*). Source: `logo/AGENTS.md` in the working tree on top of `af20054`, where the bullet was
+drafted and deliberately left uncommitted because it held the plan — so this archive is its
+only survivor. Lines 1045-1153, 8957 bytes, sha256 starting
+`b132d2d2c2ee7c96`, extracted by line range and not edited.
+The executed result is `AGENTS.md` §*Still open*, bullet *ANATOMY ROUND — executed 2026-10-12*,
+and it corrects one index in the plan's prose; the plan stays wrong here, because that is this
+file's rule: *text is moved, never corrected in place*.
+
+* **ANATOMY ROUND (drafted 2026-10-12, NOT started — this bullet is the whole plan, written
+  because the session that drafted it had no tokens left to execute it).**
+  `preview/anatomy.png` labels three parts of the mark — **C**, **A**, **PTURE** — and says nothing
+  about **K** and **W**, which are the other two letters and the only ones that carry the
+  monogram's green. The figure therefore explains the parts that are *not* type and the part that
+  *is*, while leaving the actual monogram unlabelled. Add both letters, located the same way the
+  existing three are located.
+  **Where everything lives** (verified 2026-10-12, line numbers as of `af20054`):
+  - `logo/preview/anatomy.py`, 63 lines. A `BOXES`-style list of
+    `(label, ink_box, rgb_colour, caption)` tuples — currently three entries, C / A / PTURE — plus
+    a Pillow-drawn footer line and a caption strip. `preview/build.sh:246` runs it, then re-encodes
+    every PNG in place with `magick -strip -compression-level=9`.
+  - Existing boxes at 512 px: `C (64.4,126.8,263.3,449.9)`, `A (256.9,234.4,327.6,321.5)`,
+    `PTURE (276.9,60.1,504.6,281.4)`. Their authority is stated in the file header: **they are the
+    ink boxes `validate_logo.py` reports** for `#a` and `#wordmark`, and the box computed from
+    `#kw-c`'s path data — *not eyeballed*, and that property is the thing to preserve.
+  - Docs that describe the figure: `logo/README.md` §8 area (it lists the README images) and the
+    root `README.md` if it embeds `anatomy.png` — check both with
+    `grep -rn "anatomy" README.md logo/README.md logo/AGENTS.md` before writing.
+  **The hard part, and the reason this is a round rather than an afternoon:** there is **no `#k` or
+  `#w` element to measure.** `#kw` is a *single* path holding the whole monogram — the validator
+  prints one box for it, `#kw 7.45..451.08 x 100.97..451.93` at 512 px — so K and W have no
+  individually-addressable geometry in the emitted SVG.
+
+> **CORRECTION, same day — the owner supplied the answer, and it supersedes the fallback below.
+> The per-letter geometry IS known: it is the vertex partition in `gen_logo.py`, commented at
+> ~lines 1015-1016.** The monogram is **one closed 19-vertex outline**, and the letters are
+> **index subsets of it**:
+>
+>     K = 0  1  2  3  4        13 14 15 16 17 18
+>     W =    3  4  5  6  7  8  9 10 11 12 13 14
+>     C =    3  4  5  6        12 13 14 15 16 17     <- the blue one
+>
+> **Route 1 is therefore: take the vertex list `gen_logo.py` already builds, subset it by letter,
+> and take min/max of those vertices' x,y.** Exact, no rasterising, no guessing — and it lands in
+> the same mm units the existing C/A/PTURE boxes use, so scale by the script's existing 512 px
+> factor to stay comparable with the validator.
+> **Three consequences that must be respected:**
+> - **The subsets overlap — vertices 3-4, and 12-14 — and that is the ligature, not a bug.** K's leg
+>   *is* the W's first stroke, and C borrows from both. So the K and W boxes **will overlap on the
+>   image**: draw them as overlapping/transparent outlines or offset leader lines, never as two
+>   disjoint regions, and say in the caption that they share strokes. "K and W are separate letters
+>   whose boxes happen to overlap" is the false version; **one outline, three readings** is the true
+>   one. This also refines the owner-facing question before any push: not "two letters or one
+>   monogram", but *how much of the sharing to show*.
+> - **Gotcha 22 lives right here**: an invented partition was tried on 2026-10-10 and was wrong. Use
+>   the owner's numbering **as written in `gen_logo.py`**; if the vertex-count guard
+>   (`len(verts) != 19`) trips, the letter rings are re-checked by the owner, never guessed here.
+> - **Read the indices from the generator; do not retype them into `anatomy.py` as literals.** Same
+>   law as the palette (gotcha 40): a duplicated constant goes blind at the next edit. Import or
+>   parse them, and print what was read.
+> **The old routes below are demoted to instrumentation, which is still worth doing:** keep a
+> connected-component or ink-profile check as an **independent instrument**, not as the source of the
+> boxes — assert that the union of the vertex-derived K and W boxes matches the validator's `#kw` ink
+> box (`7.45..451.08 x 100.97..451.93` at 512 px) within antialiasing tolerance. Vertex maths and
+> rendered ink disagreeing would be a real finding about the outline, and gets reported.
+
+The three routes as first drafted (route 1 is now the vertex subset above):
+  1. **Segment the render.** Rasterise `logo/kwcapture-mark.svg` at 512 (or 1024 for precision),
+     threshold on alpha, run **connected-component labelling** (Pillow has no CC label; use
+     `scipy.ndimage.label` if it's importable in `.venv`, else a small BFS/union-find — stdlib only,
+     and keep it in `anatomy.py` so the figure stays self-contained). Each letter's ink box falls
+     out of the components. This is a *measurement*, which is what the file's header promises.
+     **Expect the letters to touch or overlap** — it is a monogram, they are designed to interlock —
+     and then components merge and there is no per-letter box to report. When that happens, do NOT
+     invent one.
+  2. **Split on the ink profile.** Column-wise ink histogram between the two letter masses; the
+     local minimum is the seam. Report the box as "K, left of the seam at x≈N" and **say in the
+     caption that the box is a measured split of one path, not a separate element** — an annotation
+     that implies structure the SVG does not have is a false claim wearing a leader line, which is
+     this folder's oldest sin.
+  3. **Ask the generator.** `gen_logo.py` places the glyphs, so it may know each letter's origin and
+     advance. Reading geometry out of the generator is legitimate — it is how `contrast_report.py`
+     reads the palette — but only if it is *read*, not re-derived by hand, and the two sources must
+     be cross-checked (1 or 2 as the independent instrument), because a box lifted from the
+     generator and never checked against the render is exactly the stale-number failure gotcha 40
+     and 41 are about.
+  **Rules this round must not break**
+  - **Gotcha 38 / THE RULE: no new artwork.** Annotation is presentation. K and W get leader lines
+    and boxes *drawn into the figure*, never a re-cut path, and `kwcapture-mark.svg` must stay
+    byte-identical — prove it with `git diff` on the SVG, and with `gen_logo.py --mark` still
+    reproducing it, before and after.
+  - **Gotcha 39: titles and labels are drawn by Pillow in this script.** Three rows become five, so
+    the canvas grows; measure the resulting ink extents and print them at build time like the other
+    figures do, and show the labels are not cropped at either edge.
+  - **Gotcha 41: the diagnostic must not be the writer.** `anatomy.py` reads the render and writes
+    the figure; it must not rewrite anything in `icon/`, and after the round
+    `bash preview/build.sh && git status` should show only the figures it is allowed to change.
+  - **The colour split is load-bearing.** Green marks the monogram, blue the rest, and P2's split is
+    only **1.32:1** in lightness (hue carries it). If K and W are boxed in green on a green half,
+    the box will be invisible in greyscale — pick annotation colours that clear a visible contrast
+    against *both* halves, and state the ratios you measured.
+  **Definition of done**
+  - `anatomy.py` has five labelled rows; every box is derived by a named, reproducible measurement
+    with the method stated in the file header and, for anything that is a split rather than an
+    element, in the **caption on the image itself**.
+  - `bash preview/build.sh` exits 0, prints the measured extents, and the figure is legible at the
+    width `README.md` renders it (check the PNG at README width, not just at full size).
+  - `kwcapture-mark.svg`, `kwcapture.svg` and everything in `icon/` are unchanged: `git status`
+    clean for those paths; `tests/test_icons.py` still 98 / 0.
+  - Docs updated: `logo/README.md` §8 caption for the figure, the root `README.md` if it embeds it,
+    and `logo/AGENTS.md` *Expected numbers* gains the new `anatomy.png` byte size and canvas
+    dimensions. **Re-measure both `wc -c` size notes in this file at commit time — they are stale
+    right now by design** (this bullet was added without a commit, so the file is deliberately
+    dirty; the digits must be rewritten last, so they describe the file they end up in).
+  - Commit locally, do **not** push, until the owner has looked at the rendered figure: it is a
+    public-facing explanation of the mark, and whether K and W are described as "two letters" or as
+    "one interlocked monogram" is a branding statement, not a rendering detail — owner's call, and
+    the caption wording is theirs to approve before it goes out.

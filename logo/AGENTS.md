@@ -20,10 +20,22 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **119 211** bytes
-> — measured with `wc -c logo/AGENTS.md`, not remembered. **Round 14** (the palette round) opened at
-> **96 404** and closes at the number above. It paid for itself once, by moving Round 13's
-> session-log narrative out **verbatim** — 7 327 bytes, presence in
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **129 222** bytes
+> — `wc -c logo/AGENTS.md`, not remembered. It was the **working copy's** number for a day, which
+> was a first for this note: the *ANATOMY ROUND* at the top of *Still open* was finished and held
+> uncommitted until the owner had seen the figure, so `af20054` still carried Round 14's **119 211**
+> while this text existed only on disk. The owner has seen it and told me to push it, so this file is
+> committed and the number is both again — and it still has to be rewritten **last** in any round
+> that edits this file, because a count written inside the thing it counts is wrong by its own length
+> until it is. These digits were measured, patched and re-measured until the two agreed. What the
+> round cost here is small because it paid as it went: the ANATOMY ROUND **plan** moved
+> **verbatim** to [`AGENTS.old.md` Part K](AGENTS.old.md) — 8 957 bytes, string-searched into the
+> archive *before* the pointer replaced it — and that archive is now the plan's only copy, because
+> the bullet that held it was never committed. `AGENTS.old.md` grew 128 492 → 138 364, the first
+> time this rule has cost the archive anything rather than the file. **Round 14** (the palette
+> round) opened at **96 404** and closes at **119 211**, the last committed state. It paid for
+> itself once, by
+> moving Round 13's session-log narrative out **verbatim** — 7 327 bytes, presence in
 > [`AGENTS.old.md` Part J](AGENTS.old.md) asserted by string search *before* the pointer replaced it,
 > the way Parts G/H/I were done — and still grew, because a recolour round spends its budget on
 > *proof*: a verified block, the corrected two-grounds arithmetic, the trade the palette made, two
@@ -226,6 +238,10 @@ invisible to anyone who has not been told to look for it. It is not invisible: i
 whole idea. **Do not "complete" the word.**
 
 ![what the mark is made of](preview/anatomy.png)
+
+(The figure boxes five things, not three: the list above is what `CAPTURE` is made *of*, and
+the two extra rows are **K** and **W**, the letters the green monogram is drawn from. They are
+not elements and not part of the word — `README.md` §2, and ANATOMY ROUND under *Still open*.)
 
 If a future change makes the C or the A stop reading (different monogram, smaller pointer,
 tighter spacing), the fix is to repair that part — **not to add letters**.
@@ -921,6 +937,30 @@ the other figures, same guard, same session: ladder-kwcapture 950x302 (title 671
                            and build.sh REFUSES to draw it if any cell is under 3:1 -- a caption
                            that can go stale is a caption that will, so the number in the picture
                            is computed by the tool that draws the picture.
+preview/anatomy.png -- the five-row figure (ANATOMY ROUND 2026-10-12. It was three rows,
+980x824, 88 921 B; every number below is printed by the script that draws the picture)
+  canvas            980x1284, 190 862 B after build.sh's `-strip -compression-level=9` pass;
+                    own ink box x 16..964 y 28..1267, air L 16 R 15 T 28 B 16 px, and the
+                    script exits 1 if any edge has under 8 px of it (gotcha 39: five rows of
+                    Pillow text, each line width-checked against the real column first)
+  boxes at 512 px   K 7.45..200.67 x 100.97..451.93 | W 65.27..451.08 x 281.92..451.10
+                    overlapping 135.4 x 169.2 px, sharing vertices 3 4 13 14
+                    K and W are min/max over K_RING / W_RING READ out of gen_logo.py and
+                    mapped by #logo's own transform; C, A and PTURE keep their old authority
+                    (#kw-c's path data, and the validator's #a / #wordmark ink boxes)
+  asserted, per build   C_RING vs #kw-c's path data    0.047 px   (ring tolerance 0.06)
+                        union(K,W) vs validator #kw    0.004 px
+                        union(K,W) vs rendered ink     0.45 px    (AA tolerance 2.0: 7 ink
+                        components, the monogram 57 953 px = 21x the next blob, so the
+                        letters touch and cannot be boxed by segmentation; green ink spans
+                        all four sides of the union box to the same 0.45 px)
+  annotation colour K #5a0053  W #402a00  C #640018  A #38215f  PTURE #003052:
+                    every row clears 3:1 against green AND blue AND white -- vs green
+                    3.10-3.13, vs blue 4.09-4.13, vs white 13.46-13.60, measured by
+                    contrast_report.py, and the build fails under 3:1. The three hexes this
+                    figure shipped before (#d0021b, #7e57c2, #0277bd) measured 1.11-1.72
+                    against the two halves: they read on white and vanish on ink, which is
+                    the failure the floor exists for (*Still open*, ANATOMY ROUND).
 
 the copy that ships inside the Python package (Round 13: python3 logo/sync_package_icons.py;
 sha256 first 16 of the SOURCE, also written into kwcapture/icons/COPYING.md)
@@ -1039,6 +1079,71 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
 
 ## Still open
 
+* **ANATOMY ROUND — executed, approved and shipped 2026-10-12.** The owner looked at the rendered
+  figure, said log it in `CHANGELOG.md` and push it, which settles the two framing questions the
+  round left open: the wording the project ships is **one outline, three readings**, and the
+  darkened annotation colours go with it (see the colour bullet below). The plan this ran to —
+  drafted by the session that had no tokens left to run it — is archived verbatim at
+  [AGENTS.old.md Part K](AGENTS.old.md); what is kept here is the outcome, the numbers, and the
+  one thing the plan got wrong. `preview/anatomy.png` is **five rows: K, W, C, A, PTURE**.
+  * **The boxes are geometry, not eyeballs, and the two new ones are *not* elements.** There is
+    no `#k` and no `#w` to measure: `#kw` is one closed 19-vertex outline, so each letter's box
+    is min/max of x,y over **its** vertices, mapped by the shipped file's own `#logo` transform
+    (`translate(-576.8719 -1095.0049) scale(11.918)`, artboard 512 → 1 px per unit). The rings
+    are **read out of `gen_logo.py`** (`K_RING`, `W_RING`, `C_RING`) and the vertex count is
+    guarded by the generator's own `c_clip_polygon()` — nothing is retyped here (gotcha 40), and
+    nothing is inferred from the shape (gotcha 22). Measured at 512 px:
+    `K 7.45..200.67 x 100.97..451.93`, `W 65.27..451.08 x 281.92..451.10`, overlapping
+    **135 x 169 px**, sharing vertices **3 4 13 14**.
+  * **Three cross-checks, asserted in `preview/anatomy.py` and printed at build time:**
+    `C_RING` over the vertices reproduces the box computed from `#kw-c`'s path data to
+    **0.047 px**; `union(K, W)` reproduces `validate_logo.py`'s `#kw` ink box to **0.004 px**;
+    and an independent instrument — connected-component labelling of the *render*, a stdlib BFS
+    over the ink mask, because Pillow has no CC labelling and a figure must not acquire a scipy
+    dependency — puts the monogram's ink at `7..450 x 101..451`, **0.45 px** from `union(K, W)`,
+    with the green channel (the monogram minus the blue C) spanning all four sides to the same
+    0.45 px. Any of the three failing stops the build, with a message that says which.
+  * **What the instrument settled:** the render labels the monogram as **ONE component** —
+    57 953 px, 21x the next blob, 7 components in all (`1 + #a + PTURE`). The letters touch.
+    No segmentation of the ink can ever yield a per-letter box, which retires the archived
+    plan's routes 1 and 2 as sources and keeps them as instruments, exactly as its correction
+    said. The letters can be boxed **only** by vertex, i.e. only by the owner's numbering.
+  * **The plan's prose was wrong by one index, and reading it instead of copying it is what
+    caught it.** The plan said the subsets share "3-4, and 12-14". The intersection of the two
+    rings *as written in* `gen_logo.py` is **3, 4, 13, 14** — vertex 12 is the W's peak tip and
+    the C's, never the K's. The figure prints the computed intersection and the caption is
+    generated from it. Gotcha 22 and gotcha 40 caught in one go, and the catch is the argument
+    for both: a number re-typed into a caption cannot disagree with the prose about it.
+  * **Annotation colour is now measured, not picked — and three existing colours moved
+    because of it.** P2's halves are 1.32:1 apart in lightness, so a colour clears 3:1 against
+    BOTH only under L 0.031: all five rows were darkened to hues that do (vs green
+    **3.10-3.13**, vs blue **4.09-4.13**, vs white **13.46-13.60**; per-row numbers printed by
+    the script, computed by `contrast_report.py`, build exits 1 under 3:1). The three colours
+    the figure shipped before were chosen to read against *white* and measure **1.11-1.72:1**
+    against the artwork (`#d0021b` 1.31 green / 1.72 blue, `#7e57c2` 1.20 / 1.58, `#0277bd`
+    1.11 / 1.46) — a greyscale-invisible box on ink, which is the failure this rule exists to
+    prevent. Hues were kept and darkened, not swapped, and the two sets of numbers were put in front
+    of the owner with the figure: **the approval of 2026-10-12 covers the recolour as well**, rather
+    than sending the three old hexes back.
+  * **Nothing else moved.** No SVG, no sketch, no icon, no knob: `gen_logo.py --mark` still
+    reproduces `kwcapture-mark.svg` byte-identically (`cmp`), `validate_logo.py
+    kwcapture-mark.svg` still prints **OK**, `tests/test_icons.py` is **98 checks / 0 failed**,
+    and after `bash preview/build.sh` the tree shows `preview/anatomy.py`, `preview/anatomy.png`
+    and nothing else in `logo/` except the docs (plus one comment added to `preview/build.sh`,
+    which is where the figure's guard is now described). Gotcha 41 respected: the diagnostic
+    reads the render and the SVG, writes one PNG, and says so in its own last line. Canvas grew from
+    980x824 to **980x1284** (three rows to five) and the script prints the figure's own ink box and
+    the air to every edge, asserting
+    8 px of it — gotcha 39, since every title and label in this figure is Pillow's.
+  * **The wording, and who decided it.** "Two letters" or "one interlocked monogram" is a branding
+    statement, not a rendering detail, so the round stopped for the owner rather than deciding it
+    here. The figure as shipped says **one outline, three readings**: the K and W rows draw each
+    other's box *dashed*, so the overlap is visible instead of implied, and dot the four shared
+    vertices. **Owner's approval 2026-10-12**, given on the rendered figure with the instruction to
+    put it in `CHANGELOG.md` §*Unreleased* and push; the three annotation colours that moved were
+    part of what was approved. This round is also the reason root `AGENTS.md` gained a *LOGO*
+    paragraph: the per-letter boxes are now a claim the repo makes, and it is asserted per build.
+
 * **MSVG paints the type 26–67 px out of place (gotcha 27) — fix it or accept it? Owner's
   call.** (a) Accept: KDE, Inkscape, browsers and delegated ImageMagick are correct; only IM's
   internal MSVG coder is wrong, and `librsvg2-bin` fixes IM. (b) Emit a second,
@@ -1057,7 +1162,14 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
 * **The flake (gotcha 29): cause still not established — but it is no longer "unreproducible".**
   Both historic messages came back on 2026-10-11 in a code path that never touches fonts, and
   in a pure-Python extract with no third-party imports, plus one CPython-level
-  `Executing a cache` abort. Next steps, in order and cheap: (1) run the validator ~200× under
+  `Executing a cache` abort. **A fourth shape, 2026-10-12, and in a new program:** one run of
+  `gen_logo.py --mark` died inside fontTools — `TypeError: 'str' object is not callable` in
+  `pens/svgPathPen.py:pointToString`, mid-wordmark — where `ntos` is a bound method or `None`,
+  never a `str`, so the interpreter had lost a reference it should not have. The same command
+  on the same tree came back **byte-identically clean 5/5** straight afterwards (`cmp` against
+  the shipped `kwcapture-mark.svg`), which is the whole point of gotcha 29: the crash is not
+  evidence about the code, the re-run is, and the guard that says *which one died* is what
+  makes the difference between the two. Next steps, in order and cheap: (1) run the validator ~200× under
   `env -u LD_PRELOAD python3 …` and on a second machine; (2) once under
   `PYTHONMALLOC=malloc_debug`; (3) look at the machine, not the code (this desktop: a global
   `LD_PRELOAD` shim, non-ECC RAM). Keep the `CRASH in <name>` guard: it is the reason this is

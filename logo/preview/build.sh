@@ -243,6 +243,12 @@ magick montage -label 'QtSvg\nGwenview, Dolphin, QIcon' "$T/full-qt.png" \
   -tile 2x2 -geometry 280x280+14+14 -background white -fill '#333' -pointsize 22 \
   -font "$FONT" msvg-rotate-bug.png
 
+# The anatomy figure is not just a picture: it re-derives the K and W boxes from gen_logo.py's
+# vertex rings, cross-checks them against #kw-c's path data, against validate_logo.py's #kw ink
+# box and against the RENDER (connected-component labelling of the ink mask), and asserts the
+# figure's own ink is 8 px clear of every edge and every annotation colour clears 3:1 against
+# both halves. So a wrong caption, a moved outline or a clipped row fails this build rather than
+# shipping a confident lie. It reads the SVG and the render, and writes anatomy.png only.
 python3 anatomy.py
 for f in *.png; do magick "$f" -depth 8 -strip -define png:compression-level=9 "$f"; done
 ls -la
