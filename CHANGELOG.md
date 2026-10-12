@@ -112,21 +112,34 @@ here runs at import time, and nothing here can make a screenshot slower.
   clean rebuild while nothing shipped was wrong. `--sweep` now measures and writes nothing. No
   artwork, no size and no `FIT` value changed; the guard that refuses a clipped tile was shown to
   still fire, on three sabotaged values of the constant.
-- **A second in-suite failure, also reported rather than patched:** the
-  *regression: BUG-4 zero-copy read path* block reports `[FAIL] BUG-4 regression ran` on some runs,
-  so the suite measures **162 passed + 1 failed** rather than 165. It fails with three different
-  errors in seven runs — two `AttributeError`s naming the wrong object as `self`, and a
-  `CaptureError: unhandled pixel format 6` that cannot be true as printed, because 6 is in the
-  allow-list it cites. It reproduces from a **pristine `HEAD` worktree** and **0 of 5** times when
-  the same sequence is run standalone, so it is cross-test interference, not the read path — and the
-  reason it cannot be pinned down is that the harness prints `type(e): e` and discards the
-  traceback. See `AGENTS.md` → **FLAKE-3**.
-- **A live-desktop flake, reported rather than patched:** `tests/test_kwcapture.py`'s
-  `alpha is opaque` fails on ~96 % of grabs on this machine — **4 pixels at alpha 253/254**, in the
-  bottom corners of a rounded-corner window KWin is compositing — and it reproduces from a pristine
-  `HEAD` worktree with none of the above changes, so it is not the recolour. The assertion is left
-  alone; see `AGENTS.md` → *OPEN BUGS* **FLAKE-2** for why loosening it would retire a real question
-  about the alpha channel of a compositor grab.
+- **`logo/preview/anatomy.png` gained its two missing letters, and the boxes come out of the
+  outline's vertices.** The figure explained **C**, **A** and **PTURE** and left the green monogram
+  itself unlabelled, because there is **no `#k` and no `#w` element** to measure: `#kw` is *one*
+  closed **19-vertex outline** and the letters are index **subsets** of it — `K_RING`, `W_RING`,
+  `C_RING` in `logo/gen_logo.py`, the owner's numbering of the drawing. So a letter's box is now
+  min/max of x,y over **its own** vertices, mapped by the shipped file's `#logo` transform:
+  **K 7.45..200.67 x 100.97..451.93**, **W 65.27..451.08 x 281.92..451.10**, overlapping
+  **135 × 169 px** because vertices **3, 4, 13 and 14 belong to both letters** — the K's leg *is*
+  the W's first stroke. One outline, three readings: each of the two rows draws the other's box
+  **dashed** and dots the shared vertices. Three assertions now run on every build: `C_RING` over
+  the vertices reproduces the box computed from `#kw-c`'s own path data to **0.047 px**,
+  `union(K, W)` reproduces `validate_logo.py`'s `#kw` ink box to **0.004 px**, and an independent
+  instrument — connected-component labelling of the 512 px render, a stdlib BFS over the ink mask —
+  finds the monogram as **one** component **0.45 px** off that union (57 953 px, 21× the next blob),
+  which is the proof that the letters touch and cannot be boxed by segmenting the ink. Reading the
+  rings rather than copying the prose about them also caught a wrong index **in the round's own
+  plan**: the shared set is 3, 4, 13, 14 — vertex 12 is the W's peak and the C's, never the K's.
+  **No artwork moved**: both SVGs and all 21 files in `logo/icon/` are byte-identical
+  (`sha256sum -c`, 23/23), `gen_logo.py --mark` reproduces the mark `cmp`-identically, the validator
+  prints **OK**, `tests/test_icons.py` is **98 / 0**, and `render_agreement.py` still exits 1 on
+  purpose (the open MSVG `rotate()` finding, untouched). The figure is **980×1284 / 190 862 B**
+  (was 980×824 / 88 921 B); its own ink box is asserted ≥ 8 px clear of every edge, and every
+  annotation colour is measured by `logo/contrast_report.py` to clear **3:1 against the green half,
+  the blue half and the white ground** — vs green 3.10–3.13, vs blue 4.09–4.13, vs white
+  13.46–13.60 — which is why the three colours the figure used before moved: they measured
+  **1.11–1.72:1** against the artwork, so they read on white and vanished on ink in greyscale.
+  Docs: `logo/README.md` §2 and §8, `logo/AGENTS.md` §*Still open* and §*Expected numbers*; the
+  plan the round ran to is archived verbatim in `logo/AGENTS.old.md` **Part K**.
 - **`tests/test_icons.py`: 98 checks, no compositor needed**, now a CI step next to the
   ring-reader suite — and `probe/sabotage_icons.sh`, which breaks each guard in turn, restores it
   and compares the outcome with what it expected: **10/10 detected** here, clean tree green. It

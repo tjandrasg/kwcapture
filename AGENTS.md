@@ -127,9 +127,13 @@ about capture changed; **37 + 98 green here, 0 skips**, plus `probe/sabotage_ico
 never green in this state: it measures **162 passed + 1 failed** (not 165), and there are now **two**
 unrelated environmental failures in it — FLAKE-2 (`alpha is opaque`, ~2 runs in 3) and **FLAKE-3**
 (the BUG-4 block, three different errors in seven runs, proven from a pristine `HEAD` worktree and
-reproduced **0 of 5** standalone). Both are reported rather than patched; see the two entries below.
-A suite count quoted as a single number is a claim about a machine, so from now on it is written as
-a measurement with its failure attached. **CI, measured off the run log of the
+reproduced **0 of 5** standalone). **Both were CLOSED on 2026-10-12 by the owner's ruling: the
+desktop's environment (BUG-4's family — non-ECC RAM and a global `LD_PRELOAD` shim here), not
+kwcapture bugs, not to be chased and not release-note material**, which is why they are out of
+`CHANGELOG.md` §*Unreleased*; both entries stay below as the record and as the standing reason this
+machine's functional suite prints 162 + 1 and not 165. A suite count quoted as a single number is a
+claim about a machine, so from now on it is written as a measurement with its failure attached — and
+the control for it is a CI runner, not this desktop. **CI, measured off the run log of the
 push that changed the suite** (`34432a8`, run 38122958295, 2026-10-11): both jobs green —
 `build` and `headless KWin capture (Plasma 6, no GPU)` — and in `build`'s log the icon suite prints
 **97 passed + 1 skipped**, `RESULT: all icon tests passed (1 skipped)`, the skip being
@@ -215,6 +219,20 @@ the step's own slice of the log, not a guess from the total.*
 > grounds, which closes the finding that the old blue was **2.20:1** on dark. What it traded:
 > the two halves are **1.32:1** apart instead of 2.87, so the C separates by **hue** and would
 > collapse in greyscale. `logo/AGENTS.md` §*Still open* has the arithmetic and the argument.
+
+> **`preview/anatomy.png` now boxes all five parts of the mark, and the two new ones are derived,
+> not drawn (2026-10-12).** There is no `#k` and no `#w` element in `kwcapture-mark.svg`: `#kw` is
+> one closed 19-vertex outline and **K, W and C are index subsets of it** (`K_RING` / `W_RING` /
+> `C_RING` in `logo/gen_logo.py`, the owner's numbering), so each letter's box is min/max over its
+> own vertices mapped through `#logo`'s transform. Measured: K `7.45..200.67 x 100.97..451.93`,
+> W `65.27..451.08 x 281.92..451.10`, overlapping **135 × 169 px** on shared vertices
+> **3 4 13 14** — the K's leg *is* the W's first stroke, and reading the rings instead of the prose
+> about them is what corrected the round's own plan, which had said "12-14". `logo/preview/anatomy.py`
+> asserts three cross-checks on every build (vs `#kw-c`'s path data 0.047 px, vs the validator's
+> `#kw` box 0.004 px, vs the rendered ink — a stdlib connected-component labelling — 0.45 px) and
+> fails the build under any of them; **no artwork moved** (both SVGs and all 21 `logo/icon/` files
+> byte-identical, `sha256sum -c`). Full account and the measured annotation contrasts in
+> `logo/AGENTS.md` §*Still open*.
 
 > **The README header is the mark now**, embedded as an absolute
 > `raw.githubusercontent.com/tjandrasg/kwcapture/main/logo/icon/kwcapture-mark-256.png` URL —
@@ -451,6 +469,19 @@ that request). Assume a force-push does not un-publish anything.
 
 ### FLAKE-3 (test suite, not the library): the BUG-4 regression block fails in-suite with three *different* errors, and the harness cannot say where
 
+> **CLOSED 2026-10-12 by the owner's ruling — environmental, this desktop, not a kwcapture bug, and
+> not to be tracked further.** Same family as BUG-4 below (*root-caused 2026-10-07 — NOT OURS*, and
+> "probably not a software bug": non-ECC RAM and a global `LD_PRELOAD` shim on this machine), same
+> family as the `gen_logo.py` fontTools crash in `logo/AGENTS.md` §*Still open*. The evidence here
+> already says it: it reproduces from a pristine `HEAD` worktree, it goes away standalone (0 of 5),
+> and it prints three *different* errors from one block on identical input. Chasing a fault the
+> hardware injects costs tokens and teaches nothing about this library, so: **do not spend a round on
+> this, and do not re-add it to `CHANGELOG.md`** — it came out of *Unreleased* with this ruling. The
+> entry stays as the record and as the standing explanation of why the functional suite on **this**
+> desktop prints **162 passed + 1 failed**; a CI runner on healthy hardware is the control. If the
+> cheap harness fix (print `traceback.format_exc()` in those two handlers) ever gets done for another
+> reason, fine — but no investigation is authorised on this.
+
 * **Seen 2026-10-11 ~00:15, found while re-running every suite the palette round was required to
   re-run.** `tests/test_kwcapture.py` → *regression: BUG-4 zero-copy read path* reports
   `[FAIL] BUG-4 regression ran` and the suite prints **162 passed + 1 failed** instead of 165.
@@ -484,6 +515,15 @@ that request). Assume a force-push does not un-publish anything.
   whether anything in `_view()` is genuinely wrong.
 
 ### FLAKE-2 (test suite, not the library): `alpha is opaque` fails whenever a rounded-corner window is on screen
+
+> **CLOSED 2026-10-12 by the owner's ruling — environmental, this desktop's compositor, not a
+> kwcapture bug, and not to be tracked further; out of `CHANGELOG.md` *Unreleased* with that
+> ruling.** The measurement below stands and is not disputed: 4 pixels at alpha 253/254 in the
+> rounded bottom corners of a live KWin composite, ~2 runs in 3 here, and pristine `HEAD` does the
+> same. It is what this compositor hands back for a rounded corner, not what this library does to a
+> frame, so it is a question about KWin and not a defect to fix here. The entry stays for the record
+> (and for the standing reason the functional suite on **this** machine is not 165/165) — **do not
+> chase it, and do not weaken the assertion to make a number look green.**
 
 * **Seen 2026-10-11 ~20:40, most runs** — `check("alpha is opaque", int(arr[..., 3].min()) == 255)`
   on a live full-screen grab. Measured: **24 of 25 grabs** carry **4 pixels** at alpha **253/254**,
