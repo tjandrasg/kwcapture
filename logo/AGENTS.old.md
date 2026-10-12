@@ -1885,3 +1885,391 @@ The three routes as first drafted (route 1 is now the vertex subset above):
     public-facing explanation of the mark, and whether K and W are described as "two letters" or as
     "one interlocked monogram" is a branding statement, not a rendering detail — owner's call, and
     the caption wording is theirs to approve before it goes out.
+
+# Part L — Round 14's log, the two closed decision histories and the ANATOMY ROUND outcome, moved verbatim (2026-10-12)
+
+> Trim pass after v0.7.0 shipped: `logo/AGENTS.md` **130129** B before it, **~107680** B after. What moved: the ANATOMY ROUND's outcome narrative (the round is done, approved and released), gotcha 29's pre-ruling investigation (closed 2026-10-12 by the owner as this desktop's environment), PALETTE P2's decision history (a closed decision — the bullet itself asked to be moved here), the two `test_kwcapture.py` failure write-ups (same ruling), the GitHub social-preview verification detail (nothing owed), Round 14's session log, and the size-discipline note as it read before this pass. **Nothing in this part is a current instruction**; the rules those rounds produced are still in `AGENTS.md` — the vertex-ring rule, the measured-annotation-contrast floor, gotchas 40 and 41, and the re-run-before-you-believe rule.
+
+
+## The size-discipline note, before the 2026-10-12 trim
+
+*moved verbatim from `logo/AGENTS.md` lines 23-76 on 2026-10-12; the summary that replaces it is in the working file.*
+
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **130 129** bytes
+> — `wc -c logo/AGENTS.md`, not remembered. It was the **working copy's** number for a day, which
+> was a first for this note: the *ANATOMY ROUND* at the top of *Still open* was finished and held
+> uncommitted until the owner had seen the figure, so `af20054` still carried Round 14's **119 211**
+> while this text existed only on disk. The owner has seen it and told me to push it, so this file is
+> committed and the number is both again — and it still has to be rewritten **last** in any round
+> that edits this file, because a count written inside the thing it counts is wrong by its own length
+> until it is. These digits were measured, patched and re-measured until the two agreed. What the
+> round cost here is small because it paid as it went: the ANATOMY ROUND **plan** moved
+> **verbatim** to [`AGENTS.old.md` Part K](AGENTS.old.md) — 8 957 bytes, string-searched into the
+> archive *before* the pointer replaced it — and that archive is now the plan's only copy, because
+> the bullet that held it was never committed. `AGENTS.old.md` grew 128 492 → 138 364, the first
+> time this rule has cost the archive anything rather than the file. **Round 14** (the palette
+> round) opened at **96 404** and closes at **119 211**, the last committed state. It paid for
+> itself once, by
+> moving Round 13's session-log narrative out **verbatim** — 7 327 bytes, presence in
+> [`AGENTS.old.md` Part J](AGENTS.old.md) asserted by string search *before* the pointer replaced it,
+> the way Parts G/H/I were done — and still grew, because a recolour round spends its budget on
+> *proof*: a verified block, the corrected two-grounds arithmetic, the trade the palette made, two
+> new gotchas (**40**: a check keyed on a colour *literal* goes blind quietly; **41**: a diagnostic
+> that writes the artefacts it measures makes a build lie about being reproducible), and re-measured
+> numbers throughout. That is what the round sells, so that is what it costs — including a resumption
+> that found gotcha 41 by re-running a build nobody had re-run, which is what the re-run rule is
+> for. The debt passes on, with one
+> new candidate: the P2 decision history under *Still open* is now a **closed** decision and belongs
+> in the archive the next time this file is trimmed. It was **86 077** before Round 10's
+> archive-verbatim pass, which moved 45 KB of narrative to `AGENTS.old.md` and lost nothing
+> (every substantive line of the old file is present in one of the two files — checked, not
+> asserted; the archive's header carries the sha256 it was cut from); **59 077** when Round 11
+> opened, and **69 298** at its close. The icon round spent ~10 KB on `icon/` — two Files rows, the
+> regenerate commands, five gotchas, a block of expected numbers — and paid part of it straight
+> back by moving Round 10's session-log narrative (2 029 bytes, verbatim) to
+> [`AGENTS.old.md` Part G](AGENTS.old.md). **Round 12** (the desktop-icon round) opened at
+> **69 298** and closes at **76 584**: ~5 KB went on `sync_package_icons.py` (a Files row, the
+> regenerate commands, gotchas 36–37, the package-set expected numbers) and its log entry, and the
+> payment was moving Round 11's narrative (3 019 bytes, verbatim) to
+> [`AGENTS.old.md` Part H](AGENTS.old.md) — asserted present in the archive *before* the summary
+> replaced it, the same way Round 10's pass was done. **A round that adds narrative also moves one
+> out.** **Round 13** (the one-artwork round) opened at **76 584** and closes at **96 404**, and it
+> did *not* pay for itself: it moved Round 12's narrative out (4 070 bytes, verbatim — the moved
+> block's sha256 starts `cddb1ce7cb55b311`, and its presence in
+> [`AGENTS.old.md` Part I](AGENTS.old.md) was asserted by string search *before* the pointer
+> replaced it) and still grew by 19 820 bytes, because a round about *why a build script was not
+> allowed to pick the artwork* spends its budget on reasoning: a verified block, gotchas 38 and 39,
+> the Files/Still-open corrections and its own log entry. The debt is the next round's, and the two
+> fattest candidates are the `icon/` expected-numbers block and Round 10's verification prose —
+> which is exactly what this note has always said to do, and has always been slow to do.
+> The failure mode is
+> real: a note here once claimed 62 KB while the file was already 72, and the number in
+> *this very note* was the stale one until it was recomputed. When a round finishes:
+> **move its narrative to `AGENTS.old.md` verbatim and leave a pointer here**; distil the
+> substance into the knob table / gotcha index / expected numbers; do not append forever, and
+> do not correct history here. Precedents: Round 6's pass upstream (root `AGENTS.old.md`,
+> 77→54 KB), Round 10's split of this file, and Round 11's Part G.
+
+
+## ANATOMY ROUND — the full outcome narrative
+
+*moved verbatim from `logo/AGENTS.md` lines 1082-1156 on 2026-10-12; the summary that replaces it is in the working file.*
+
+* **ANATOMY ROUND — executed, approved and shipped 2026-10-12.** The owner looked at the rendered
+  figure, said log it in `CHANGELOG.md` and push it, which settles the two framing questions the
+  round left open: the wording the project ships is **one outline, three readings**, and the
+  darkened annotation colours go with it (see the colour bullet below). The plan this ran to —
+  drafted by the session that had no tokens left to run it — is archived verbatim at
+  [AGENTS.old.md Part K](AGENTS.old.md); what is kept here is the outcome, the numbers, and the
+  one thing the plan got wrong. `preview/anatomy.png` is **five rows: K, W, C, A, PTURE**.
+  * **The boxes are geometry, not eyeballs, and the two new ones are *not* elements.** There is
+    no `#k` and no `#w` to measure: `#kw` is one closed 19-vertex outline, so each letter's box
+    is min/max of x,y over **its** vertices, mapped by the shipped file's own `#logo` transform
+    (`translate(-576.8719 -1095.0049) scale(11.918)`, artboard 512 → 1 px per unit). The rings
+    are **read out of `gen_logo.py`** (`K_RING`, `W_RING`, `C_RING`) and the vertex count is
+    guarded by the generator's own `c_clip_polygon()` — nothing is retyped here (gotcha 40), and
+    nothing is inferred from the shape (gotcha 22). Measured at 512 px:
+    `K 7.45..200.67 x 100.97..451.93`, `W 65.27..451.08 x 281.92..451.10`, overlapping
+    **135 x 169 px**, sharing vertices **3 4 13 14**.
+  * **Three cross-checks, asserted in `preview/anatomy.py` and printed at build time:**
+    `C_RING` over the vertices reproduces the box computed from `#kw-c`'s path data to
+    **0.047 px**; `union(K, W)` reproduces `validate_logo.py`'s `#kw` ink box to **0.004 px**;
+    and an independent instrument — connected-component labelling of the *render*, a stdlib BFS
+    over the ink mask, because Pillow has no CC labelling and a figure must not acquire a scipy
+    dependency — puts the monogram's ink at `7..450 x 101..451`, **0.45 px** from `union(K, W)`,
+    with the green channel (the monogram minus the blue C) spanning all four sides to the same
+    0.45 px. Any of the three failing stops the build, with a message that says which.
+  * **What the instrument settled:** the render labels the monogram as **ONE component** —
+    57 953 px, 21x the next blob, 7 components in all (`1 + #a + PTURE`). The letters touch.
+    No segmentation of the ink can ever yield a per-letter box, which retires the archived
+    plan's routes 1 and 2 as sources and keeps them as instruments, exactly as its correction
+    said. The letters can be boxed **only** by vertex, i.e. only by the owner's numbering.
+  * **The plan's prose was wrong by one index, and reading it instead of copying it is what
+    caught it.** The plan said the subsets share "3-4, and 12-14". The intersection of the two
+    rings *as written in* `gen_logo.py` is **3, 4, 13, 14** — vertex 12 is the W's peak tip and
+    the C's, never the K's. The figure prints the computed intersection and the caption is
+    generated from it. Gotcha 22 and gotcha 40 caught in one go, and the catch is the argument
+    for both: a number re-typed into a caption cannot disagree with the prose about it.
+  * **Annotation colour is now measured, not picked — and three existing colours moved
+    because of it.** P2's halves are 1.32:1 apart in lightness, so a colour clears 3:1 against
+    BOTH only under L 0.031: all five rows were darkened to hues that do (vs green
+    **3.10-3.13**, vs blue **4.09-4.13**, vs white **13.46-13.60**; per-row numbers printed by
+    the script, computed by `contrast_report.py`, build exits 1 under 3:1). The three colours
+    the figure shipped before were chosen to read against *white* and measure **1.11-1.72:1**
+    against the artwork (`#d0021b` 1.31 green / 1.72 blue, `#7e57c2` 1.20 / 1.58, `#0277bd`
+    1.11 / 1.46) — a greyscale-invisible box on ink, which is the failure this rule exists to
+    prevent. Hues were kept and darkened, not swapped, and the two sets of numbers were put in front
+    of the owner with the figure: **the approval of 2026-10-12 covers the recolour as well**, rather
+    than sending the three old hexes back.
+  * **Nothing else moved.** No SVG, no sketch, no icon, no knob: `gen_logo.py --mark` still
+    reproduces `kwcapture-mark.svg` byte-identically (`cmp`), `validate_logo.py
+    kwcapture-mark.svg` still prints **OK**, `tests/test_icons.py` is **98 checks / 0 failed**,
+    and after `bash preview/build.sh` the tree shows `preview/anatomy.py`, `preview/anatomy.png`
+    and nothing else in `logo/` except the docs (plus one comment added to `preview/build.sh`,
+    which is where the figure's guard is now described). Gotcha 41 respected: the diagnostic
+    reads the render and the SVG, writes one PNG, and says so in its own last line. Canvas grew from
+    980x824 to **980x1284** (three rows to five) and the script prints the figure's own ink box and
+    the air to every edge, asserting
+    8 px of it — gotcha 39, since every title and label in this figure is Pillow's.
+  * **The wording, and who decided it.** "Two letters" or "one interlocked monogram" is a branding
+    statement, not a rendering detail, so the round stopped for the owner rather than deciding it
+    here. The figure as shipped says **one outline, three readings**: the K and W rows draw each
+    other's box *dashed*, so the overlap is visible instead of implied, and dot the four shared
+    vertices. **Owner's approval 2026-10-12**, given on the rendered figure with the instruction to
+    put it in `CHANGELOG.md` §*Unreleased* and push; the three annotation colours that moved were
+    part of what was approved. This round is also the reason root `AGENTS.md` gained a *LOGO*
+    paragraph: the per-letter boxes are now a claim the repo makes, and it is asserted per build.
+  * **Shipped: `1811ebc` (this round) + `ca1bf74` (root `AGENTS.md` + `CHANGELOG.md`), pushed
+    2026-10-12, CI run 38192200374** — both jobs `success`: `build` (15 steps, among them the
+    ring-reader suite, the brand-icon suite, *both artefacts carry the brand icons*, the wheel
+    install and the sdist built from scratch) and `headless KWin capture (Plasma 6, no GPU)`.
+    **What is claimed here is step conclusions, nothing more**: `GET
+    /repos/tjandrasg/kwcapture/actions/runs/38192200374/jobs` with the credential in
+    `~/.git-credentials` answers `log_url: null`, so the log bodies — including the pass/skip
+    line the icon suite prints on a runner that has no themes — were never read, and the
+    **97 passed + 1 skipped** this folder used to quote from CI is *that* run's number, not
+    this one's. Locally, on this desktop, `tests/test_icons.py` prints **98 / 0 / 0 skipped**.
+
+
+
+## The flake (gotcha 29) — the pre-ruling investigation
+
+*moved verbatim from `logo/AGENTS.md` lines 1172-1187 on 2026-10-12; the summary that replaces it is in the working file.*
+
+* **The flake (gotcha 29): cause still not established — but it is no longer "unreproducible".**
+  Both historic messages came back on 2026-10-11 in a code path that never touches fonts, and
+  in a pure-Python extract with no third-party imports, plus one CPython-level
+  `Executing a cache` abort. **A fourth shape, 2026-10-12, and in a new program:** one run of
+  `gen_logo.py --mark` died inside fontTools — `TypeError: 'str' object is not callable` in
+  `pens/svgPathPen.py:pointToString`, mid-wordmark — where `ntos` is a bound method or `None`,
+  never a `str`, so the interpreter had lost a reference it should not have. The same command
+  on the same tree came back **byte-identically clean 5/5** straight afterwards (`cmp` against
+  the shipped `kwcapture-mark.svg`), which is the whole point of gotcha 29: the crash is not
+  evidence about the code, the re-run is, and the guard that says *which one died* is what
+  makes the difference between the two. Next steps, in order and cheap: (1) run the validator ~200× under
+  `env -u LD_PRELOAD python3 …` and on a second machine; (2) once under
+  `PYTHONMALLOC=malloc_debug`; (3) look at the machine, not the code (this desktop: a global
+  `LD_PRELOAD` shim, non-ECC RAM). Keep the `CRASH in <name>` guard: it is the reason this is
+  now diagnosable at all. **Do not wrap `box_check` in a retry** — that launders a machine
+  fault into a passing build.
+
+
+## PALETTE P2 — the decision history and the dark-mode finding
+
+*moved verbatim from `logo/AGENTS.md` lines 1226-1269 on 2026-10-12; the summary that replaces it is in the working file.*
+
+* **PALETTE P2 — APPLIED (Round 14, 2026-10-11), and the dark-mode finding it closed is
+  closed.** Green `#00ac4e → #008c46`, blue `#0000ff → #7f7fff`; the owner picked the pair from
+  six rendered on white and on `#0d1117`, this round applied it and re-measured everything paint
+  can move. The numbers, from `python3 logo/contrast_report.py` (which reads the constants out of
+  `gen_logo.py`, exits 1 if a cell falls under `--min`, and reproduces the old pair if you hand it
+  the old hexes): green **4.34** white / **4.36** dark, blue **3.29** / **5.75**, split **1.32**;
+  every cell clears the WCAG 3:1 non-text floor on both grounds, where the pair it replaced had
+  two failures (blue **2.20** on dark, green 3.00 on white). Paint only, and proved as paint only:
+  the hex-stripped diff against the previous commit is empty.
+  **What P2 bought and what it paid, because the trade is the thing to remember:** it bought a mark
+  that is legal on every ground a host uses, and it paid split strength, **2.87 → 1.32**. The C
+  now separates from the green by **hue** (240° against 150°) and not by lightness — so in
+  greyscale, or through any pipeline that flattens saturation, the two halves become near-identical
+  and the first letter of CAPTURE goes with the distinction. `contrast_report.py` prints a
+  dichromatic estimate (Viénot/Brettel LMS — a smoke test, not a person): ΔE76 117 / 116 /
+  33 and ratios 1.15 / 1.27 / 1.08 for protan / deuteran / tritan, i.e. the split survives the
+  simulation by hue while the lightness separation does not. If a future round ever needs the loud
+  two-tone back, it is an owner decision about *which ground to fail on*, not a recolour to be
+  slipped in — and this is why.
+  **The arithmetic that was mistaken for a law, now corrected in `README.md` §8.** That section
+  said *"no ground wins both colours"*, which was true of the pair it measured and read as if no
+  pair could. A colour clears 3:1 on white at L ≤ **0.3000** and on `#0d1117` at L ≥ **0.1164**;
+  the window **[0.1164, 0.3000]** is not empty — both P2 halves are inside it (0.1920, 0.2691).
+  What the window really forbids is *loudness*: two colours inside it can separate by at most
+  **2.10:1**. "Both halves legal on both grounds" and "a strong two-tone split" are in tension by
+  arithmetic; the old split was strong precisely because its blue sat **outside** the window, too
+  dark for dark grounds.
+  The greens measured before the owner chose, all keeping `#7f7fff`, kept because the reasoning is
+  the useful part and because someone will propose a fifth green: `#00ac4e` 3.00/6.32, split 1.10
+  (fails white); `#008c46` 4.34/4.36, split 1.32 — **chosen**, the balanced one; `#007a3d`
+  5.45/3.47, split 1.66 (starts to read as forest rather than brand); `#007038` 6.22/3.04, split
+  1.89, the last green that still clears dark. And the proposal that started it, `#00ff00`: not the
+  *darkening* the owner asked for but the brightest green a byte holds (L 0.715 vs the old 0.301),
+  **1.37:1** on white — and white is the ground of every tile in `icon/`, of the social card, of
+  GitHub-light and of PyPI. Measured: pixels under 1.5:1 against white went 1.6 % → 47.9 % at
+  512 px and 20.5 % → 57.5 % at 16 px. It was measured rather than obeyed and sent back with the
+  awkward half included (gotcha 38 working as intended); the owner then chose from six pairs, which
+  is the correct order of operations.
+  **Owed by this palette, and now paid:** the GitHub social preview is a stored **upload**, so it
+  had to be re-uploaded for P2. The owner did, and it was verified off the pixels rather than off
+  the flag: the live URL — a **new object id**, `5425fcdb-…` where Round 13 recorded `dc44cc05-…`,
+  which is how you can tell an upload happened — serves 1280×640 / **84 871 B** with **0 of
+  819 200 pixels** differing from the committed P2 card and **6.73 %** differing from the old one.
+  See the item below and the root `AGENTS.md`.
+
+
+## the two test failures on this desktop, as first written up
+
+*moved verbatim from `logo/AGENTS.md` lines 1304-1337 on 2026-10-12; the summary that replaces it is in the working file.*
+
+* **`tests/test_kwcapture.py` carries TWO failures on this desktop, neither of them a logo bug
+  (both found 2026-10-11, Round 14, both reported rather than patched).** Measured together:
+  **162 passed + 1 failed**, not 165 — the failing check is the BUG-4 block's catch-all
+  (`[FAIL] BUG-4 regression ran`), which *replaces* two checks with one, or `alpha is opaque` on
+  its own runs. Full write-ups are **FLAKE-2** and **FLAKE-3** in the root `AGENTS.md`; the parts
+  that belong to this folder's rules are the method and the restraint. Method: each was proven
+  pre-existing from a **pristine `git worktree add … HEAD`** carrying none of the round's changes,
+  and FLAKE-3 additionally fails **0 of 5** standalone, which localises it to cross-test
+  interference rather than to the zero-copy read path. Restraint: FLAKE-3's third error,
+  `CaptureError: unhandled pixel format 6`, is *impossible as printed* — 6 is in the allow-list at
+  `kwcapture/__init__.py:1716` — which says the value in the message is not the value that was
+  checked, and the honest response to an error message that cannot be true is to make the harness
+  print the traceback (one line, in a round that owns `tests/`), not to pick a number that makes
+  the suite green.
+* **`tests/test_kwcapture.py`'s `alpha is opaque` is failing on this desktop, and it is not a
+  logo bug (found 2026-10-11, Round 14, reported rather than patched).** The check is
+  `check("alpha is opaque", int(arr[..., 3].min()) == 255)` on a live full-screen grab, and KWin is
+  returning **alpha 253/254** at exactly four pixels — (284,1144), (2275,1144), (289,1149),
+  (2270,1149) — which are the bottom corners of the System Monitor window
+  (`1992x907+284+243`, so its bottom edge is y=1149 and its corners are x=284 and x=2275): the
+  rounded-corner composite bleeds sub-opaque alpha into the screenshot. It is there in **24 of 25**
+  grabs while that window is up; the suite therefore fails ~2 runs in 3 and passes when the desktop
+  happens not to have such a window. Proven unrelated to this round: the same check fails 7 of 8
+  times from a **pristine `git worktree` of `HEAD`** with none of the recolour's changes, and
+  nothing under `kwcapture/` or `tests/` is modified by P2 (only `kwcapture/icons/`, which is data).
+  **Not touched, on purpose**: tightening an assertion to make a red suite green is how a real
+  bug — is the alpha channel of a compositor grab *allowed* to be non-opaque at a window corner,
+  and does anything downstream assume 255? — gets archived as a passing test. Owner's call, in
+  order: (a) leave the check and treat the failure as environmental, which costs a red suite every
+  time a rounded window is on screen; (b) assert what the code actually guarantees on a controlled
+  surface (a solid capture, or `min()` over a grab of a known-opaque region) and add a separate,
+  explicitly-labelled check for the live-desktop case; (c) investigate whether KWin's BGRA grab
+  alpha at rounded corners is expected, and write the answer down. (b) is the recommendation, and
+  whichever way it goes belongs in a round that owns `tests/`, not in a recolour.
+
+
+## GitHub social preview + profile picture — the verification detail
+
+*moved verbatim from `logo/AGENTS.md` lines 1338-1358 on 2026-10-12; the summary that replaces it is in the working file.*
+
+* **GitHub social preview: DONE, and now verified live in palette P2 — nothing owed.**
+  Re-measured 2026-10-12 after the owner's re-upload, off the URL rather than off the flag:
+  `usesCustomOpenGraphImage` is `true` and `openGraphImageUrl` is
+  `repository-images.githubusercontent.com/1406948211/**5425fcdb**-bcfa-4d50-b99e-30d4087c1849`.
+  That URL is a **different object id** from the one Round 13 recorded (`dc44cc05-…`), which is
+  itself the tell that a new upload happened — GitHub mints a new URL per upload. What it serves is
+  1280×640, **84 871 B**, and against the committed P2 card **0 of 819 200 pixels differ** by more
+  than 8/255; against the pre-P2 card (**84 565 B**) **55 119 px, 6.73 %**, differ. Same bytes as
+  this folder, right down to the file size. The loop gotcha 34 said no script could close has now
+  been closed twice from a shell: the click is outside the repo, the *proof* never was.
+  **Keep the method, not the conclusion:** the flag only proves *an* image is set. The check that
+  matters is pixels-against-`HEAD`, because a recolour silently reopens this — a `true` flag with
+  the old upload is exactly as misleading as a stale caption (gotcha 39), and between the two
+  uploads that is precisely what the repo's own docs had to say.
+* **The optional user profile picture is NOT the mark, measured — so nothing is owed there either.**
+  `https://github.com/tjandrasg.png` serves 460×460 / 48 875 B and differs from
+  `icon/github-avatar-400.png` in **100 %** of pixels — in *both* palettes — so the account picture
+  is unrelated artwork that the project never uploaded, not a stale copy of ours. Which means
+  `icon/github-avatar-400.png` (P2: 25 293 B) is an asset that exists and is unused: if the owner
+  ever wants it as the profile picture that is an account setting no script can reach (gotcha 34);
+  until then, no doc may describe it as live.
+
+
+## Session log — Round 14 day-log
+
+*moved verbatim from `logo/AGENTS.md` lines 1376-1473 on 2026-10-12; the summary that replaces it is in the working file.*
+
+
+Only this round's entry lives here. Rounds 1–9c (two recovered dead sessions, the anchor bug,
+the falsified fit table, the renderer matrix, the MSVG `rotate()` find) are
+[`AGENTS.old.md` Part C](AGENTS.old.md); Round 10's narrative is
+[`AGENTS.old.md` Part G](AGENTS.old.md) and its own summary of what moved is
+[Part F](AGENTS.old.md); **Round 11's** (the icon round) is
+[`AGENTS.old.md` Part H](AGENTS.old.md); **Round 12's** (the desktop-icon round) is
+[`AGENTS.old.md` Part I](AGENTS.old.md) — moved verbatim by Round 13, which left its **wiring**
+standing and deleted its **artwork**, so read Part I for how the icon reaches a desktop and this
+round's entry for what the artwork is. **Round 13's** (the one-artwork round) is
+[`AGENTS.old.md` Part J](AGENTS.old.md), moved verbatim by Round 14 under the same rule; Round 14's
+did not change the artwork, so Round 13's *conclusions* all still stand and are not amended there.
+Read them before arguing with any number above.
+
+**Round 13 — 2026-10-11, the one-artwork round.** Moved verbatim to
+[`AGENTS.old.md` Part J](AGENTS.old.md), with its authority intact: the owner's rule that the icon
+of kwcapture is `kwcapture-mark.svg` and the only permitted transforms are resize and re-render is
+still *the* rule; gotcha 38 (*a build script has no authority to make a branding decision*) is the
+one this folder still runs on; gotcha 39 (*never trust `montage -title`*) is still why every title
+in `preview/build.sh` is drawn by Pillow. Read Part J for the story of the deleted glyphs, and the
+entry below for what the round after it measured.
+
+**Round 14 — 2026-10-11, the palette round: P2 applied.** One decision handed over written down
+— green `#00ac4e → #008c46`, blue `#0000ff → #7f7fff`, the owner's pick from six rendered
+pairs — with the instruction *"do not re-litigate the colour: it is chosen; your job is to apply
+it completely and prove nothing broke"*. Applying a palette is the easiest round to fake: search,
+replace, re-render, done. So this round is mostly the proving.
+
+* **"Paint only" is a diff, not an adjective.** Strip every 6-digit hex from both sides
+  (`sed -E "s/#[0-9a-fA-F]{6}//g"`) and `diff` against `HEAD` is **empty** — no coordinate, no
+  `transform`, no `#type` matrix, not one comment re-wrapped. Two constants moved and the artwork
+  moved with them: `gen_logo.py --mark` and plain `gen_logo.py` reproduce `kwcapture-mark.svg` and
+  `kwcapture.svg` byte-identically, and the variant guard still refuses `--mark --green '#00ff00'`
+  on a shipped path. That guard is exactly why a recolour goes through the **constants**: an SVG
+  written by `--green` on a command line is an artwork no generator state reproduces.
+* **The check that had gone blind was found by reading the checker, not the picture.**
+  `render_agreement.py` identified the green half with `fill.startswith("#00a")` — a property of
+  `#00ac4e`, not of green. On the recoloured files it matched nothing, so the tool that exists to
+  catch an engine painting in the wrong place was comparing NOTHING and would have printed "all
+  engines agree" at exit 0: gotcha 30, live, on the first change it would have missed. Repaired by
+  deleting the hard-coded colour — the palette is read out of `gen_logo.py`, and
+  `validate_logo.py` classifies rendered pixels **by hue** against it and refuses to guess when it
+  cannot find it. Same reason, new file: `contrast_report.py`, because two rounds of docs had been
+  quoting ratios no file could re-compute. It prints the 2x2 against white and `#0d1117`, the
+  split, the window and a dichromatic estimate, and it exits 1 under `--min` so a palette
+  regression cannot ship by accident.
+* **Every number that could move, moved — so it was re-measured; the ones that could not, did
+  not.** Render split: mark 53.6/50.3 → **53.3/49.8** % blue (QtSvg/MSVG), lockup 44.3/45.4
+  → **44.0/44.8**, mono → **39.3/39.5**; every byte size in `icon/`; every sha256 in the
+  package block; the `--c-paint` matrix re-run, where the two renderer bugs came through untouched
+  (Qt still paints `clip` **100 % blue**, MSVG still swallows a `mask`). Geometry — ink bounds,
+  clearances, the type check, the box check, the fit, the taper — is identical to Round 13's
+  line for line. That half of the proof is the half a colour diff cannot give you.
+* **`FIT = 0.79` was the trap, and it was measured rather than trusted.** Tiles count antialiasing
+  as ink; antialiasing is a blend of ink with ground; the ground of every tile is white. So a
+  recolour can clip ink while no coordinate moves. `tiles.py --sweep` on both palettes with the
+  same instrument: worst tile 0.794 against FIT 0.790 — **+0.4 %** of the side in hand, clipped
+  px 0 everywhere. It survived. Had it not, the answer was to re-measure the constant, never to
+  crop a tile or ship a second drawing (gotcha 38 is the round that learned that).
+* **What the palette was *for*, measured:** green **4.34** white / **4.36** dark, blue **3.29** /
+  **5.75** — every cell over the 3:1 non-text floor, closing the oldest open finding in this
+  folder (blue **2.20:1** on `#0d1117`, since Round 10). The sentence `README.md` §8 had been
+  carrying — *"no ground wins both colours"* — was arithmetic about one pair of hex values,
+  mistaken for a law: the window **[0.1164, 0.3000]** is not empty, both P2 halves sit in it. What
+  the arithmetic really says is that two colours inside it cannot separate by more than **2.10:1**,
+  so P2 buys legality by spending split strength (**2.87 → 1.32**) and the C now reads on
+  **hue** (240° against 150°) rather than value. In greyscale it collapses, and that
+  dependency is written down now instead of discovered in a year.
+* **The monogram deletion folded in, as scheduled.** `git rm logo/kwcapture-mono.svg`;
+  `--monogram` now **requires `--out`** instead of defaulting at a path that would resurrect a
+  deleted artefact; `preview/build.sh` and `render_agreement.py` render the monogram into a temp
+  directory the way the ladder already did. Doing it surfaced a real ambiguity: the script had
+  been using *two different drawings* — the original monogram and the mark's monogram — from
+  one file name, so they are `mono-orig` and `mono-mark` now, each with its own `--sketch`.
+* **Reported, not routed around.** `tests/test_kwcapture.py`'s `alpha is opaque` fails on this
+  desktop: 4 px at alpha 253/254 in the bottom corners of a window KWin composites there, ~96 % of
+  grabs, and it reproduces on a **pristine `git worktree` of `HEAD`** carrying none of this round's
+  changes. Nothing under `kwcapture/` or `tests/` was touched by P2, so the test stays as it is and
+  the finding goes to the owner (*Still open*). A green suite you had to edit is worth less than a
+  red one you understand.
+* **The build was convicted by running it, not by reading it (gotcha 41).** Re-running
+  `bash icon/build.sh` after the commit dirtied five tile PNGs. Two back-to-back builds hashed
+  *identical* — so the build is reproducible and something else had written those files: `tiles.py`
+  built its tiles at import time, so the `--sweep` diagnostic had re-saved them with Pillow after
+  the build's ImageMagick pass. Identical pixels, different container, and git was holding bytes
+  that this file's own byte table did not describe. Fixed by making `--sweep` read-only, and the
+  mask guard was shown still to refuse on three sabotaged `FIT` values before the change was
+  believed. The line worth keeping: **"the build is reproducible" is a claim about `git`, not about
+  the build** — rebuilding twice proves only that the build is self-consistent.
+* **Two sessions of this round died out of tokens, and the second died *inside* a tool call.** Its
+  `edit_file` arguments are truncated mid-string (`Unterminated string in JSON at position 1049`),
+  so the *new* text was unrecoverable and only the `old_text` anchor survived — which is still
+  enough to know what it was recording: the CI count for the P2 push. Re-derived from the run log
+  rather than reconstructed from the fragment (see *Reading the transcript*). The recovery rule held:
+  re-run everything the dead session claimed before writing any of it down. Every claim in the
+  verified block above was measured again in this resumption; one of them turned out to be false,
+  which is the entire argument for the rule.
+
