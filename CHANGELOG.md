@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-10-12
 
 The desktop entry this package writes finally names an icon that **exists**, and the artwork
 behind it ships inside the package instead of being re-drawn by whoever packages it. The artwork

@@ -100,7 +100,7 @@
 > (*FORENSICS — recovering a lost finding after a session died*) for what can and cannot be recovered
 > after the fact.
 
-Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`; releases `v0.1.0` … **`v0.6.0`**,
+Repo: **https://github.com/tjandrasg/kwcapture** (branch `main`; releases `v0.1.0` … **`v0.7.0`**,
 every one from `v0.3.0` on carrying a CI-built `manylinux` wheel plus a prebuilt
 `linux_x86_64` wheel attached) and on PyPI as
 **`kwcapture`** (https://pypi.org/project/kwcapture/) — publish new versions with
