@@ -20,7 +20,7 @@ the directory, with renders. [`AGENTS.old.md`](AGENTS.old.md) is the archive: th
 log, the falsified claims, the war story behind every gotcha.
 [`LICENSE.md`](LICENSE.md) says what you may do with any of it.
 
-> **Size discipline** (the root `AGENTS.md` says the same). This file is **129 222** bytes
+> **Size discipline** (the root `AGENTS.md` says the same). This file is **130 129** bytes
 > — `wc -c logo/AGENTS.md`, not remembered. It was the **working copy's** number for a day, which
 > was a first for this note: the *ANATOMY ROUND* at the top of *Still open* was finished and held
 > uncommitted until the owner had seen the figure, so `af20054` still carried Round 14's **119 211**
@@ -1143,6 +1143,16 @@ caught the four stale claims of gotcha 18. Full version, including the field-by-
     put it in `CHANGELOG.md` §*Unreleased* and push; the three annotation colours that moved were
     part of what was approved. This round is also the reason root `AGENTS.md` gained a *LOGO*
     paragraph: the per-letter boxes are now a claim the repo makes, and it is asserted per build.
+  * **Shipped: `1811ebc` (this round) + `ca1bf74` (root `AGENTS.md` + `CHANGELOG.md`), pushed
+    2026-10-12, CI run 38192200374** — both jobs `success`: `build` (15 steps, among them the
+    ring-reader suite, the brand-icon suite, *both artefacts carry the brand icons*, the wheel
+    install and the sdist built from scratch) and `headless KWin capture (Plasma 6, no GPU)`.
+    **What is claimed here is step conclusions, nothing more**: `GET
+    /repos/tjandrasg/kwcapture/actions/runs/38192200374/jobs` with the credential in
+    `~/.git-credentials` answers `log_url: null`, so the log bodies — including the pass/skip
+    line the icon suite prints on a runner that has no themes — were never read, and the
+    **97 passed + 1 skipped** this folder used to quote from CI is *that* run's number, not
+    this one's. Locally, on this desktop, `tests/test_icons.py` prints **98 / 0 / 0 skipped**.
 
 * **MSVG paints the type 26–67 px out of place (gotcha 27) — fix it or accept it? Owner's
   call.** (a) Accept: KDE, Inkscape, browsers and delegated ImageMagick are correct; only IM's

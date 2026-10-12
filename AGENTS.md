@@ -231,8 +231,13 @@ the step's own slice of the log, not a guess from the total.*
 > asserts three cross-checks on every build (vs `#kw-c`'s path data 0.047 px, vs the validator's
 > `#kw` box 0.004 px, vs the rendered ink — a stdlib connected-component labelling — 0.45 px) and
 > fails the build under any of them; **no artwork moved** (both SVGs and all 21 `logo/icon/` files
-> byte-identical, `sha256sum -c`). Full account and the measured annotation contrasts in
-> `logo/AGENTS.md` §*Still open*.
+> byte-identical, `sha256sum -c`). **Pushed 2026-10-12** as `1811ebc` (the round) + `ca1bf74`
+> (this file and `CHANGELOG.md`), CI run **38192200374** green on both jobs — `build` (15 steps:
+> ring-reader, brand-icon, sdist + wheel, *both artefacts carry the brand icons*, wheel install,
+> sdist from scratch) and `headless KWin capture (Plasma 6, no GPU)` — **step conclusions only**,
+> because the jobs endpoint answers this credential with `log_url: null`, so the printed
+> pass/skip counts in the log body are not claimed from here. Full account and the measured
+> annotation contrasts in `logo/AGENTS.md` §*Still open*.
 
 > **The README header is the mark now**, embedded as an absolute
 > `raw.githubusercontent.com/tjandrasg/kwcapture/main/logo/icon/kwcapture-mark-256.png` URL —
