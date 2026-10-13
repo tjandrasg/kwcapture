@@ -1,5 +1,16 @@
 # AGENTS.md — fast screen capture on Wayland (KDE Plasma 6 / KWin)
 
+> **SCOPE — nunif content does not belong in this file (hard rule, restated 2026-10-13).**
+> This file is **kwcapture-only**. Notes about the **nunif** fork — `~/way_scr_cap/private/nunif`,
+> the kwcapture-in-`iw3.desktop` integration, that fork's dependencies and GitHub state — go in
+> **`private/AGENTS.md`** (archive: `private/AGENTS.old.md`), which is git-ignored like the rest of
+> `private/`. The three `AGENTS.md` files sitting one directory level apart are a live trap:
+> `private/nunif/AGENTS.md` (upstream's own — do not edit), `private/AGENTS.md` (nunif notes), and
+> this file. On 2026-10-13 a session appended ~124 lines of nunif notes **here** by resolving `..`
+> to this directory instead of `private/`; reverted the same day (`git checkout -- AGENTS.md`,
+> verified byte-identical to HEAD). **Before writing to a relative path, `readlink -f` it and check
+> which repo owns the target.** See *File writes & paths* in `~/AGENTS.md`.
+
 > **Archive:** `AGENTS.old.md` holds the superseded detail — the original three-key-findings
 > investigation log, the v0.1/v0.2 file map and benchmark tables, old packaging/CI notes, the
 > forensics write-up, the 2026-10-07 session logs of the v0.4.0/v0.5.0 work, the original
